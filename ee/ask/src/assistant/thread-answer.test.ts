@@ -63,12 +63,12 @@ describe('the stored form of an answer', () => {
       const stored = sentence('Jordan Lee is listed.');
       if (stored === undefined) throw new Error('no stored form');
       const keyOf = (ref: unknown) => (JSON.stringify(ref) === JSON.stringify(REF) ? 'n1' : undefined);
-      expect(bindingsApproved(stored.answer, context, stored.keyOf)).toBe(true);
-      expect(bindingsApproved(stored.answer, context, () => undefined)).toBe(false);
-      expect(bindingsApproved(stored.answer, context, () => 'n9')).toBe(false);
-      expect(bindingsApproved(stored.answer, { ...context, sensitiveKeys: new Map([['widget', ['other']]]) }, keyOf)).toBe(false);
-      expect(bindingsApproved(stored.answer, { ...context, sentValues: new Map([['n1', [{ key: 'plain', text: 'gold', masked: false }]]]) }, keyOf)).toBe(false);
-      expect(bindingsApproved(stored.answer, { ...context, sentValues: undefined }, keyOf)).toBe(false);
+      expect(bindingsApproved(stored.answer, context, stored.keyOf, 'demo')).toBe(true);
+      expect(bindingsApproved(stored.answer, context, () => undefined, 'demo')).toBe(false);
+      expect(bindingsApproved(stored.answer, context, () => 'n9', 'demo')).toBe(false);
+      expect(bindingsApproved(stored.answer, { ...context, sensitiveKeys: new Map([['widget', ['other']]]) }, keyOf, 'demo')).toBe(false);
+      expect(bindingsApproved(stored.answer, { ...context, sentValues: new Map([['n1', [{ key: 'plain', text: 'gold', masked: false }]]]) }, keyOf, 'demo')).toBe(false);
+      expect(bindingsApproved(stored.answer, { ...context, sentValues: undefined }, keyOf, 'demo')).toBe(false);
     });
 
     it('refuses in the schema a binding to an element the item does not cite, and a bound item with no binding', () => {
@@ -77,5 +77,40 @@ describe('the stored form of an answer', () => {
       expect(assistantThreadTurnWriteSchema.safeParse({ ...base, question: 'Q?', answer: { blocks: [{ kind: 'sentences', items: [{ form: 'bound', segments: [{ literal: 'x' }], cites: [REF] }] }] } }).success).toBe(false);
       expect(assistantThreadTurnWriteSchema.safeParse({ ...base, question: 'Q?', answer: { blocks: [{ kind: 'sentences', items: [{ ...bound, cites: [REF] }] }] } }).success).toBe(true);
     });
+    it('refuses a binding to another sensitive property the element holds, to an element of another source, and to an element the item does not cite', () => {
+      const two = { ...context, sentValues: new Map([['n1', [{ key: 'holder', text: 'Jordan Lee', masked: false }, { key: 'partner', text: 'Maria Gomez', masked: false }]]]), sensitiveKeys: new Map([['widget', ['holder', 'partner']]]) };
+      const stored = storedAnswerOf(viewAnswer({ sentences: [{ text: 'Jordan Lee is listed.', cites: ['n1'] }] }), false, (text, cited) => classifyItem(text, cited, two));
+      if (stored === undefined) throw new Error('no stored form');
+      const keyOf = stored.keyOf;
+      expect(bindingsApproved(stored.answer, two, keyOf, 'demo')).toBe(true);
+      const item = stored.answer.blocks[0]?.kind === 'sentences' ? stored.answer.blocks[0].items[0] : undefined;
+      const swapped = JSON.parse(JSON.stringify(stored.answer).replace('"property":"holder"', '"property":"partner"')) as typeof stored.answer;
+      expect(item?.form).toBe('bound');
+      expect(bindingsApproved(swapped, two, keyOf, 'demo')).toBe(false);
+      expect(bindingsApproved(stored.answer, two, keyOf, 'another-source')).toBe(false);
+    });
+
+    it('binds each whole value of a table cell, leaves a cell with a shared value or a partial one unbound, and keeps exactly 40 segments bound and 41 unbound', () => {
+      const values = new Map([['n1', [{ key: 'holder', text: 'Jordan Lee', masked: false }]], ['n2', [{ key: 'holder', text: 'Maria Gomez', masked: false }]], ['n3', [{ key: 'holder', text: 'Maria Gomez', masked: false }]]]);
+      const wide: ClassifyContext = { sentValues: values, sent: ['n1', 'n2', 'n3'], typeOf: () => 'widget', sensitiveKeys: new Map([['widget', ['holder']]]) };
+      const cites = ['n1', 'n2', 'n3'];
+      const refOf = (id: string) => ({ ...REF, stableId: id });
+      const citations = ['n1', 'n2', 'n3'].map((key, index) => ({ key, kind: 'entity', ref: refOf(`A-${index + 1}`) }));
+      const table = (cell: string) => storedAnswerOf({ status: 'answered', route: 'view', citations, coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 1, table: { title: 'T', columns: ['C'], rows: [{ cells: [cell], cites }] } } as AssistantTurnAnswer, false, (text, cited) => classifyItem(text, cited, wide));
+      const cell = (result: ReturnType<typeof table>) => (result?.answer.blocks[0]?.kind === 'table' ? result.answer.blocks[0].rows[0]?.cells[0] : undefined);
+      expect(cell(table('Jordan Lee'))).toMatchObject({ form: 'bound' });
+      expect(cell(table('Maria Gomez'))).toMatchObject({ form: 'unbound', text: 'Maria Gomez' });
+      expect(cell(table('Jordan'))).toMatchObject({ form: 'unbound' });
+      const exact = (count: number) => Array.from({ length: count }, () => 'Jordan Lee').join('/');
+      // 20 values and 19 separators are 39 segments; 20 values with 20 pieces of text around them are 40; one more is 41
+      const sentenceAt = (text: string) => storedAnswerOf(viewAnswer({ sentences: [{ text, cites: ['n1'] }] }), false, (value, citedKeys) => classifyItem(value, citedKeys, wide));
+      const items = (result: ReturnType<typeof sentenceAt>) => (result?.answer.blocks[0]?.kind === 'sentences' ? result.answer.blocks[0].items[0] : undefined);
+      const forty = `${Array.from({ length: 20 }, () => 'Jordan Lee x').join(' ')}`;
+      expect(items(sentenceAt(forty))).toMatchObject({ form: 'bound' });
+      expect((items(sentenceAt(forty)) as { segments: unknown[] }).segments).toHaveLength(40);
+      expect(items(sentenceAt(`${forty} Jordan Lee`))).toMatchObject({ form: 'unbound' });
+      expect(exact(2)).toBe('Jordan Lee/Jordan Lee');
+    });
   });
 });
+

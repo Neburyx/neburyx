@@ -4,7 +4,7 @@ import { type AssembledText, edgeDetailOf, propertiesOf, rankedOf, sentValuesOf,
 import { retrievalLine, viewCoverageOf } from '../case-summary/coverage.js';
 import type { DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf } from '../case-summary/judge.js';
-import { noteProvenance } from './turn-audit.js';
+import { provenanceOf, type Provenance } from './sensitive-items.js';
 import { listedElements } from '../summary/index.js';
 import { countOf, coverageOf, degreeCountsOf, inexactCountOf } from './coverage.js';
 import { rowsPhrase, subjectPluralOf, subjectTypeOf } from './table.js';
@@ -34,9 +34,9 @@ export interface ToolAnswerInput {
 }
 
 export type ToolAnswerOutcome =
-  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; blocks: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
+  | { readonly kind: 'sentences'; readonly provenance: Provenance; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; blocks: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
   /** The answer as a table (the router chose the form): rows that each cite an element a read returned. */
-  | { readonly kind: 'table'; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; blocks: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
+  | { readonly kind: 'table'; readonly provenance: Provenance; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; blocks: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
   /** The question is about types the mapping does not describe: the fixed sentence the server wrote and the names of the profile. */
   | { readonly kind: 'noDescription'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported'; readonly calls: number }
@@ -250,7 +250,6 @@ export function answerBasisOf(input: Pick<ToolAnswerInput, 'reads' | 'view' | 's
   const names = typeNamesOf(input.scope.request, input.scope.sourceId);
   const viewCoverage = input.view === undefined ? undefined : viewCoverageOf(input.view.reading, names);
   const { assembled, readKeys, noteLines, noteElements } = assembleResults(input.reads, input.view?.assembled, names, viewCoverage);
-  noteProvenance(assembled);
   if (assembled.keys.size === 0 && readKeys.length === 0) return undefined;
   const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${findingOf(read, names)}`)].join('; ');
   const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message, input.scope.askedTypes, input.scope.contextTypes);
@@ -323,7 +322,7 @@ export function outcomeOfDraft(context: DraftContext): ToolAnswerOutcome {
         }
         const droppedRows = draft.rows.length - rows.length + draft.uncited;
         const note = noteOfTable({ columns: draft.columns, rows: shown, lines: basis.checkedText.lines, elements: assembled.keys, descriptions: input.scope.request.typeDescriptions?.(input.scope.sourceId) });
-        return { kind: 'table', table: { title, columns: [...draft.columns], rows: shown, note, ...(droppedRows > 0 ? { droppedRows } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) }, citations: tableCitations, coverage: { retrieval: coverage, summary: shownOf }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
+        return { kind: 'table', provenance: provenanceOf(assembled), table: { title, columns: [...draft.columns], rows: shown, note, ...(droppedRows > 0 ? { droppedRows } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) }, citations: tableCitations, coverage: { retrieval: coverage, summary: shownOf }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
       }
       const cited = new Set(drafted.sentences.flatMap((sentence) => sentence.cites));
       const citations = [...cited].flatMap((key) => {
@@ -339,7 +338,7 @@ export function outcomeOfDraft(context: DraftContext): ToolAnswerOutcome {
         return read === undefined ? [] : [{ key, kind: 'read' as const, label: citationTitleOf(read.label ?? read.tool) ?? read.tool, finding: findingCitationOf(findingOf(read, names)) }];
       });
       const withDescriptions = [...citations, ...descriptionCitationsOf(drafted.sentences, typeLines), ...readCitations];
-      return { kind: 'sentences', sentences: drafted.sentences, citations: withDescriptions, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
+      return { kind: 'sentences', provenance: provenanceOf(assembled), sentences: drafted.sentences, citations: withDescriptions, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
     }
     default: {
       const unreachable: never = drafted;

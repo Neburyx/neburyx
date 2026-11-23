@@ -1,6 +1,7 @@
 import type { AssistantBlocks } from '@neburyx/contracts';
 import { labelsHold } from './table.js';
 import { withinTotals, type KeptBlock } from './blocks.js';
+import type { Provenance } from './sensitive-items.js';
 import type { AnswerBasis, ToolAnswerOutcome } from './tool-answer.js';
 
 type Judged = Extract<ToolAnswerOutcome, { kind: 'sentences' | 'table' }>;
@@ -16,6 +17,8 @@ export interface BlocksAnswer {
   readonly citations: Judged['citations'];
   readonly coverage: { readonly retrieval: string; readonly summary: string };
   readonly model: string;
+  /** What the answer was checked against: the values sent for its elements, from which a stored form is classified. */
+  readonly provenance: Provenance;
   readonly noDescription?: string;
   readonly pointer?: string;
   readonly lastCallNote?: string;
@@ -53,5 +56,5 @@ export function combineOutcomes(outcomes: readonly JudgedBlock[], basis: AnswerB
   const elements = citations.filter((citation) => citation.kind !== 'description' && citation.kind !== 'read').length;
   const summary = summaries.length > 0 ? summaries.join(' ') : `The answer cites ${elements} of the ${basis.assembled.keys.size} elements the reads returned.`;
   const noDescription = outcomes.find((outcome) => outcome.noDescription !== undefined)?.noDescription;
-  return { blocks, citations, coverage: { retrieval: first.coverage.retrieval, summary }, model: first.model, leftOut, itemsCut, labelsRemoved, ...(noDescription === undefined ? {} : { noDescription }) };
+  return { blocks, citations, coverage: { retrieval: first.coverage.retrieval, summary }, model: first.model, provenance: first.provenance, leftOut, itemsCut, labelsRemoved, ...(noDescription === undefined ? {} : { noDescription }) };
 }

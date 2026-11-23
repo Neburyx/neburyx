@@ -1,6 +1,6 @@
 import type { AssistantThreadTurnWrite, AssistantTurnAnswer, StoredAnswer } from '@neburyx/contracts';
 import { THREAD_SEGMENTS_MAX } from '@neburyx/contracts';
-import type { Classified, ClassifyContext } from './sensitive-items.js';
+import { classifyItem, type Classified, type ClassifyContext } from './sensitive-items.js';
 
 type Cite = AssistantThreadTurnWrite['citationRefs'][number];
 type Sentence = { readonly text: string; readonly cites: readonly string[] };
@@ -11,6 +11,9 @@ type Item = TextItem | { form: 'bound'; segments: ({ literal: string } | { eleme
 
 /** The element a key of an answer stands for, when the key is one of an element or a relationship (not a read, not a meaning); the references the thread already keeps. */
 const refsOf = (citations: readonly Citation[]): Map<string, Cite> => new Map(citations.flatMap((citation) => (citation.ref === undefined || citation.kind === 'read' || citation.kind === 'description' ? [] : [[citation.key, citation.ref] as const])));
+
+/** The text an item was made from, by the item the conversion made: what a binding is checked against, since a bound item keeps none of its values. */
+const ORIGINAL = new WeakMap<object, string>();
 
 /** How an item of an answer written with the mask off is classified, by its text and the keys of the elements it cites; absent, every such item is `unbound`. */
 export type ClassifyItem = (text: string, cited: readonly string[]) => Classified;
@@ -38,7 +41,9 @@ function itemOf(text: string, cited: readonly string[], refs: ReadonlyMap<string
     at = span.end;
   }
   if (at < written.length) segments.push({ literal: written.slice(at) });
-  return segments.length > THREAD_SEGMENTS_MAX || segments.length === 0 ? unbound : { form: 'bound', segments };
+  const item: Item = segments.length > THREAD_SEGMENTS_MAX || segments.length === 0 ? unbound : { form: 'bound', segments };
+  ORIGINAL.set(item, text);
+  return item;
 }
 
 /**
@@ -55,7 +60,12 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
   const fixed = (text: string): TextItem => ({ form: 'frozen', text });
   const citedRefs = (keys: readonly string[], refs: ReadonlyMap<string, Cite>): Cite[] => keys.flatMap((key) => (refs.has(key) ? [refs.get(key) as Cite] : []));
   const sentences = (list: readonly Sentence[], refs: ReadonlyMap<string, Cite>) =>
-    list.map((sentence) => ({ ...itemOf(sentence.text, sentence.cites.filter((key) => refs.has(key)), refs, maskOn, 2000, classify), cites: citedRefs(sentence.cites, refs) }));
+    list.map((sentence) => {
+      const item = itemOf(sentence.text, sentence.cites.filter((key) => refs.has(key)), refs, maskOn, 2000, classify);
+      const withCites = { ...item, cites: citedRefs(sentence.cites, refs) };
+      ORIGINAL.set(withCites, sentence.text);
+      return withCites;
+    });
   const result = (blocks: Block[], refs: ReadonlyMap<string, Cite> = new Map()): StoredAnswerResult => {
     const inverse = new Map([...refs].map(([key, ref]) => [JSON.stringify(ref), key] as const));
     return { answer: { blocks }, keyOf: (ref) => inverse.get(JSON.stringify(ref)) };
@@ -82,19 +92,39 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
 }
 
 /**
- * Whether every binding of a stored answer is one the classifier could have approved for the elements this turn sent: the element is one that was sent, the property is one of its values and a sensitive key of its type. A strict schema cannot say
- * that (it has no provenance), so the write is validated here against the answer's own provenance, and refused as a whole when a binding is to anything else.
+ * Whether every binding of a stored answer is the one the classifier approves for its item, for the elements this turn sent: each bound item is rebuilt, its literals and the value sent for each binding (the element's key and the property, from the
+ * provenance), and classified again with the keys of the elements the item cites; it must come out `bound` with the same spans, and every binding is to an element of the turn's source. A strict schema cannot say that (it has no provenance), so the
+ * write is validated here, and refused as a whole when a binding is to anything else: another property the element holds, an element cited only by another item, an element of another source, or no provenance at all.
  */
-export function bindingsApproved(stored: StoredAnswer, context: ClassifyContext, keyOf: (ref: Cite) => string | undefined): boolean {
-  const bound = (item: { readonly form: string; readonly segments?: readonly unknown[] }): { element: Cite; property: string }[] => (item.form === 'bound' ? (item.segments ?? []).filter((segment): segment is { element: Cite; property: string } => typeof segment === 'object' && segment !== null && 'element' in segment) : []);
-  const items = stored.blocks.flatMap((block) => (block.kind === 'sentences' ? block.items : block.kind === 'table' ? block.rows.flatMap((row) => row.cells) : block.overview ?? []));
-  const bindings = items.flatMap((item) => bound(item as never));
-  if (bindings.length === 0) return true;
-  if (context.sentValues === undefined || context.sensitiveKeys === undefined) return false;
-  return bindings.every((binding) => {
-    const key = keyOf(binding.element);
-    const type = key === undefined ? undefined : context.typeOf(key);
-    const values = key === undefined ? undefined : context.sentValues?.get(key);
-    return type !== undefined && values?.some((value) => value.key === binding.property && !value.masked) === true && context.sensitiveKeys?.get(type)?.includes(binding.property) === true;
-  });
+export function bindingsApproved(stored: StoredAnswer, context: ClassifyContext, keyOf: (ref: Cite) => string | undefined, sourceId: string | undefined): boolean {
+  type Segment = { readonly literal: string } | { readonly element: Cite; readonly property: string };
+  const itemsOf = (block: Block): { readonly item: { readonly form: string; readonly segments?: readonly Segment[] }; readonly cites: readonly Cite[] }[] =>
+    block.kind === 'sentences' ? block.items.map((item) => ({ item, cites: item.cites })) : block.kind === 'table' ? block.rows.flatMap((row) => row.cells.map((item) => ({ item, cites: row.cites }))) : (block.overview ?? []).map((item) => ({ item, cites: item.cites }));
+  for (const { item, cites } of stored.blocks.flatMap(itemsOf)) {
+    if (item.form !== 'bound') continue;
+    if (context.sentValues === undefined || context.sensitiveKeys === undefined) return false;
+    let text = '';
+    const expected: { start: number; end: number; element: string; property: string }[] = [];
+    for (const segment of item.segments ?? []) {
+      if ('literal' in segment) {
+        text += segment.literal;
+        continue;
+      }
+      const key = keyOf(segment.element);
+      const sent = key === undefined ? undefined : context.sentValues.get(key)?.find((value) => value.key === segment.property && !value.masked)?.text;
+      if (key === undefined || sent === undefined || (sourceId !== undefined && (segment.element as { sourceId?: string }).sourceId !== sourceId)) return false;
+      const start = text.length;
+      text += sent.normalize('NFC').trim();
+      expected.push({ start, end: text.length, element: key, property: segment.property });
+    }
+    const cited = cites.flatMap((ref) => {
+      const key = keyOf(ref);
+      return key === undefined ? [] : [key];
+    });
+    // the item is rebuilt from its bindings: it must read as the text it was made from, so that a binding to another property or element that holds another value is refused
+    if (ORIGINAL.get(item)?.normalize('NFC') !== text) return false;
+    const again = classifyItem(text, cited, context);
+    if (again.form !== 'bound' || JSON.stringify(again.spans) !== JSON.stringify(expected)) return false;
+  }
+  return true;
 }

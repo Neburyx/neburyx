@@ -15,7 +15,8 @@ import { selectedSectionOf } from './selected-section.js';
 import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
-import { noteModelAnswer, notePropertyValuesSent, noteProvenance, startModelCall } from './turn-audit.js';
+import { noteModelAnswer, notePropertyValuesSent, stampProvenance, startModelCall } from './turn-audit.js';
+import { provenanceOf } from './sensitive-items.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
@@ -239,7 +240,6 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const allowed = settings.maxCalls - input.callsUsed;
     if (allowed < 1) return outcome({ status: 'stopped', because: 'calls' });
     notePropertyValuesSent(assembled.carriesPropertyValues);
-    noteProvenance(assembled);
     const typeLines = typeLinesOf(input.typeDescriptions, assembled, input.message, input.askedTypes, input.contextTypes);
     const checkedText = withTypeLines(checkedTextOf(assembled), typeLines);
     input.onAnswering?.();
@@ -380,13 +380,13 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
             model: drafted.model,
             calls: progress.calls + input.callsUsed,
           };
-          return outcome({ status: 'answered', answer, cited: elementCitations.length });
+          return outcome({ status: 'answered', answer: stampProvenance(answer, provenanceOf(assembled)), cited: elementCitations.length });
         }
         const elementCitations = [...citationsOf(sentences, assembled)];
         const citations = [...elementCitations, ...descriptionCitationsOf(sentences, typeLines)];
         const positions = [...cited].sort((a, b) => a - b);
         const answer = { status: 'answered' as const, route: 'view' as const, blocks: [{ kind: 'sentences' as const, sentences: [...sentences] }], ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }), citations, coverage: { ...coverageOf(viewReading, sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
-        return outcome({ status: 'answered', answer, cited: elementCitations.length });
+        return outcome({ status: 'answered', answer: stampProvenance(answer, provenanceOf(assembled)), cited: elementCitations.length });
       }
       default: {
         const unreachable: never = drafted;

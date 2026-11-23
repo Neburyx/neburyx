@@ -40,7 +40,8 @@ const skeletonOf = (text: string): string => text.normalize('NFKD').replace(/\p{
 const plainOf = (text: string): string => text.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
 
 /** What the classifier reads of a turn's assembled text: the values sent, and every element key the lines name (the completeness of the provenance is judged from all of them, never from a list the caller chooses). */
-export const provenanceOf = (assembled: { readonly keys: ReadonlyMap<string, { readonly kind: string; readonly ref: unknown }>; readonly sentValues?: ReadonlyMap<string, readonly SentValue[]> | undefined }): Pick<ClassifyContext, 'sentValues' | 'sent' | 'typeOf'> => ({
+export type Provenance = Pick<ClassifyContext, 'sentValues' | 'sent' | 'typeOf'>;
+export const provenanceOf = (assembled: { readonly keys: ReadonlyMap<string, { readonly kind: string; readonly ref: unknown }>; readonly sentValues?: ReadonlyMap<string, readonly SentValue[]> | undefined }): Provenance => ({
   sentValues: assembled.sentValues,
   sent: [...assembled.keys.keys()],
   typeOf: (key) => {

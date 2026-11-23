@@ -18,8 +18,7 @@ import type { ModelAnswer } from '@neburyx/ee-ai-runtime';
 import { createTurnRun, type CallRecord, type TurnRun, type TurnRunDeps } from './turn-run.js';
 import type { AssistantContextTurn } from './thread-store.js';
 import { bindingsApproved, storedAnswerOf } from './thread-answer.js';
-import { classifyItem, provenanceOf, type ClassifyContext } from './sensitive-items.js';
-import type { AssembledText } from '../case-summary/assemble.js';
+import { classifyItem, type ClassifyContext, type Provenance } from './sensitive-items.js';
 import { openTurnThread, type TurnThread, type TurnThreadDeps } from './turn-thread.js';
 
 export const TURN_CLOSED_ACTION = 'assistant.turn.closed';
@@ -39,8 +38,6 @@ interface TurnNotes {
   /** The question as typed, for a turn that carries one, and whether the request asked for the mask: for the thread only. */
   question?: string;
   maskOn?: boolean;
-  /** What the classifier reads of the text the accepted answer was written from: the values sent for every element, every element key, the type of each. */
-  provenance?: Pick<ClassifyContext, 'sentValues' | 'sent' | 'typeOf'>;
   entities?: AssistantThreadTurnWrite['entities'];
   citedRefs?: AssistantThreadTurnWrite['citationRefs'];
   started?: { readonly sourceId: string; readonly investigationId: string };
@@ -115,8 +112,18 @@ export function noteTurn(change: TurnNote): void {
 }
 
 /** The turn passed the checks that come before it: from here on it ends in a closing event, and the investigation's epoch is read before the turn does any other work. `questionHash` is the keyed hash of the message, for the thread. */
-/** The text the answer being checked was written from: the last one noted is the one the accepted answer rests on. */
-export const noteProvenance = (assembled: Pick<AssembledText, 'keys' | 'sentValues'>): void => note((notes) => void (notes.provenance = provenanceOf(assembled)));
+/** What the classifier reads of the text an answer was written from: the values sent for every element, every element key, the type of each. Kept with the answer object itself, so that the answer a turn ends with is classified against the text it was checked against and never another attempt's. */
+const PROVENANCE = new WeakMap<object, Provenance>();
+/** The provenance of an answer carried to its copy, when a later step copies it (the follow-ups added to an answer): the copy is the answer the turn ends with. */
+export const carryProvenance = <T extends AssistantTurnAnswer>(from: AssistantTurnAnswer, copy: T): T => {
+  const held = PROVENANCE.get(from);
+  if (held !== undefined) PROVENANCE.set(copy, held);
+  return copy;
+};
+export const stampProvenance = <T extends AssistantTurnAnswer>(answer: T, provenance: Provenance): T => {
+  PROVENANCE.set(answer, provenance);
+  return answer;
+};
 
 export const noteTurnStarted = async (started: { readonly sourceId: string; readonly investigationId: string; readonly questionHash?: string; readonly question?: string; readonly maskOn?: boolean }): Promise<void> => {
   const notes = scope.getStore();
@@ -343,13 +350,19 @@ function textOf(request: ExtensionRequest, notes: TurnNotes, kept: 'answered' | 
   if (kept === 'waiting') return {};
   const maskOn = notes.maskOn === true;
   const sourceId = notes.started?.sourceId;
-  const keys = sourceId === undefined ? undefined : safely(() => request.sensitiveKeys?.(sourceId));
-  const version = sourceId === undefined ? undefined : safely(() => request.sensitivityVersion?.(sourceId));
-  const context: ClassifyContext = { sentValues: notes.provenance?.sentValues, sent: notes.provenance?.sent ?? [], typeOf: notes.provenance?.typeOf ?? (() => undefined), sensitiveKeys: keys };
+  // the keys and the version are read from the live mapping one after the other: when the version moved between the reads, the pair is not one snapshot, and neither is used
+  const before = sourceId === undefined ? undefined : safely(() => request.sensitivityVersion?.(sourceId));
+  const read = sourceId === undefined ? undefined : safely(() => request.sensitiveKeys?.(sourceId));
+  const after = sourceId === undefined ? undefined : safely(() => request.sensitivityVersion?.(sourceId));
+  const steady = before !== undefined && before === after;
+  const keys = steady ? read : undefined;
+  const version = steady ? before : undefined;
+  const provenance = 'answer' in outcome ? PROVENANCE.get(outcome.answer) : undefined;
+  const context: ClassifyContext = { sentValues: provenance?.sentValues, sent: provenance?.sent ?? [], typeOf: provenance?.typeOf ?? (() => undefined), sensitiveKeys: keys };
   const stored = 'answer' in outcome ? storedAnswerOf(outcome.answer, maskOn, (text, cited) => classifyItem(text, cited, context)) : undefined;
   const answer = stored?.answer;
   // a binding to anything the classifier could not have approved refuses the write as a whole: nothing of the turn is stored
-  if (stored !== undefined && !maskOn && !bindingsApproved(stored.answer, context, stored.keyOf)) return undefined;
+  if (stored !== undefined && !maskOn && !bindingsApproved(stored.answer, context, stored.keyOf, sourceId)) return undefined;
   return { ...(notes.question === undefined ? {} : { question: notes.question }), maskOn, ...(answer === undefined ? {} : { answer }), ...(version === undefined ? {} : { sensitivityVersion: version }) };
 }
 

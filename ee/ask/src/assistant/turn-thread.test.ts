@@ -391,6 +391,22 @@ describe('the writes of a thread never change a turn and never outlive the inves
       expect(masked?.sensitivityVersion).toBe('sv1:abc');
     });
 
+    it('stores an answer written after tool steps the same way, bound to the element a read listed, and unbound when the answer is not the one the provenance was kept for', async () => {
+      const steps = () => { let next = 0; const replies = [ok(JSON.stringify({ tool: 'byId', values: { id: 'A-2' } })), ok('{"done":true}')]; return () => replies[Math.min(next++, replies.length - 1)] ?? ok('{"done":true}'); };
+      const tools = await turnRig({ reply: SHARED, step: steps(), run: () => ({ status: 'ok', result: okResult() }), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }] })) });
+      await run(tools, BASE, TITLES);
+      const kept = stored(tools)[0];
+      const item = kept?.answer?.blocks[0]?.kind === 'sentences' ? kept.answer.blocks[0].items[0] : undefined;
+      expect(item).toMatchObject({ form: 'bound', segments: [{ element: { stableId: 'A-1' }, property: '(title)' }, { literal: ' is listed.' }] });
+      expect(JSON.stringify(kept?.answer)).not.toContain('Account A-1');
+      // a keys-and-version pair read across a change of the mapping is not used
+      let reads = 0;
+      const moving = await turnRig({ reply: SHARED, step: steps(), run: () => ({ status: 'ok', result: okResult() }), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }] })) });
+      await run(moving, BASE, { sensitiveKeys: TITLES.sensitiveKeys, sensitivityVersion: () => `sv1:${(reads += 1)}` });
+      expect(stored(moving)[0]?.answer?.blocks[0]).toMatchObject({ items: [{ form: 'unbound' }] });
+      expect(stored(moving)[0]).not.toHaveProperty('sensitivityVersion');
+    });
+
     it('stores every item unbound, and no version, when the capability is absent or fails', async () => {
       const absent = await answerOf_({}, {}, sentence('Account A-1 is listed.'));
       expect(absent?.answer?.blocks[0]).toMatchObject({ items: [{ form: 'unbound', text: 'Account A-1 is listed.' }] });

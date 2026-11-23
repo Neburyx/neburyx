@@ -145,6 +145,15 @@ describe('the text of a turn, stored through the strict schema', () => {
     expect(bare.statements.some((text) => /INSERT INTO assistant_turns/.test(text))).toBe(true);
   });
 
+  it('hands the database the segments of a bound item and none of its values', async () => {
+    const bound = { blocks: [{ kind: 'sentences', items: [{ form: 'bound', segments: [{ element: { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' }, property: 'holder' }, { literal: ' is listed.' }], cites: [{ sourceId: 'demo', entityType: 'widget', stableId: 'A-1' }] }] }] };
+    const { held, statements, parameters } = pool();
+    await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).append(turn({ question: 'Who?', maskOn: false, answer: bound as never }), 0);
+    const bytes = String(parameters[statements.findIndex((text) => /INSERT INTO assistant_turns/.test(text))]?.[20]);
+    expect(bytes).toContain('"property":"holder"');
+    expect(bytes).not.toContain('Jordan');
+  });
+
   it.each([
     ['a question one over the bound', { maskOn: false, question: 'q'.repeat(4001) }],
     ['a sentence one over the bound', { maskOn: false, answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ text: 's'.repeat(2001) })] }] } }],

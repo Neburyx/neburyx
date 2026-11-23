@@ -53,7 +53,7 @@ import type { TokenKeys } from '../case-summary/token-keys.js';
 import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
 import { verdictRefusal } from './verdict-overview.js';
-import { noteResumes, noteStep, noteTurn, noteTurnStarted, readTurnContext, withTurnAudit } from './turn-audit.js';
+import { noteResumes, noteStep, noteTurn, noteTurnStarted, carryProvenance, readTurnContext, stampProvenance, withTurnAudit } from './turn-audit.js';
 import { auditConfirmation, openDecision, waitingAnswer, type WaitContext } from './confirmation.js';
 import type { AssistantPendingStore } from './pending-store.js';
 import { countWords } from './words.js';
@@ -218,7 +218,7 @@ async function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view', onWaiting
     case 'limit':
       return { status: 'limit', limit: outcome.limit, sentence: ASSISTANT_LIMIT_SENTENCES[outcome.limit], reads: [...outcome.reads] };
     case 'blocks':
-      return { status: 'answered', route, blocks: [...outcome.answer.blocks], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.answer.pointer === undefined ? {} : { pointer: outcome.answer.pointer }), ...(outcome.answer.lastCallNote === undefined ? {} : { lastCallNote: outcome.answer.lastCallNote }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
+      return stampProvenance({ status: 'answered', route, blocks: [...outcome.answer.blocks], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.answer.pointer === undefined ? {} : { pointer: outcome.answer.pointer }), ...(outcome.answer.lastCallNote === undefined ? {} : { lastCallNote: outcome.answer.lastCallNote }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) }, outcome.answer.provenance);
     case 'no-description':
       return { status: 'no-description', route, sentence: outcome.sentence, names: [...outcome.names] };
     case 'unsupported':
@@ -406,7 +406,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       // an answer of the ask route that rests on a read of one of the folder's questions carries the follow-ups of Ask's own answer to that read
       if (turn?.status === 'answered' && turn.route === 'ask' && 'blocks' in turn && run.route === 'ask' && looped.kind === 'blocks' && looped.askAnswer !== undefined) {
         const chips = followUpsFor(request, body)({ answered: looped.askAnswer });
-        if (chips.length > 0) return { ...turn, followUps: chips.map((chip) => ({ titles: [...chip.titles], choice: chip.choice })) };
+        if (chips.length > 0) return carryProvenance(turn, { ...turn, followUps: chips.map((chip) => ({ titles: [...chip.titles], choice: chip.choice })) });
       }
       return turn ?? undefined;
     } catch (error) {
