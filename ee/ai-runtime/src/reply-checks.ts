@@ -200,17 +200,20 @@ function namesType(after: string, name: string): boolean {
  */
 const OTHER_POPULATION = /(?<![\p{L}\p{N}_-])(?:in total|total|totals|overall|altogether|in all|source-wide|the (?:whole |entire )?(?:source|database)|not (?:yet )?(?:retrieved|loaded|shown|read|listed|counted)|unretrieved|hidden|remaining|further|additional|beyond|more|fewer|less|over|under|exceeds?|exceeding|at least|at most|up to|about|approximately|around|roughly|nearly|almost)(?![\p{L}\p{N}_-])/iu;
 
-/** Whether a number is the count of the elements the sentence cites that are of the type the text after it names: the check counts the cited elements itself and invents no number. */
+/** Whether a number is the count of the elements the sentence cites that are of the type, or of the kind (entities, relationships, elements), the text after it names: the check counts the cited elements itself and invents no number. */
 function countsCitedElements(number: string, after: string, sentence: SummarySentence, assembled: CheckedText): boolean {
   const types = assembled.elementTypes;
   if (types === undefined || !/^\d+$/u.test(number) || OTHER_POPULATION.test(sentence.text.replace(/\s+/gu, ' '))) return false;
   const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
   const perType = new Map<string, number>();
+  const perKind = new Map<string, number>([['element', 0], ['entity', 0], ['relationship', 0]]);
   for (const key of new Set(sentence.cites)) {
     const type = lines.has(key) ? undefined : types.get(key);
-    if (type !== undefined) perType.set(type, (perType.get(type) ?? 0) + 1);
+    if (type === undefined) continue;
+    perType.set(type, (perType.get(type) ?? 0) + 1);
+    for (const kind of ['element', type.startsWith('relationship ') ? 'relationship' : 'entity']) perKind.set(kind, (perKind.get(kind) ?? 0) + 1);
   }
-  return [...perType].some(([type, count]) => count === Number(number) && namesType(after, elementTypeName(type)));
+  return [...perType].some(([type, count]) => count === Number(number) && namesType(after, elementTypeName(type))) || [...perKind].some(([kind, count]) => count > 0 && count === Number(number) && namesType(after, kind));
 }
 
 function numbersHold(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): boolean {

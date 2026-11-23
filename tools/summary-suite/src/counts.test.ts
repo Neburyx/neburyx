@@ -97,6 +97,9 @@ describe('the suite\'s own rule for the count of cited elements', () => {
     ['1 widget is a relationship.', ['n3', 'e1']],
     ['1 widget is listed.', ['n5', 'n6']],
     ['2 money movements are listed.', ['n7', 'n8']],
+    ['1 relationship is listed.', ['e1', 'n3']],
+    ['2 entities are listed.', ['n1', 'n2', 'e1']],
+    ['3 elements are listed.', ['n1', 'n2', 'e1']],
   ])('supports a correct count: %s', (text, cites) => {
     expect(unsupported(text, cites)).toEqual([]);
   });
@@ -108,6 +111,9 @@ describe('the suite\'s own rule for the count of cited elements', () => {
     ['2 categories are unretrieved.', ['n1', 'n2']],
     ['2 categories are not\tshown.', ['n1', 'n2']],
     ['At\nleast 2 categories are listed.', ['n1', 'n2']],
+    ['2 relationships are listed.', ['e1', 'n3']],
+    ['3 entities are listed.', ['n1', 'n2', 'e1']],
+    ['In total 1 relationship is listed.', ['e1']],
   ])('does not support a number that is no count of the cited elements: %s', (text, cites) => {
     expect(unsupported(text, cites)).not.toEqual([]);
   });

@@ -5,7 +5,7 @@ import { caseOf, loadCases } from './cases.js';
 import { NUMBER_ON_THE_SECOND } from './evidence.js';
 import { mutatedChecks, type Mutation } from './mutants.js';
 import { twinsOf, viewOf, type Evidence } from './rules.js';
-import { node, reading } from './view.js';
+import { edge, node, reading } from './view.js';
 
 type Counted = { readonly view: Evidence['view'] };
 const set = loadCases();
@@ -163,6 +163,38 @@ describe.each(PATHS)('%s: 25 transactions over 25 cited transactions, with the p
   it('shows 25 and removes 26', async () => {
     expect(await path(undefined, sentencesOf({ text: '25 transactions are listed.', cites }), evidence)).toEqual(['25 transactions are listed.']);
     expect(await path(undefined, sentencesOf({ text: '26 transactions are listed.', cites }), evidence)).toEqual([]);
+  });
+});
+
+describe.each(PATHS)('%s: the entities and the relationships of a view, counted by kind, with the product’s own checks', (_name, path) => {
+  const account = node('account', 'acct1', 'Account one');
+  const bank = node('bank', 'bank1', 'Bank one');
+  const customer = node('customer', 'cust1', 'Customer one');
+  const transactions = Array.from({ length: 25 }, (_, index) => node('transaction', `tx${index + 1}`, `Transfer ${index + 1}`));
+  const entities = [account, bank, customer, ...transactions];
+  const edges = [
+    ...transactions.map((transaction, index) => edge('RECEIVED_BY', `rb${index + 1}`, transaction.ref, account.ref)),
+    edge('OWNS', 'own1', customer.ref, account.ref),
+    edge('HELD_AT', 'held1', account.ref, bank.ref),
+  ];
+  const evidence: Counted = { view: reading(entities, edges) };
+  const entityCites = entities.map((_, index) => `n${index + 1}`);
+  const edgeCites = edges.map((_, index) => `e${index + 1}`);
+
+  it('shows 27 relationships over the 27 cited relationships of three types, and removes 26 and 28', async () => {
+    expect(await path(undefined, sentencesOf({ text: '27 relationships are in view.', cites: edgeCites }), evidence)).toEqual(['27 relationships are in view.']);
+    expect(await path(undefined, sentencesOf({ text: '26 relationships are in view.', cites: edgeCites }), evidence)).toEqual([]);
+    expect(await path(undefined, sentencesOf({ text: '28 relationships are in view.', cites: edgeCites }), evidence)).toEqual([]);
+  });
+
+  it('shows 28 entities and 27 relationships in one sentence, and removes the sentence when one of the two is wrong', async () => {
+    const cites = [...entityCites, ...edgeCites];
+    expect(await path(undefined, sentencesOf({ text: '28 entities and 27 relationships are in view.', cites }), evidence)).toEqual(['28 entities and 27 relationships are in view.']);
+    expect(await path(undefined, sentencesOf({ text: '28 entities and 26 relationships are in view.', cites }), evidence)).toEqual([]);
+  });
+
+  it('removes the count of relationships said of another population, so the source-wide figure is not backed by the cited ones', async () => {
+    expect(await path(undefined, sentencesOf({ text: 'In total 27 relationships are in view.', cites: edgeCites }), evidence)).toEqual([]);
   });
 });
 

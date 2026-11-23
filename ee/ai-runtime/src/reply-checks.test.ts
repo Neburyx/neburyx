@@ -287,6 +287,37 @@ describe('a count of the cited elements', () => {
     expect(judged('1 transaction is listed.', ['n1']).kept).toHaveLength(1);
   });
 
+  describe('a count of a kind: entities, relationships or elements', () => {
+    const mixed: CheckedText = { ...counted, elementTypes: new Map([...(counted.elementTypes ?? []), ['e2', 'relationship OWNS']]) };
+
+    it('shows the number of cited relationships of every type, and of cited entities', () => {
+      expect(judged('2 relationships are in view.', ['e1', 'e2'], mixed).kept).toHaveLength(1);
+      expect(judged('4 entities are in view.', ['n1', 'n2', 'n3', 'n4'], mixed).kept).toHaveLength(1);
+      expect(judged('1 entity is in view.', ['n4'], mixed).kept).toHaveLength(1);
+    });
+
+    it('shows the number of all cited elements as elements', () => {
+      expect(judged('6 elements are in view.', ['n1', 'n2', 'n3', 'n4', 'e1', 'e2'], mixed).kept).toHaveLength(1);
+    });
+
+    it.each([
+      ['3 relationships are in view.', ['e1', 'e2']],
+      ['2 relationships are in view.', ['e1', 'n1']],
+      ['5 entities are in view.', ['n1', 'n2', 'n3', 'n4']],
+      ['7 elements are in view.', ['n1', 'n2', 'n3', 'n4', 'e1', 'e2']],
+    ])('removes the wrong count: %s', (text, cites) => {
+      expect(judged(text, cites, mixed).kept).toEqual([]);
+    });
+
+    it.each(['In total 2 relationships are in view.', 'At least 2 relationships are in view.', '2 relationships are not yet retrieved.'])('removes a kind count said of another population: %s', (text) => {
+      expect(judged(text, ['e1', 'e2'], mixed).kept).toEqual([]);
+    });
+
+    it('does not take a longer word for the kind', () => {
+      expect(judged('2 relationshipsx are in view.', ['e1', 'e2'], mixed).kept).toEqual([]);
+    });
+  });
+
   it.each([2, 4])('removes the count %i over three cited transactions, once', (wrong) => {
     const result = judged(`${wrong} transactions are listed.`, ['n1', 'n2', 'n3']);
     expect(result.kept).toEqual([]);

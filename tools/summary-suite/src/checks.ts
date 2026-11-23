@@ -143,16 +143,21 @@ const typeOfLine = (key: string, line: string | undefined): string | undefined =
 
 const formsOf = (name: string): string[] => [name, `${name}s`, `${name}es`, ...(name.endsWith('y') ? [`${name.slice(0, -1)}ies`] : [])];
 
-/** Whether a number is how many of the cited elements are of the type the words after it name, said of those elements alone. */
+/** Whether a number is how many of the cited elements are of the type, or of the kind (entities, relationships, elements), the words after it name, said of those elements alone. */
 function countsCitedOfType(found: { readonly value: string; readonly after: string }, sentence: SummarySentence, lines: Map<string, string>): boolean {
   if (!/^\d+$/u.test(found.value) || NOT_ABOUT_THE_CITED.test(sentence.text.replace(/\s+/gu, ' '))) return false;
   const named = found.after.toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trimStart();
   const types = new Map<string, number>();
+  const kinds = new Map<string, number>();
   for (const key of new Set(sentence.cites)) {
     const type = typeOfLine(key, lines.get(key));
-    if (type !== undefined) types.set(type, (types.get(type) ?? 0) + 1);
+    if (type === undefined) continue;
+    types.set(type, (types.get(type) ?? 0) + 1);
+    for (const kind of ['element', type.slice(0, type.indexOf(' '))]) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
   }
-  return [...types].some(([type, count]) => count === Number(found.value) && formsOf(type.slice(type.indexOf(' ') + 1).toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trim()).some((form) => named.startsWith(form) && !/^[\p{L}\p{N}_-]/u.test(named.slice(form.length))));
+  const namedAs = (name: string): boolean => formsOf(name).some((form) => named.startsWith(form) && !/^[\p{L}\p{N}_-]/u.test(named.slice(form.length)));
+  const wanted = Number(found.value);
+  return [...types].some(([type, count]) => count === wanted && namedAs(type.slice(type.indexOf(' ') + 1).toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trim())) || [...kinds].some(([kind, count]) => count === wanted && namedAs(kind));
 }
 
 /** The numbers of a sentence with the text after each, the words and identifiers blanked to their own length. */
