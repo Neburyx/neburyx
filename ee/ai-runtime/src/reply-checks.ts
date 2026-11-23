@@ -898,9 +898,14 @@ function rangeHolds(sentence: SummarySentence, assembled: CheckedText): boolean 
     }
     return true;
   };
-  // no type is named and more than one could be what the range is over: the sentence holds only when exactly one of them verifies it
+  // no type is named and more than one could be what the range is over: it holds only when every one of them with its whole set cited verifies it; a type cited in part is context
   const candidateTypes = new Set(candidates.map((pair) => pair.type));
-  if (candidateTypes.size > 1) return new Set(candidates.filter((pair) => verifies(pair.type, pair.property)).map((pair) => pair.type)).size === 1;
+  if (candidateTypes.size > 1) {
+    const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
+    const wholeSet = (type: string): boolean => [...(assembled.elementTypes ?? [])].every(([key, held]) => held !== type || lines.has(key) || cited.includes(key));
+    const fullyCited = candidates.filter((pair) => wholeSet(pair.type));
+    return fullyCited.length > 0 && fullyCited.every((pair) => verifies(pair.type, pair.property));
+  }
   return candidates.some((pair) => verifies(pair.type, pair.property));
 }
 

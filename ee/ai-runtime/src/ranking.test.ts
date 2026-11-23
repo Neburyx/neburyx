@@ -412,7 +412,9 @@ describe.each([
       // the context type is a whole set cited with values whose ends fit the sentence, and the sentence names the other type: it cannot be chosen
       const fits = withOne([['n8', '2022-09-10T20:00:00Z'], ['n9', '2022-09-10T22:00:00Z']]);
       expect(verdict(`The ${type}s were created between 20:00 and 22:00 on 2022-09-10.`, [...all, 'n8', 'n9'], fits)).not.toBe('kept');
-      expect(verdict(`The ${other}s were created between 20:00 and 22:00 on 2022-09-10.`, [...all, 'n8', 'n9'], fits)).toBe('kept');
+      expect(verdict(`Every ${other} was created between 20:00 and 22:00 on 2022-09-10.`, [...all, 'n8', 'n9'], fits)).toBe('kept');
+      // no type named: both are whole sets, only the context type fits, so the sentence is not verified
+      expect(verdict(`These were created between 20:00 and 22:00 on 2022-09-10.`, [...all, 'n8', 'n9'], fits)).not.toBe('kept');
     });
 
     it('keeps only the named keys that fit the ends, checks figure ranges of a named plural type like time ranges, and removes a sentence that names more than one type', () => {
@@ -446,9 +448,18 @@ describe.each([
       const every = [...all, 'n8', 'n9'];
       expect(verdict(`The ${type}s sent by a ${other} were created between 09:00 and 10:00 on 2022-09-10.`, every, crowd)).toBe('comparison');
       expect(verdict(`The ${type}s sent by a ${other} were created between 23:50 and 23:59 on 2022-09-10.`, every, crowd)).toBe('comparison');
-      // no type named, two types: held only when exactly one of them verifies it
-      expect(verdict(`These were created between 23:50 and 23:59 on 2022-09-10.`, every, crowd)).toBe('kept');
+      // no type named, two fully cited types: held only when both verify it
+      expect(verdict(`These were created between 23:50 and 23:59 on 2022-09-10.`, every, crowd)).not.toBe('kept');
       expect(verdict(`These were created between 09:00 and 23:59 on 2022-09-10.`, every, crowd)).not.toBe('kept');
+      // both directions: a second type that holds the same range too is verified with the first; a type cited in part is context and does not decide
+      const alike = new Map(ranked);
+      for (const [id, instant] of [['n8', '2022-09-10T23:50:00Z'], ['n9', '2022-09-10T23:59:00Z']] as const) {
+        context.set(id, `${id} | "${other}" | title: "Holder ${id}" | id: "${id}x" | ${time}: "${instant}"`);
+        alike.set(id, [{ key: time, dataClass: 'dateTime', value: temporalKey('dateTime', instant) ?? '' }]);
+      }
+      const matching: CheckedText = { ...crowd, lines: context, text: [...context.values()].join('\n'), rankedValues: alike };
+      expect(verdict(`These were created between 23:50 and 23:59 on 2022-09-10.`, every, matching)).toBe('kept');
+      expect(verdict(`These were created between 23:50 and 23:59 on 2022-09-10.`, [...all, 'n8'], crowd)).toBe('kept');
     });
 
     it('takes a time of day of an instant only as an exact part of it, never a rounding, and a part that is no part as a number to find', () => {
