@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { prepareOutFolder, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
-import { enrichRepeat } from './enrich.js';
+import { blindSets, type ArmRepeat } from './blind.js';
+import { enrichRepeat, type EnrichedRepeat } from './enrich.js';
 import { connectDb } from './db.js';
 import type { Db } from './records.js';
 import { runRepeat, type Http, type RepeatFile, type RepeatSettings, type TurnRecord } from './driver.js';
@@ -11,6 +12,7 @@ import { readSettingsFile } from './settings-file.js';
 
 const THREAD_USAGE = `usage:
   ask-eval thread records --file <run file> --database-env-file <env file> --out <file>
+  ask-eval thread blind --seed <text> --sets <folder> --key <folder> <records file>...
   ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder>)`;
 
 /** What a thread run needs of the outside world: the product's HTTP surface (a stand-in in tests) and the clock. */
@@ -28,15 +30,20 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
+const VALUE_FLAGS = ['seed', 'sets', 'key-folder', 'file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
-function parse(args: readonly string[]): { readonly values: Map<string, string>; readonly dryRun: boolean } {
+function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly rest: readonly string[] } {
   const values = new Map<string, string>();
+  const rest: string[] = [];
   let dryRun = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] ?? '';
-    if (!arg.startsWith('--')) throw new UsageError(THREAD_USAGE);
+    if (!arg.startsWith('--')) {
+      if (!positional) throw new UsageError(THREAD_USAGE);
+      rest.push(arg);
+      continue;
+    }
     const name = arg.slice(2);
     if (REFUSED_FLAGS.includes(name)) throw new UsageError('a provider key is never given to this command: the product reads it itself');
     if (name === 'dry-run') {
@@ -48,7 +55,7 @@ function parse(args: readonly string[]): { readonly values: Map<string, string>;
     values.set(name, value);
     index += 1;
   }
-  return { values, dryRun };
+  return { values, dryRun, rest };
 }
 
 const wholeNumber = (text: string | undefined, name: string, min: number, max: number): number | undefined => {
@@ -106,6 +113,7 @@ function settingsOf(values: Map<string, string>): RepeatSettings {
 /** `ask-eval thread run`: one or more repeats of the thread against a running product, written as run files. Returns the exit code: 0 complete, 1 a repeat ended early, 2 usage. */
 export async function runThread(argv: readonly string[], io: CliIo, deps: ThreadDeps = {}): Promise<number> {
   if (argv[0] === 'records') return await runRecords(argv.slice(1), io, deps);
+  if (argv[0] === 'blind') return runBlind(argv.slice(1), io);
   if (argv[0] !== 'run') throw new UsageError(THREAD_USAGE);
   const { values, dryRun } = parse(argv.slice(1));
   for (const name of ['manifest', 'base', 'settings-file', 'head', 'arm']) if (values.get(name) === undefined) throw new UsageError(THREAD_USAGE);
@@ -170,4 +178,36 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
   } finally {
     await connection.close();
   }
+}
+
+/** `ask-eval thread blind`: the blind sets of the given records files (arms and repeats read from them), written to `--sets`, and the key written to a different folder `--key`. */
+function runBlind(args: readonly string[], io: CliIo): number {
+  const { values, rest } = parse(args, true);
+  const seed = values.get('seed');
+  const sets = values.get('sets');
+  const keyFolder = values.get('key-folder');
+  if (seed === undefined || sets === undefined || keyFolder === undefined || rest.length === 0) throw new UsageError(THREAD_USAGE);
+  const setsFolder = resolve(sets);
+  const keyPath = resolve(keyFolder);
+  if (setsFolder === keyPath) throw new UsageError('the key folder must be another folder than the sets');
+  prepareOutFolder(setsFolder);
+  prepareOutFolder(keyPath);
+  const inputs: ArmRepeat[] = rest.map((path) => {
+    let enriched: EnrichedRepeat;
+    try {
+      enriched = JSON.parse(readFileSync(resolve(path), 'utf8')) as EnrichedRepeat;
+    } catch {
+      throw new UsageError('a records file cannot be read');
+    }
+    const repeat = Number(/-r(\d+)\./u.exec(path)?.[1] ?? NaN);
+    if (!Number.isInteger(repeat)) throw new UsageError('a records file name must end in -r<repeat>.records.json');
+    return { arm: enriched.file.arm, repeat, enriched };
+  });
+  const forbidden = [...new Set(inputs.flatMap((entry) => [entry.arm, entry.enriched.file.manifest.name, entry.enriched.file.settings.model, entry.enriched.file.head, ...entry.enriched.file.turns.flatMap((turn) => (turn.traceId === undefined ? [] : [turn.traceId]))]))];
+  const output = blindSets(inputs, { seed, manifestSha256: inputs[0]?.enriched.file.manifest.sha256 ?? '', forbidden });
+  for (const [repeat, text] of output.sets) writePrivateFile(resolve(setsFolder, `set-${repeat}.md`), text, false);
+  writePrivateFile(resolve(keyPath, 'key.json'), `${JSON.stringify({ key: output.key, slots: output.slots }, null, 2)}\n`, false);
+  io.out(`sets written: ${output.sets.size}`);
+  io.out(`answers to score: ${output.slots.length}`);
+  return 0;
 }
