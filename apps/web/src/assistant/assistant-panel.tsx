@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useClientState } from '../state/context.js';
 import { usePanelSize } from '../workspace/panel-host.js';
 import { useAiAvailabilityWhenProvided } from '../shell/shell-data.js';
@@ -6,6 +6,8 @@ import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDE_SIZE, ASSISTANT_PANEL_WIDTH } 
 import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, wordsText } from './copy.js';
 import { MaskingCard, NewThreadCard, StandingNote } from './thread-notices.js';
 import { StoredTurns } from './stored-turns.js';
+import { boundElementsOf } from './stored-answer.js';
+import { useRefReads } from './stored-reads.js';
 import { useStoredThread } from './stored-thread.js';
 import { SummaryContext } from './summary-context.js';
 import { TurnView, stepSentenceOf } from './turn-cards.js';
@@ -96,6 +98,8 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const body = useRef<HTMLDivElement>(null);
   const { turns, notice, input, summary } = model.state;
   const storedTurns = stored.kind === 'ready' ? stored.thread.turns : [];
+  const bound = useMemo(() => boundElementsOf(storedTurns.flatMap((turn) => (turn.answer === undefined ? [] : [turn.answer]))), [storedTurns]);
+  const reads = useRefReads(bound, stored.kind === 'ready' && !off);
   const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
   useEffect(() => {
@@ -163,7 +167,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
         {unavailable ? <NotAvailable /> : showNewThread ? <NewThreadCard /> : null}
         {!unavailable && stored.kind === 'loading' ? <p className="ask-note" role="status">{ASSISTANT_COPY.storedLoading}</p> : null}
         {!unavailable && stored.kind === 'failed' ? <p className="ask-note" role="alert">{ASSISTANT_COPY.storedFailed}</p> : null}
-        {!unavailable && storedTurns.length > 0 ? <StoredTurns turns={storedTurns} earlier={stored.kind === 'ready' ? stored.thread.earlierTurns : 0} /> : null}
+        {!unavailable && storedTurns.length > 0 ? <StoredTurns turns={storedTurns} earlier={stored.kind === 'ready' ? stored.thread.earlierTurns : 0} reads={reads} drawsValues={bound.length > 0} /> : null}
         {!unavailable && summary !== undefined ? <SummaryContext summary={summary} /> : null}
         {unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread ? null : <Intro />}
         {!unavailable && turns.length > 0 ? (

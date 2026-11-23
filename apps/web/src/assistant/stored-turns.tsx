@@ -1,6 +1,7 @@
 import type { AssistantThreadResponse } from '@neburyx/contracts';
 import { ASSISTANT_COPY, causeText, earlierText, sourcesText } from './copy.js';
-import { storedViewOf, type ValueOf } from './stored-answer.js';
+import { storedViewOf, valueFromReads, type ValueOf } from './stored-answer.js';
+import type { RefReads } from './stored-reads.js';
 import type { ViewAnswer } from './assistant-session.js';
 import { ViewAnswerCard } from './view-answer-card.js';
 
@@ -40,13 +41,23 @@ function StoredAnswer({ answer, valueFor }: { readonly answer: NonNullable<Turn[
 }
 
 /** The earlier turns of the thread, oldest first: the question as the person typed it and the answer in the card of a live one, as frame AS19a draws them; a turn that kept no text is a row. */
-export function StoredTurns({ turns, earlier, valueFor = () => undefined }: { readonly turns: AssistantThreadResponse['turns']; readonly earlier: number; readonly valueFor?: ValueOf }) {
+export function StoredTurns({ turns, earlier, reads, drawsValues }: { readonly turns: AssistantThreadResponse['turns']; readonly earlier: number; readonly reads: RefReads; /** Whether some answer shown holds a bound value, so that the reading of values has something to say. */ readonly drawsValues: boolean }) {
+  const valueFor = valueFromReads(reads);
   return (
     <section className="assistant-stored" aria-labelledby="assistant-stored-heading">
       <h3 id="assistant-stored-heading" className="visually-hidden">
         {ASSISTANT_COPY.storedHeading}
       </h3>
       <p className="assistant-stored-notice">{ASSISTANT_COPY.storedNotice}</p>
+      {drawsValues && reads.loading ? <p className="ask-note" role="status">{ASSISTANT_COPY.valuesLoading}</p> : null}
+      {drawsValues && reads.failed ? (
+        <p className="ask-note" role="alert">
+          {ASSISTANT_COPY.valuesFailed}{' '}
+          <button type="button" className="ask-continue" onClick={reads.retry}>
+            {ASSISTANT_COPY.tryAgain}
+          </button>
+        </p>
+      ) : null}
       {earlier > 0 ? <p className="ask-note">{earlierText(earlier)}</p> : null}
       <ol className="assistant-stored-list">
         {turns.map((turn) =>

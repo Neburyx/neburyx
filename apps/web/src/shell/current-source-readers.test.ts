@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const SRC = join(import.meta.dirname, '..');
 const READS_SOURCE_OF_INVESTIGATION = /investigation\)?\s*,\s*\(\w+\)\s*=>\s*\w+\.sourceId|investigation\.getState\(\)\.sourceId/;
 const SHOWS_THE_SOURCE = 'shell/use-current-source.ts';
-const KEYS_BEHAVIOUR_TO_THE_SOURCE = ['paths/paths-panel.tsx', 'ask/use-ask.ts', 'assistant/use-assistant.ts', 'summary/use-summary.ts', 'workspace/investigation-identity.tsx', 'canvas/profile-context.tsx', 'canvas/profile-store.ts', 'canvas/graph-canvas.tsx', 'workspace/legend-panel.tsx', 'workspace/panel-resize.ts', 'search/add-tab.tsx', 'patterns/patterns-panel.tsx'];
+const KEYS_BEHAVIOUR_TO_THE_SOURCE = ['paths/paths-panel.tsx', 'ask/use-ask.ts', 'assistant/use-assistant.ts', 'assistant/stored-reads.ts', 'summary/use-summary.ts', 'workspace/investigation-identity.tsx', 'canvas/profile-context.tsx', 'canvas/profile-store.ts', 'canvas/graph-canvas.tsx', 'workspace/legend-panel.tsx', 'workspace/panel-resize.ts', 'search/add-tab.tsx', 'patterns/patterns-panel.tsx'];
 const CHOOSES_THE_SOURCE_OF_A_SEARCH_WITHOUT_ONE = ['search/search-page.tsx', 'home/home-search.tsx'];
 const CHOOSES_THE_SOURCE_OF_THE_LIBRARY = ['patterns/library/use-library-source.ts'];
 const NAMES_THE_SOURCE_IN_AN_EXPORT = ['exports/export-dialog.tsx'];

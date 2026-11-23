@@ -122,6 +122,8 @@ export const ASSISTANT_COPY = {
   storedHeading: 'Earlier in this thread',
   storedNotice: 'Showing the earlier chat of this investigation. It is cleared when the investigation is closed.',
   storedWithheld: 'Masking is on, so this text is not shown.',
+  valuesLoading: 'Reading the values of the earlier answers…',
+  valuesFailed: 'Some values of the earlier answers could not be read.',
   valueUnavailable: '(not available)',
   storedLoading: 'Reading the earlier turns…',
   storedFailed: 'The earlier turns of this thread could not be read.',

@@ -1,7 +1,8 @@
-import type { ReadAnswer } from '@neburyx/contracts';
-import { edgeKey, elementKey } from '../state/keys.js';
+import type { ElementRef, ReadAnswer } from '@neburyx/contracts';
+import { elementKey } from '../state/keys.js';
 import type { CitationEntry } from '../summary/summary-model.js';
 import { ASSISTANT_COPY } from './copy.js';
+import { refKeyOf, type RefReads } from './stored-reads.js';
 import type { ViewAnswer } from './assistant-session.js';
 
 type Block = ReadAnswer['blocks'][number];
@@ -14,7 +15,6 @@ type Binding = Extract<Segment, { element: unknown }>;
 export type ValueOf = (binding: Binding) => string | undefined;
 
 const isBinding = (segment: Segment): segment is Binding => 'element' in segment;
-const refKeyOf = (ref: Cited): string => ('entityType' in ref ? elementKey(ref) : edgeKey(ref));
 
 /** The text a stored item draws: its text, its literal pieces with the value of each binding as `valueFor` gives it (or the unavailable mark), or the masking notice for an item the read withheld. */
 function itemTextOf(item: Item, valueFor: ValueOf): string {
@@ -53,4 +53,23 @@ export function storedViewOf(answer: ReadAnswer, valueFor: ValueOf): StoredView 
     }
   }
   return { blocks, refusals, entries: [...numbers.values()] };
+}
+
+/** The value a binding draws from what the gate returned for its element under the current mask, as the text a live answer writes it: a string, a number or a boolean as it is. Nothing when the element was not returned, holds no such property, or holds a value of another kind. */
+export const valueFromReads = (reads: Pick<RefReads, 'nodes'>): ValueOf => (binding) => {
+  const value = reads.nodes.get(elementKey(binding.element as ElementRef))?.properties.find((property) => property.key === binding.property)?.value;
+  if (typeof value === 'string') return value === '' ? undefined : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return undefined;
+};
+
+/** The elements whose values the shown answers draw: each element a binding names, once, in the order first named. */
+export function boundElementsOf(answers: readonly ReadAnswer[]): ElementRef[] {
+  const seen = new Map<string, ElementRef>();
+  const itemsOf = (block: Block): Item[] =>
+    block.kind === 'sentences' ? block.items.map((each) => each.item) : block.kind === 'table' ? [...block.columns, ...block.rows.flatMap((row) => row.cells)] : [block.sentence, ...(block.overview ?? []).map((each) => each.item)];
+  for (const answer of answers)
+    for (const item of answer.blocks.flatMap(itemsOf))
+      if (item.state === 'segments') for (const segment of item.segments) if (isBinding(segment) && 'entityType' in segment.element) seen.set(refKeyOf(segment.element), segment.element);
+  return [...seen.values()];
 }

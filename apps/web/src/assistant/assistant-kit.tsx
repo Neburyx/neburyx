@@ -1,7 +1,7 @@
 import type { TurnStep } from '../api/turn-stream.js';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, type AssistantThreadResponse, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
+import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, type AssistantThreadResponse, type AssistantTurnAnswer, type AssistantTurnRequest, type ReadRefsRequest, type ReadRefsResponse } from '@neburyx/contracts';
 import { fakeClient } from '../api/fake-client.js';
 import type { ApiResult } from '../api/client.js';
 import { ApiClientProvider } from '../api/client-context.js';
@@ -23,7 +23,10 @@ export type TurnCall = (request: AssistantTurnRequest, signal: AbortSignal | und
 export type ThreadCall = (investigationId: string, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantThreadResponse>>;
 const EMPTY_THREAD: ThreadCall = async () => ({ ok: true, value: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
 
-export function harness(turn: TurnCall, limit: number | null = 1000, thread: ThreadCall = EMPTY_THREAD, summary = false) {
+export type ReadRefsCall = (request: ReadRefsRequest, signal: AbortSignal | undefined) => Promise<ApiResult<ReadRefsResponse>>;
+const NO_REFS: ReadRefsCall = async () => ({ ok: true, value: { nodes: [], edges: [], missing: { entities: [], edges: [] } } });
+
+export function harness(turn: TurnCall, limit: number | null = 1000, thread: ThreadCall = EMPTY_THREAD, summary = false, refs: ReadRefsCall = NO_REFS) {
   const state = createClientState();
   state.bindSource('a');
   state.show({ id: 'inv-1', sourceId: 'a', record: RECORD, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
@@ -31,7 +34,12 @@ export function harness(turn: TurnCall, limit: number | null = 1000, thread: Thr
   const tools = createToolRegistry();
   const sent: AssistantTurnRequest[] = [];
   const reads: string[] = [];
+  const askedRefs: ReadRefsRequest[] = [];
   const client = fakeClient({
+    readRefs: async (request, signal) => {
+      askedRefs.push(request);
+      return refs(request, signal);
+    },
     assistantTurn: async (request, signal, onStep) => {
       sent.push(request);
       return turn(request, signal, onStep);
@@ -54,7 +62,7 @@ export function harness(turn: TurnCall, limit: number | null = 1000, thread: Thr
       </ClientStateProvider>
     </ApiClientProvider>
   );
-  return { tree, sent, reads, session, state, shell, tools };
+  return { tree, sent, reads, askedRefs, session, state, shell, tools };
 }
 
 export const typeAndSend = async (text: string) => {
