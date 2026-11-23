@@ -299,13 +299,18 @@ function countsCitedElements(number: string, after: string, sentence: SummarySen
   // the entities of one type that the cited elements are or join (a relationship that ends at an entity of the type counts that entity once): a count of them is exact when it equals how many distinct there are, less the ones the sentence names apart from the count, as a target or a subject
   const endsCited = sentence.cites.filter((key) => !lines.has(key)).flatMap((key) => assembled.elementEnds?.get(key) ?? []);
   const entityTypes = new Set(endsCited.map(([type]) => type));
+  // the names the text sent gives each end (its title, and its id only where the line prints it as one: the id of `EntityEnd` itself only tells two ends apart), in the form the sentence is read in; a name two ends share names neither apart
+  const identities = new Map(endsCited.map(([type, id, ...names]) => [`${type}\u0000${id}`, names.map((name) => name.normalize('NFC'))] as const));
+  const holders = new Map<string, Set<string>>();
+  for (const [identity, names] of identities) for (const name of names) holders.set(name, (holders.get(name) ?? new Set()).add(identity));
+  const endNames = [...holders.keys()];
   const countedEnds = (entityType: string): boolean => {
     const end = typeWordLength(tail, elementTypeName(`entity ${entityType}`));
     if (end === undefined || wanted === 0) return false;
-    const distinct = new Map(endsCited.filter(([type]) => type === entityType).map((held) => [held[1], held] as const));
-    const outside = outsideTheList(text.slice(0, text.length - tail.length).replace(/\S+$/u, ''), tail.slice(end), namesOfElements(assembled));
-    const apart = [...distinct.values()].filter(([, id, ...names]) => [id, ...names].some((name) => occursWhole(name, outside))).length;
-    return distinct.size === wanted || distinct.size - apart === wanted;
+    const distinct = [...identities].filter(([identity]) => identity.startsWith(`${entityType}\u0000`));
+    const outside = outsideTheList(text.slice(0, text.length - tail.length).replace(/\S+$/u, ''), tail.slice(end), [...namesOfElements(assembled), ...endNames]);
+    const apart = distinct.filter(([identity, names]) => names.some((name) => holders.get(name)?.size === 1 && holders.get(name)?.has(identity) === true && occursWhole(name, outside))).length;
+    return distinct.length === wanted || distinct.length - apart === wanted;
   };
   return (
     [...entityTypes].some(countedEnds) ||
