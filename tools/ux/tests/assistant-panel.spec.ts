@@ -665,6 +665,40 @@ test.describe('the Assistant panel', () => {
   });
 
   for (const width of [1440, 1280]) {
+    test(`shows a list after a sentence and a table at ${width} pixels, in the order given, with every citation numbered once and no sideways scroll`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const ref = (stableId: string) => ({ sourceId: 'banking-demo', entityType: 'account', stableId });
+      const answer: AssistantTurnAnswer = {
+        status: 'answered',
+        route: 'view',
+        blocks: [
+          { kind: 'sentences', sentences: [{ text: 'Two accounts are in view.', cites: ['n1', 'n2'] }] },
+          { kind: 'table', table: { title: 'Accounts · 1 row', columns: ['Account'], rows: [{ cells: ['AC-1'], cites: ['n1'] }], note: 'Each row selects its elements on the graph.' } },
+          { kind: 'list', label: 'Where it came from', items: [{ text: 'Owner: a rather long item that has to wrap inside the panel without clipping any of its words at all.', cites: ['n1'] }, { text: 'Bank: another item.', cites: ['n2'] }] },
+        ],
+        citations: [{ key: 'n1', kind: 'entity', ref: ref('AC-1') }, { key: 'n2', kind: 'entity', ref: ref('AC-2') }],
+        coverage: { retrieval: '2 shown · 0 not yet retrieved (exact)', summary: 'The answer cites 2 of the 2 shown elements.' },
+        model: 'claude-sonnet-5-5',
+        calls: 2,
+      };
+      await answerWith(page, answer);
+      await open(page);
+      await page.getByLabel('Your message').fill('show where it came from');
+      await page.keyboard.press('Enter');
+      const list = panel(page).getByRole('list', { name: 'Where it came from' });
+      await expect(list).toBeVisible();
+      await expect(list.getByRole('listitem')).toHaveCount(2);
+      const order = await panel(page).locator('.assistant-view-answer > div').evaluateAll((blocks) => blocks.map((block) => (block.querySelector('table') ? 'table' : block.querySelector('ul') ? 'list' : block.querySelector('ol') ? 'sentences' : 'other')).filter((kind) => kind !== 'other'));
+      expect(order).toEqual(['sentences', 'table', 'list']);
+      await expect(panel(page).getByText('Sources · 2')).toBeVisible();
+      const wrapped = await list.evaluate((element) => [...element.querySelectorAll('li')].map((item) => item.scrollWidth <= item.clientWidth));
+      expect(wrapped).toEqual([true, true]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    });
+  }
+
+  for (const width of [1440, 1280]) {
     test(`shows the refusal of a verdict with what the investigation connects at ${width} pixels, and selects the cited element`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await openWorkspace(page);

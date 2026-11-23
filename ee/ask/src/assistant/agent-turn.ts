@@ -5,7 +5,7 @@ import { AuditUnavailableError, removalNoteOf, type AuditedCallContext, type Che
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { judgeCheck } from '../case-summary/judge.js';
 import { judgeTableRows, rowSentenceOf } from './table.js';
-import { combineOutcomes, type BlocksAnswer } from './answer-blocks.js';
+import { combineOutcomes, type BlocksAnswer, type JudgedBlock } from './answer-blocks.js';
 import { parseBlocksInput } from './blocks.js';
 import { viewCoverageOf } from '../case-summary/coverage.js';
 import { assembleResults, answerBasisOf, failureOf, outcomeOfDraft, typeNamesOf, withElementsOfNotes, type ReadDone, type ToolAnswerOutcome } from './tool-answer.js';
@@ -29,7 +29,7 @@ const NOT_ANSWERED = 'Nothing has been read yet. Read first, then call answer.';
 const LIMIT_TEXT = 'Not read: this turn has reached its limit. Call answer now with what you have.';
 
 /** What the model is told when `answer` removes sentences. A caller may replace it; the default says how many were removed and names each removed sentence with its reason. */
-type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: number; readonly verdictFound: boolean; readonly rejected: readonly RejectedSentence[]; readonly form?: RemovalForm; /** For an answer of both kinds of block: what was kept of each. */ readonly keptOf?: { readonly sentences: number; readonly rows: number } }) => string;
+type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: number; readonly verdictFound: boolean; readonly rejected: readonly RejectedSentence[]; readonly form?: RemovalForm; /** For an answer of several kinds of block: what was kept of each. */ readonly keptOf?: { readonly sentences: number; readonly items: number; readonly rows: number }; /** A list label was not shown. */ readonly labelRemoved?: boolean }) => string;
 
 /** What the model is told to do with a removed sentence or row: the next answer replaces this one when any of its own is kept, so what is removed for a reason that can be mended is mended and sent again, and what no line can hold is left out. */
 const RESEND_SENTENCES = 'Your next answer replaces this one if any of its sentences is kept: call answer again with every sentence you want shown, the kept ones and each removed one corrected as its reason says (copy a figure as the line writes it, with its label; cite every element a count or an all, each or latest sentence speaks of). Leave a sentence out when no line holds its figure, name or comparison, or when it states a conclusion; never add a cite only to keep it.';
@@ -37,19 +37,35 @@ const RESEND_TABLE = 'Your next answer replaces this one if any of its rows is k
 const VERDICT_LEFT_OUT = ' A sentence removed for verdict wording is left out, not reworded.';
 const VERDICT_ROW_LEFT_OUT = ' A row removed for verdict wording is left out, not reworded.';
 
-/** An answer that holds sentences and a table: the next answer replaces the whole of it, so it must hold every block again. */
-const RESEND_BLOCKS = 'Your next answer replaces this whole answer if any of its sentences or rows is kept: call answer again with every block you want shown, the sentences and the table, the kept ones and each removed one corrected as its reason says (copy a figure as the line writes it, with its label; cite every element a count or an all, each or latest sentence speaks of; a cell copies a figure of the lines its row cites). Leave a sentence or a row out when no line holds its figure, name or comparison; never add a cite only to keep it.';
-const VERDICT_BLOCKS_LEFT_OUT = ' A sentence or a row removed for verdict wording is left out, not reworded.';
+/** An answer of several kinds of block: the next answer replaces the whole of it, so it must hold every block again. */
+const RESEND_BLOCKS = 'Your next answer replaces this whole answer if any of its sentences, items or rows is kept: call answer again with every block you want shown, each sentences block, list and table, the kept ones and each removed one corrected as its reason says (copy a figure as the line writes it, with its label; cite every element a count or an all, each or latest sentence speaks of; a cell copies a figure of the lines its row cites). Leave a sentence, an item or a row out when no line holds its figure, name or comparison; never add a cite only to keep it.';
+const VERDICT_BLOCKS_LEFT_OUT = ' A sentence, an item or a row removed for verdict wording is left out, not reworded.';
+const VERDICT_ITEM_LEFT_OUT = ' An item removed for verdict wording is left out, not reworded.';
 
-type RemovalForm = 'sentences' | 'table' | 'blocks';
+type RemovalForm = 'sentences' | 'list' | 'table' | 'blocks';
 
-const keptText = (kept: number, form: RemovalForm | undefined, keptOf: { readonly sentences: number; readonly rows: number } | undefined): string =>
-  form === 'blocks' && keptOf !== undefined ? `${keptOf.sentences} ${keptOf.sentences === 1 ? 'sentence' : 'sentences'} and ${keptOf.rows} ${keptOf.rows === 1 ? 'row' : 'rows'}` : `${kept} ${form === 'table' ? 'rows' : 'sentences'}`;
+const formOf = (inputs: readonly { readonly kind: 'sentences' | 'list' | 'table' }[]): RemovalForm => {
+  const kinds = new Set(inputs.map((block) => block.kind));
+  const only = [...kinds][0];
+  return kinds.size === 1 && only !== undefined ? only : 'blocks';
+};
 
-const plainFeedback: RemovalFeedback = ({ kept, removed, verdictFound, rejected, form, keptOf }) =>
+const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+const keptText = (kept: number, form: RemovalForm | undefined, keptOf: { readonly sentences: number; readonly items: number; readonly rows: number } | undefined): string => {
+  if (form === 'blocks' && keptOf !== undefined) {
+    const parts = [keptOf.sentences > 0 ? plural(keptOf.sentences, 'sentence', 'sentences') : undefined, keptOf.items > 0 ? plural(keptOf.items, 'item', 'items') : undefined, keptOf.rows > 0 ? plural(keptOf.rows, 'row', 'rows') : undefined].filter((part): part is string => part !== undefined);
+    return parts.length === 0 ? '0 sentences' : parts.join(' and ');
+  }
+  return `${kept} ${form === 'table' ? 'rows' : form === 'list' ? 'items' : 'sentences'}`;
+};
+
+const LABEL_NOT_SHOWN = ' A list label was not shown: use one of the fixed headings ("Where it came from", "Details", "Notes") or plain words of the lines.';
+
+const plainFeedback: RemovalFeedback = ({ kept, removed, verdictFound, rejected, form, keptOf, labelRemoved }) =>
   removed === 0
     ? `Checked: all ${keptText(kept, form, keptOf)} kept. Reply "${FINAL_TEXT}".`
-    : `Checked: ${keptText(kept, form, keptOf)} kept, ${removed} removed${verdictFound ? ' (verdict wording found)' : ''}. ${form === 'blocks' ? RESEND_BLOCKS : form === 'table' ? RESEND_TABLE : RESEND_SENTENCES}${verdictFound ? (form === 'blocks' ? VERDICT_BLOCKS_LEFT_OUT : form === 'table' ? VERDICT_ROW_LEFT_OUT : VERDICT_LEFT_OUT) : ''} Or reply "${FINAL_TEXT}" to leave the answer as it stands.${rejected.length === 0 ? '' : `\n${removalNoteOf(rejected)}`}`;
+    : `Checked: ${keptText(kept, form, keptOf)} kept, ${removed} removed${verdictFound ? ' (verdict wording found)' : ''}. ${form === 'blocks' ? RESEND_BLOCKS : form === 'table' ? RESEND_TABLE : RESEND_SENTENCES}${verdictFound ? (form === 'blocks' ? VERDICT_BLOCKS_LEFT_OUT : form === 'table' ? VERDICT_ROW_LEFT_OUT : form === 'list' ? VERDICT_ITEM_LEFT_OUT : VERDICT_LEFT_OUT) : ''}${labelRemoved === true ? LABEL_NOT_SHOWN : ''} Or reply "${FINAL_TEXT}" to leave the answer as it stands.${rejected.length === 0 ? '' : `\n${removalNoteOf(rejected)}`}`;
 
 interface AgentTurnSettings {
   readonly maxCalls: number;
@@ -94,7 +110,11 @@ const pointerSchema = z.enum(ASSISTANT_POINTERS).optional();
 const withPointer = (answer: BlocksAnswer, pointer: AssistantPointer | undefined): BlocksAnswer => (pointer === undefined ? answer : { ...answer, pointer: ASSISTANT_POINTER_SENTENCES[pointer] });
 /** The input the model is offered for `answer`: the blocks are checked one by one in the call, so that an input that is not valid gets the tool's own fixed result and not a schema error. */
 const answerSchema = z.object({ blocks: z.array(z.record(z.string(), z.unknown())).min(1), noDescription: noDescriptionSchema, pointer: pointerSchema });
-const NOT_VALID = 'The answer is not valid: give one to four blocks, each { kind: "sentences", sentences: [{ text, cites }] } or, when a table was asked for, { kind: "table", columns, rows: [{ cells, cites }] }, within the bounds. Call answer again.';
+const NOT_VALID = 'The answer is not valid: give one to four blocks, each { kind: "sentences", sentences: [{ text, cites }] }, { kind: "list", label (optional, at most 40 characters), items: [{ text, cites }] } (one to twelve items) or, when a table was asked for, { kind: "table", columns, rows: [{ cells, cites }] }, within the bounds. Call answer again.';
+
+/** What the model is told of the `answer` tool: the shapes of its blocks and their bounds; a table only when one was asked for. */
+export const answerDescription = (tableAsked: boolean): string =>
+  `Give the final answer as blocks, in the order you want them shown: { kind: "sentences", sentences: [{ text, cites }] } for short sentences, each with the keys of the elements it rests on in cites, { kind: "list", label, items: [{ text, cites }] } for a short list of one to twelve items cited the same way (the label is optional: \"Where it came from\", \"Details\", \"Notes\" or plain words of the lines you were given, at most 40 characters)${tableAsked ? ', and { kind: "table", columns, rows: [{ cells, cites }] } for the table that was asked for: one row for each element, with the row\'s own values in cells and the keys of the elements it rests on in cites' : ''}. At most four blocks. Call it once when you have what you need.`;
 
 function paramsSchema(tool: Tool): z.ZodObject<z.ZodRawShape> {
   return z.strictObject(Object.fromEntries(tool.parameters.map((name) => [name, z.string().min(1)])));
@@ -273,7 +293,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     }));
     tools.push({
       name: ANSWER_TOOL,
-      description: `Give the final answer as blocks, in the order you want them shown: { kind: "sentences", sentences: [{ text, cites }] } for short sentences, each with the keys of the elements it rests on in cites${scope.form === 'table' ? ', and { kind: "table", columns, rows: [{ cells, cites }] } for the table that was asked for: one row for each element, with the row\'s own values in cells and the keys of the elements it rests on in cites' : ''}. At most four blocks. Call it once when you have what you need.`,
+      description: answerDescription(scope.form === 'table'),
       schema: answerSchema,
       run: async (args) => {
         stepsOf(scope.request).answering();
@@ -285,10 +305,12 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         const inputs = parsed.success ? parseBlocksInput(parsed.data.blocks, scope.form === 'table') : undefined;
         if (!parsed.success || inputs === undefined) return NOT_VALID;
         const named = parsed.data.noDescription === undefined ? undefined : undescribedNamesOf(parsed.data.noDescription, basis.typeLines);
-        const judgedBlocks: Extract<ToolAnswerOutcome, { kind: 'sentences' | 'table' }>[] = [];
+        const judgedBlocks: JudgedBlock[] = [];
         let other: Extract<ToolAnswerOutcome, { kind: 'noDescription' | 'unsupported' }> | undefined;
         let kept = 0;
         let keptSentences = 0;
+        let keptItems = 0;
+        let listDropped = 0;
         let keptRows = 0;
         let removed = 0;
         let verdictFound = false;
@@ -313,28 +335,34 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
             }
             continue;
           }
-          const checked = await options.checks.run(judgeCheck, { sentences: withElementsOfNotes(block.sentences, basis.noteElements), text: basis.checkedText }, { timeoutMs: settings.timeoutMs, signal });
+          const texts = block.kind === 'list' ? block.items : block.sentences;
+          const checked = await options.checks.run(judgeCheck, { sentences: withElementsOfNotes(texts, basis.noteElements), text: basis.checkedText }, { timeoutMs: settings.timeoutMs, signal });
           if (checked.status === 'refused') return 'The answer could not be checked. Reply "Done."';
           const judged = checked.value;
           kept += judged.kept.length;
-          keptSentences += judged.kept.length;
+          if (block.kind === 'list') {
+            keptItems += judged.kept.length;
+            listDropped += judged.removed;
+          } else keptSentences += judged.kept.length;
           rejected.push(...judged.rejected);
           removed += judged.removed;
           verdictFound ||= judged.verdictFound;
           const outcome = outcomeOfDraft({ drafted: { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls: 0, verdictFound: judged.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: [], lastNames: named });
-          if (outcome.kind === 'sentences' || outcome.kind === 'table') judgedBlocks.push(outcome);
+          if (outcome.kind === 'sentences' && block.kind === 'list') judgedBlocks.push({ ...outcome, list: true, ...(block.label === undefined ? {} : { label: block.label }) });
+          else if (outcome.kind === 'sentences' || outcome.kind === 'table') judgedBlocks.push(outcome);
           else other ??= outcome.kind === 'noDescription' || outcome.kind === 'unsupported' ? outcome : undefined;
         }
         const combined = verdictFound ? undefined : combineOutcomes(judgedBlocks, basis, droppedWithTable);
         if (combined !== undefined) {
           standing = withPointer(combined, parsed.data.pointer);
           onLastCall = isLast;
-          noteTurn({ tableRowsLeftOut: combined.blocks.some((block) => block.kind === 'table') ? 0 : droppedWithTable });
+          noteTurn({ tableRowsLeftOut: combined.blocks.some((block) => block.kind === 'table') ? 0 : droppedWithTable, listItemsDropped: listDropped + combined.itemsCut });
         }
         else standing ??= other;
         // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown, so no call acknowledges it
-        if (combined !== undefined && removed === 0 && combined.leftOut === 0 && !verdictFound) control.stop = true;
-        return feedback({ kept, removed: removed + (combined?.leftOut ?? 0), verdictFound, rejected, form: inputs.every((block) => block.kind === 'table') ? 'table' : inputs.some((block) => block.kind === 'table') ? 'blocks' : 'sentences', keptOf: { sentences: keptSentences, rows: keptRows } });
+        if (combined !== undefined && removed === 0 && combined.leftOut === 0 && combined.itemsCut === 0 && combined.labelsRemoved === 0 && !verdictFound) control.stop = true;
+        const cutItems = combined?.itemsCut ?? 0;
+        return feedback({ kept: kept - cutItems, removed: removed + (combined?.leftOut ?? 0) + (combined?.itemsCut ?? 0) + (combined?.labelsRemoved ?? 0), verdictFound, rejected, form: formOf(inputs), keptOf: { sentences: keptSentences, items: keptItems - cutItems, rows: keptRows }, ...((combined?.labelsRemoved ?? 0) > 0 ? { labelRemoved: true } : {}) });
       },
     });
 

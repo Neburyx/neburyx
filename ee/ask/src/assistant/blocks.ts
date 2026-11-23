@@ -1,4 +1,4 @@
-import { ASSISTANT_BLOCKS_MAX, ASSISTANT_SENTENCES_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantBlocks, type AssistantTable, type SummarySentence, type TypeDescriptions } from '@neburyx/contracts';
+import { ASSISTANT_BLOCKS_MAX, ASSISTANT_LIST_ITEMS_MAX, ASSISTANT_LIST_LABEL_MAX, ASSISTANT_SENTENCES_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantBlocks, type AssistantTable, type SummarySentence, type TypeDescriptions } from '@neburyx/contracts';
 import { parseTable, rowsPhrase, type TableDraft } from './table.js';
 
 /** The fixed sentence that ends the note of a table block. */
@@ -69,24 +69,38 @@ function firstUnitOf(column: number, input: Parameters<typeof noteOfTable>[0]): 
 
 export type BlockInput =
   | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[] }
+  | { readonly kind: 'list'; readonly label?: string; readonly items: readonly SummarySentence[] }
   | { readonly kind: 'table'; readonly draft: TableDraft };
 
 const SENTENCE_MEMBERS = 'cites,text';
 
-/** The blocks of the `answer` tool's input: one to four of the kinds `sentences` and (when a table was asked for) `table`, each of the exact shape; anything else is undefined, and no part of it is shown. */
+/** The blocks of the `answer` tool's input: one to four of the kinds `sentences`, `list` and (when a table was asked for) `table`, each of the exact shape; anything else is undefined, and no part of it is shown. */
 export function parseBlocksInput(value: unknown, tableAsked: boolean): readonly BlockInput[] | undefined {
   if (!Array.isArray(value) || value.length < 1 || value.length > ASSISTANT_BLOCKS_MAX) return undefined;
   const blocks: BlockInput[] = [];
+  const sentencesOf = (list: unknown): SummarySentence[] | undefined => {
+    const out: SummarySentence[] = [];
+    for (const sentence of list as unknown[]) {
+      if (!isRecord(sentence) || Object.keys(sentence).sort().join() !== SENTENCE_MEMBERS || typeof sentence['text'] !== 'string' || sentence['text'].trim() === '' || !Array.isArray(sentence['cites']) || !sentence['cites'].every((cite): cite is string => typeof cite === 'string')) return undefined;
+      out.push({ text: sentence['text'], cites: sentence['cites'] });
+    }
+    return out;
+  };
   for (const block of value as unknown[]) {
     if (!isRecord(block)) return undefined;
     if (block['kind'] === 'sentences') {
       if (Object.keys(block).sort().join() !== 'kind,sentences' || !Array.isArray(block['sentences']) || block['sentences'].length < 1) return undefined;
-      const sentences: SummarySentence[] = [];
-      for (const sentence of block['sentences'] as unknown[]) {
-        if (!isRecord(sentence) || Object.keys(sentence).sort().join() !== SENTENCE_MEMBERS || typeof sentence['text'] !== 'string' || sentence['text'].trim() === '' || !Array.isArray(sentence['cites']) || !sentence['cites'].every((cite): cite is string => typeof cite === 'string')) return undefined;
-        sentences.push({ text: sentence['text'], cites: sentence['cites'] });
-      }
+      const sentences = sentencesOf(block['sentences']);
+      if (sentences === undefined) return undefined;
       blocks.push({ kind: 'sentences', sentences });
+    } else if (block['kind'] === 'list') {
+      const members = Object.keys(block).sort().join();
+      if ((members !== 'items,kind' && members !== 'items,kind,label') || !Array.isArray(block['items']) || block['items'].length < 1 || block['items'].length > ASSISTANT_LIST_ITEMS_MAX) return undefined;
+      const label = block['label'];
+      if (members === 'items,kind,label' && (typeof label !== 'string' || label.trim() === '' || label.length > ASSISTANT_LIST_LABEL_MAX)) return undefined;
+      const items = sentencesOf(block['items']);
+      if (items === undefined) return undefined;
+      blocks.push({ kind: 'list', ...(typeof label === 'string' ? { label } : {}), items });
     } else if (block['kind'] === 'table' && tableAsked) {
       const draft = parseTable({ columns: block['columns'], rows: block['rows'] });
       if (draft === undefined || Object.keys(block).sort().join() !== 'columns,kind,rows') return undefined;
@@ -99,15 +113,17 @@ export function parseBlocksInput(value: unknown, tableAsked: boolean): readonly 
 /** A block that was checked and kept: its content as the answer shows it. */
 export type KeptBlock =
   | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[] }
+  | { readonly kind: 'list'; readonly label?: string; readonly items: readonly SummarySentence[] }
   | { readonly kind: 'table'; readonly table: AssistantTable; /** The coverage line of the table as the checks wrote it. */ readonly summary?: string };
 
 /**
  * The blocks of one answer after the totals: kept rows beyond the 25th of all the tables are cut from the later tables and counted in the `moreNotShown` of the table they were cut from (a table left with no row is left out), and kept sentences beyond the 12th of all the sentences blocks are cut from the end. The order of the blocks is the model's.
  */
-export function withinTotals(kept: readonly KeptBlock[]): { readonly blocks: AssistantBlocks; readonly leftOut: number; readonly summaries: readonly string[] } {
+export function withinTotals(kept: readonly KeptBlock[]): { readonly blocks: AssistantBlocks; readonly leftOut: number; /** Items of lists cut from the end by the total of 12. */ readonly itemsCut: number; readonly summaries: readonly string[] } {
   let rowsLeft = ASSISTANT_TABLE_ROWS_MAX;
   let sentencesLeft = ASSISTANT_SENTENCES_MAX;
   let leftOut = 0;
+  let itemsCut = 0;
   const blocks: AssistantBlocks = [];
   const summaries: string[] = [];
   for (const block of kept) {
@@ -116,6 +132,13 @@ export function withinTotals(kept: readonly KeptBlock[]): { readonly blocks: Ass
       sentencesLeft -= shown.length;
       if (shown.length === 0) leftOut += 1;
       else blocks.push({ kind: 'sentences', sentences: [...shown] });
+      continue;
+    }
+    if (block.kind === 'list') {
+      const shown = block.items.slice(0, sentencesLeft);
+      sentencesLeft -= shown.length;
+      itemsCut += block.items.length - shown.length;
+      if (shown.length > 0) blocks.push({ kind: 'list', ...(block.label === undefined ? {} : { label: block.label }), items: [...shown] });
       continue;
     }
     const rows = block.table.rows.slice(0, rowsLeft);
@@ -135,5 +158,5 @@ export function withinTotals(kept: readonly KeptBlock[]): { readonly blocks: Ass
     blocks.push({ kind: 'table', table: { ...rest, title, rows: [...rows], ...(moreNotShown > 0 ? { moreNotShown } : {}) } });
     summaries.push(block.summary === undefined ? '' : cut === 0 ? block.summary : block.summary.replace(/^\d[\d,]*/u, String(rows.length)));
   }
-  return { blocks, leftOut, summaries };
+  return { blocks, leftOut, itemsCut, summaries };
 }

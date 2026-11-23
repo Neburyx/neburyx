@@ -13,7 +13,7 @@ import { TableBlock } from "./table-block.js";
 import type { ViewAnswer } from "./assistant-session.js";
 
 type Block = ViewAnswer["blocks"][number];
-type SentencesBlock = Extract<Block, { kind: "sentences" }>;
+type ListBlock = Extract<Block, { kind: "list" }>;
 
 const labelOf = (entry: CitationEntry): string =>
   entry.label ??
@@ -95,9 +95,11 @@ export function ViewAnswerCard({
   );
   const descriptionKeys = (cites: readonly string[]): readonly string[] => cites.filter((key) => meanings.has(key));
   const readKeys = (cites: readonly string[]): readonly string[] => cites.filter((key) => reads.has(key));
-  const sentencesOf = (shown: SentencesBlock) => (
-    <ol className="summary-sentences">
-      {shown.sentences.map((sentence, index) => (
+  const textsOf = (texts: readonly { readonly text: string; readonly cites: readonly string[] }[], bullets: { readonly labelledBy?: string } | undefined) => {
+    const Tag = bullets === undefined ? "ol" : "ul";
+    return (
+    <Tag className={bullets === undefined ? "summary-sentences" : "summary-sentences assistant-list-items"} aria-labelledby={bullets?.labelledBy}>
+      {texts.map((sentence, index) => (
         <li key={index} className="summary-block">
           <p className="assistant-sentence">
             {sentence.text}
@@ -164,8 +166,9 @@ export function ViewAnswerCard({
           })}
         </li>
       ))}
-    </ol>
-  );
+    </Tag>
+    );
+  };
   const showSourceOf = (entry: CitationEntry): void => {
     setSourcesOpen(true);
     setFocusRequest({ number: entry.number, tick: (focusRequest?.tick ?? 0) + 1 });
@@ -204,9 +207,20 @@ export function ViewAnswerCard({
     setNote("");
     state.presentation.select(keys);
   };
+  const listOf = (block: ListBlock, index: number) => {
+    const labelId = `${titleId}-list-${index}`;
+    return (
+      <div key={index} className="assistant-list-block">
+        {block.label === undefined ? null : <p id={labelId} className="assistant-list-label">{block.label}</p>}
+        {textsOf(block.items, block.label === undefined ? {} : { labelledBy: labelId })}
+      </div>
+    );
+  };
   const blockOf = (block: Block, index: number) =>
     block.kind === "sentences" ? (
-      <div key={index}>{sentencesOf(block)}</div>
+      <div key={index}>{textsOf(block.sentences, undefined)}</div>
+    ) : block.kind === "list" ? (
+      listOf(block, index)
     ) : (
       <TableBlock
         key={index}

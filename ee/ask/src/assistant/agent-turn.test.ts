@@ -4,6 +4,7 @@ import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_RE
 import { removalNoteOf } from '@neburyx/ee-ai-runtime';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, answerOf, degreeResult, expandEarlierResult, expandResult, heavyResult, lowerBoundResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, V, type Rig } from '../testing/assistant-rig.js';
+import { answerDescription } from './agent-turn.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 
@@ -234,7 +235,7 @@ describe('a view question on the agent', () => {
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
     expect(told).toContain('Checked: 1 sentence and 1 row kept, 1 removed.');
-    expect(told).toContain('Your next answer replaces this whole answer if any of its sentences or rows is kept: call answer again with every block you want shown, the sentences and the table');
+    expect(told).toContain('Your next answer replaces this whole answer if any of its sentences, items or rows is kept: call answer again with every block you want shown, each sentences block, list and table');
     expect(told).not.toContain('every sentence you want shown');
     expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }, { kind: 'table', table: { rows: [{ cells: [`${V.title} A-1`] }, { cells: [`${V.title} A-2`] }] } }] });
   });
@@ -248,7 +249,7 @@ describe('a view question on the agent', () => {
     const r = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model, maxCalls: 8 }, runStore: store });
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
     const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
-    expect(told).toContain('A sentence or a row removed for verdict wording is left out, not reworded.');
+    expect(told).toContain('A sentence, an item or a row removed for verdict wording is left out, not reworded.');
   });
 
   it('answers a question about a shared other end for the two elements it read of five in view, one sentence for each read citing its line, says what was not read citing c1, and removes a sentence that generalises to every element', async () => {
@@ -620,6 +621,157 @@ describe('the blocks of an agent answer', () => {
     expect(sentencesOfBlocks((answer as { blocks: AssistantBlocks }).blocks)).toHaveLength(12);
   });
 });
+describe('the list block of an agent answer', () => {
+  const item = (text: string, cites: string[] = ['n1']) => ({ text, cites });
+  const list = (items: unknown[], label?: string) => ({ kind: 'list', ...(label === undefined ? {} : { label }), items });
+  const answerWith = async (blocks: readonly unknown[], reply: unknown = VIEW) => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { blocks } }]).respond(new AIMessage('Done.'));
+    const r = await rig({ reply: reply as never, agent: { model } });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const closed = r.events.filter((event) => event.action === 'assistant.turn.closed');
+    return { answer, closed: JSON.stringify(closed[0]?.detail ?? {}) };
+  };
+
+  it('shows a list with its label among sentences, its items cited and the citations numbered from all the blocks', async () => {
+    const { answer, closed } = await answerWith([{ kind: 'sentences', sentences: [item(`${V.title} A-1 is in view.`)] }, list([item(`${V.title} A-1 is in view.`), item(`${V.title} A-2 is in view.`, ['n2'])], 'Where it came from')]);
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }, { kind: 'list', label: 'Where it came from', items: [{ cites: ['n1'] }, { cites: ['n2'] }] }] });
+    expect(closed).toMatch(/"listItemsShown":2/);
+    expect(closed).not.toMatch(/listItemsDropped/);
+  });
+
+  it('removes an item that cites nothing, and counts it, and keeps the other items', async () => {
+    const { answer, closed } = await answerWith([list([item(`${V.title} A-1 is in view.`), item(`${V.title} A-2 is in view.`, [])])]);
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'list', items: [{ cites: ['n1'] }] }] });
+    expect(closed).toMatch(/"listItemsShown":1/);
+    expect(closed).toMatch(/"listItemsDropped":1/);
+  });
+
+  it('removes an item that states a number no cited line holds, and an item with a verdict word, which suppresses the answer', async () => {
+    const invented = await answerWith([list([item(`${V.title} A-1 is in view.`), item(`${V.title} A-2 has 7311 rows.`, ['n2'])])]);
+    expect(invented.answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'list', items: [{ cites: ['n1'] }] }] });
+    const verdict = await answerWith([list([item(`${V.title} A-1 is in view.`), item(`${V.title} A-2 is guilty of fraud.`, ['n2'])])]);
+    expect(verdict.answer).not.toMatchObject({ blocks: expect.anything() });
+  });
+
+  it('leaves out a list whose items are all removed, counts them, and keeps the answer that has another block', async () => {
+    const { answer, closed } = await answerWith([{ kind: 'sentences', sentences: [item(`${V.title} A-1 is in view.`)] }, list([item(`${V.title} Z-9 is in view.`, ['n9']), item(`${V.title} Z-8 is in view.`, [])])]);
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }] });
+    expect(JSON.stringify((answer as { blocks: unknown[] }).blocks)).not.toContain('"list"');
+    expect(closed).toMatch(/"listItemsDropped":2/);
+    expect(closed).toMatch(/"listItemsShown":0/);
+  });
+
+  it('ends a turn whose only block is a list of removed items as an answer with no sentences does', async () => {
+    const { answer } = await answerWith([list([item(`${V.title} Z-9 is in view.`, ['n9'])])]);
+    expect(answer).not.toMatchObject({ blocks: expect.anything() });
+  });
+
+  it('shows a list without its label when the label is no plain words of the text sent, and keeps the list', async () => {
+    const { answer } = await answerWith([list([item(`${V.title} A-1 is in view.`)], 'These accounts are criminals')]);
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'list', items: [{ cites: ['n1'] }] }] });
+    expect(JSON.stringify(answer)).not.toContain('criminals');
+  });
+
+  it('cuts the items beyond the twelfth of sentences and lists together from the end, and counts them as dropped', async () => {
+    const twelve = Array.from({ length: 12 }, () => item(`${V.title} A-1 is in view.`));
+    const { answer, closed } = await answerWith([{ kind: 'sentences', sentences: [item(`${V.title} A-1 is in view.`), item(`${V.title} A-1 is in view.`)] }, list(twelve)]);
+    const blocks = (answer as { blocks: { kind: string; items?: unknown[] }[] }).blocks;
+    expect(blocks.find((block) => block.kind === 'list')?.items).toHaveLength(10);
+    expect(closed).toMatch(/"listItemsShown":10/);
+    expect(closed).toMatch(/"listItemsDropped":2/);
+  });
+
+  it('refuses with the tool\'s fixed result a list of another shape: a thirteenth item, another member, a nested list, an empty label', async () => {
+    const twelve = Array.from({ length: 13 }, () => item(`${V.title} A-1 is in view.`));
+    const bad = [list(twelve), { kind: 'list', items: [item(`${V.title} A-1 is in view.`)], extra: 1 }, list([{ ...item(`${V.title} A-1 is in view.`), items: [] }]), list([item(`${V.title} A-1 is in view.`)], ''), { kind: 'list', items: [] }];
+    for (const block of bad) {
+      const { answer } = await answerWith([block]);
+      expect(answer).not.toMatchObject({ blocks: expect.anything() });
+    }
+  });
+
+  it('tells the model of an answer of sentences and a list, with one item removed, to send every block again, counting each kind', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [item(`${V.title} A-1 is in view.`)] }, list([item(`${V.title} A-1 is in view.`), item(`${V.title} Z-9 is in view.`, ['n9'])])] } }])
+      .respond(new AIMessage('Done.'));
+    const store = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, runStore: store });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(told).toContain('Checked: 1 sentence and 1 item kept, 1 removed.');
+    expect(told).toContain('every block you want shown, each sentences block, list and table');
+  });
+
+  it('canary: with the check keeping every item, an item that cites nothing and an invented number are shown, so the tests that drop them depend on the check', async () => {
+    vi.resetModules();
+    vi.doMock('../case-summary/checks.js', async (original) => ({ ...(await original<typeof import('../case-summary/checks.js')>()), judgeSentences: (sentences: readonly { text: string; cites: string[] }[]) => ({ kept: sentences, removed: 0, rejected: [], verdictFound: false, keysStripped: 0, keysRemoved: 0 }) }));
+    const testing = await import('../testing/assistant-rig.js');
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { blocks: [list([item(`${V.title} A-1 is in view.`), item(`${V.title} A-2 is in view.`, []), item(`${V.title} A-2 has 7311 rows.`, ['n2'])])] } }]).respond(new AIMessage('Done.'));
+    const r = await testing.rig({ reply: VIEW, agent: { model } });
+    const answer = await testing.answerOf(r.route.handler(r.request(testing.VIEW_BODY)));
+    vi.doUnmock('../case-summary/checks.js');
+    vi.resetModules();
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'list', items: [{}, {}, {}] }] });
+  });
+
+  const closedOf = (r: { events: { action: string; detail?: unknown }[] }) => JSON.stringify(r.events.filter((event) => event.action === 'assistant.turn.closed')[0]?.detail ?? {});
+  const twoCalls = async (first: unknown[], second: unknown[]) => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { blocks: first } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: second } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW as never, agent: { model, maxCalls: 8 } });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    return { answer, closed: closedOf(r) };
+  };
+
+  it('counts the items of the answer that stands: a later answer with no list shows no list counts', async () => {
+    const { answer, closed } = await twoCalls([list([item(`${V.title} A-1 is in view.`), item(`${V.title} Z-9 is in view.`, ['n9']), item(`${V.title} Z-8 is in view.`, [])])], [{ kind: 'sentences', sentences: [item(`${V.title} A-1 is in view.`)] }]);
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }] });
+    expect(closed).not.toMatch(/listItems/);
+  });
+
+  it('keeps the counts of the standing answer when a later answer is all removed', async () => {
+    const { answer, closed } = await twoCalls([list([item(`${V.title} A-1 is in view.`), item(`${V.title} A-2 is in view.`, ['n2']), item(`${V.title} Z-9 is in view.`, ['n9'])])], [list([item(`${V.title} Z-8 is in view.`, []), item(`${V.title} Z-7 is in view.`, ['n8'])])]);
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'list', items: [{}, {}] }] });
+    expect(closed).toMatch(/"listItemsShown":2/);
+    expect(closed).toMatch(/"listItemsDropped":1/);
+  });
+
+  it('tells the model of items a list cut whole by the total as the items cut, not as a block more', async () => {
+    const twelve = { kind: 'sentences', sentences: Array.from({ length: 12 }, () => item(`${V.title} A-1 is in view.`)) };
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { blocks: [twelve, list([item(`${V.title} A-1 is in view.`), item(`${V.title} A-2 is in view.`, ['n2'])])] } }]).respond(new AIMessage('Done.'));
+    const store = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, runStore: store });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(told).toContain('Checked: 12 sentences kept, 2 removed.');
+    expect(told).toMatch(/replaces this whole answer if any of its sentences, items or rows is kept[^\n]*never add a cite only to keep it\. Or reply "Done\." to leave the answer as it stands\./);
+  });
+
+  it('tells the model that a list label was not shown, with the headings it may use', async () => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { blocks: [list([item(`${V.title} A-1 is in view.`)], 'These accounts are criminals')] } }]).respond(new AIMessage('Done.'));
+    const store = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, runStore: store });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(told).toContain('A list label was not shown: use one of the fixed headings ("Where it came from", "Details", "Notes") or plain words of the lines. Or reply "Done."');
+    expect(told).not.toMatch(/\S {2,}\S/);
+  });
+
+  it('names the list shape and its bounds in the answer tool\'s description, with or without a table', () => {
+    for (const tableAsked of [false, true]) {
+      const text = answerDescription(tableAsked);
+      expect(text).toContain('{ kind: "list", label, items: [{ text, cites }] }');
+      expect(text).toContain('one to twelve items');
+      expect(text).toContain('at most 40 characters');
+      expect(text.includes('{ kind: "table"')).toBe(tableAsked);
+    }
+  });
+});
+
 
 describe('what the model may ask the agent to run', () => {
   const asks = (name: string, args: Record<string, unknown>) => fakeModel().respondWithTools([{ name, args }]).respond(new AIMessage('Done.'));

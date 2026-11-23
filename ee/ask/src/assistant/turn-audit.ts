@@ -3,6 +3,7 @@ import {
   ExtensionRefusal,
   assistantTurnAuditDetailSchema,
   isTokenCount,
+  listsOfBlocks,
   tablesOfBlocks,
   tokenCount,
   type AssistantTurnAnswer,
@@ -56,6 +57,7 @@ interface TurnNotes {
   cause?: string;
   summary?: { readonly kept: number; readonly dropped: number };
   tableRowsLeftOut?: number;
+  listItemsDropped?: number;
   /** That the reads being made are made again after a decision; and the record of the waiting turn this turn goes on from. */
   replaying?: boolean;
   resumes?: string;
@@ -82,6 +84,8 @@ export interface TurnNote {
   readonly summary?: { readonly kept: number; readonly dropped: number };
   /** How many rows of tables the answer left out whole (no table of it is shown), counted as dropped rows in the closing event. */
   readonly tableRowsLeftOut?: number;
+  /** How many items of lists the checks removed or the total of 12 cut: a count and nothing of them. */
+  readonly listItemsDropped?: number;
 }
 
 /** Notes what the route of a turn knows; outside a turn it does nothing. */
@@ -98,6 +102,7 @@ export function noteTurn(change: TurnNote): void {
     if (change.cause !== undefined) notes.cause = change.cause;
     if (change.summary !== undefined) notes.summary = change.summary;
     if (change.tableRowsLeftOut !== undefined) notes.tableRowsLeftOut = change.tableRowsLeftOut;
+    if (change.listItemsDropped !== undefined) notes.listItemsDropped = change.listItemsDropped;
   });
 }
 
@@ -194,6 +199,7 @@ interface Ending {
   readonly intent?: string;
   readonly citedElements?: number;
   readonly table?: { readonly shown: number; readonly dropped?: number; readonly notShown?: number };
+  readonly list?: { readonly shown: number; readonly dropped?: number };
 }
 
 const tableOf = (tables: readonly { readonly rows: readonly unknown[]; readonly droppedRows?: number; readonly moreNotShown?: number }[], leftOut: number): NonNullable<Ending['table']> => {
@@ -208,7 +214,9 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
       if (answer.route === 'refuse') return { route: 'refuse', outcome: 'refused', result: 'refused', cause: answer.cause, ...(answer.overview === undefined ? {} : { citedElements: answer.overview.citations.length }) };
       if ('blocks' in answer) {
         const tables = tablesOfBlocks(answer.blocks);
-        return { route: answer.route, outcome: 'answered', result: 'success', citedElements: answer.citations.length, ...(tables.length === 0 && (notes.tableRowsLeftOut ?? 0) === 0 ? {} : { table: tableOf(tables, notes.tableRowsLeftOut ?? 0) }), ...('stoppedAt' in answer && answer.stoppedAt !== undefined ? { cause: `limit-${answer.stoppedAt}` } : {}) };
+        const lists = listsOfBlocks(answer.blocks);
+        const listDropped = notes.listItemsDropped ?? 0;
+        return { route: answer.route, outcome: 'answered', result: 'success', citedElements: answer.citations.length, ...(tables.length === 0 && (notes.tableRowsLeftOut ?? 0) === 0 ? {} : { table: tableOf(tables, notes.tableRowsLeftOut ?? 0) }), ...(lists.length === 0 && listDropped === 0 ? {} : { list: { shown: lists.reduce((sum, list) => sum + list.items.length, 0), ...(listDropped === 0 ? {} : { dropped: listDropped }) } }), ...('stoppedAt' in answer && answer.stoppedAt !== undefined ? { cause: `limit-${answer.stoppedAt}` } : {}) };
       }
       if ('refused' in answer.answer) return { route: 'ask', outcome: 'refused', result: 'refused', cause: answer.answer.refused.cause, ...(answer.answer.refused.valueNotFit === undefined ? {} : { valueKind: answer.answer.refused.valueNotFit.kind }), ...(answer.answer.refused.intent === undefined ? {} : { intent: answer.answer.refused.intent }) };
       return {
@@ -288,6 +296,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(notes.paramsHash === undefined ? {} : { paramsHash: notes.paramsHash }),
     ...(notes.steps === undefined ? {} : { steps: notes.steps }),
     ...(ending.citedElements === undefined ? {} : { citedElements: ending.citedElements }),
+    ...(ending.list === undefined ? {} : { listItemsShown: ending.list.shown, ...(ending.list.dropped === undefined ? {} : { listItemsDropped: ending.list.dropped }) }),
     ...(ending.table === undefined ? {} : { form: 'table' as const, tableRowsShown: ending.table.shown, ...(ending.table.dropped === undefined ? {} : { tableRowsDropped: ending.table.dropped }), ...(ending.table.notShown === undefined ? {} : { tableRowsNotShown: ending.table.notShown }) }),
     ...(notes.selectedElements === undefined || notes.selectedElements === 0 ? {} : { selectedElements: notes.selectedElements }),
     ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),

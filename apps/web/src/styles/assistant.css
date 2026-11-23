@@ -441,6 +441,29 @@
   background: transparent;
 }
 
+.assistant-list-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.assistant-list-label {
+  margin: 0;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.assistant-view-answer ul.assistant-list-items {
+  display: block;
+  padding-left: var(--space-16);
+  list-style: disc outside;
+}
+
+.assistant-view-answer ul.assistant-list-items > .summary-block {
+  display: list-item;
+  margin-bottom: var(--space-6);
+}
+
 /* the panel fills the canvas from 16 px under the header to 16 px above the window's bottom, as the frames draw it: a long thread scrolls inside it and the composer stays at the bottom */
 .assistant-panel {
   height: calc(var(--full-height) - var(--header-height) - 2 * var(--space-16) - 2 * var(--border-width));

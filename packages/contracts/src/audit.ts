@@ -158,6 +158,9 @@ export const assistantTurnAuditDetailSchema = z.strictObject({
   tableRowsShown: wholeCount.optional(),
   tableRowsDropped: wholeCount.optional(),
   tableRowsNotShown: wholeCount.optional(),
+  /** An answer with lists: how many items they show and how many the checks removed or the total of 12 cut (the last absent when none); never an item or a label. */
+  listItemsShown: wholeCount.optional(),
+  listItemsDropped: wholeCount.optional(),
   /** How many elements the person had selected on the canvas that the turn kept (those in the view): a count, never a key. */
   selectedElements: wholeCount.optional(),
   /** When an AI case summary was attached and used: how many of its sentences still held and how many did not; never a sentence. */

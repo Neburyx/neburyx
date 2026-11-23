@@ -80,6 +80,23 @@ describe('the blocks of the answer tool', () => {
 const tableOf = (rows: number, moreNotShown?: number): KeptBlock => ({ kind: 'table', table: { title: 't', columns: ['E'], note: 'n', rows: Array.from({ length: rows }, () => ({ cells: ['a'], cites: ['n1'] })), ...(moreNotShown === undefined ? {} : { moreNotShown }) } as AssistantTable });
 const sentencesOf = (count: number): KeptBlock => ({ kind: 'sentences', sentences: Array.from({ length: count }, () => ({ text: 'A.', cites: ['n1'] })) });
 
+describe('the list blocks of the answer tool', () => {
+  it('reads a list of the exact shape, with or without a label, and refuses any other', () => {
+    const items = [{ text: 'A.', cites: ['n1'] }];
+    expect(parseBlocksInput([{ kind: 'list', items }], false)).toEqual([{ kind: 'list', items }]);
+    expect(parseBlocksInput([{ kind: 'list', label: 'Details', items }], false)).toEqual([{ kind: 'list', label: 'Details', items }]);
+    for (const bad of [{ kind: 'list', items: [] }, { kind: 'list', label: '', items }, { kind: 'list', label: 'x'.repeat(41), items }, { kind: 'list', items, extra: 1 }, { kind: 'list', items: [{ text: 'A.', cites: ['n1'], extra: 1 }] }, { kind: 'list', items: Array.from({ length: 13 }, () => items[0]) }, { kind: 'list', label: 1, items }]) expect(parseBlocksInput([bad], false)).toBeUndefined();
+  });
+
+  it('counts the items of lists with the sentences toward 12 and reports the items it cut', () => {
+    const many = (count: number) => Array.from({ length: count }, () => ({ text: 'A.', cites: ['n1'] }));
+    const totalled = withinTotals([{ kind: 'sentences', sentences: many(5) }, { kind: 'list', label: 'L', items: many(10) }, { kind: 'list', items: many(1) }]);
+    expect(totalled.blocks.map((block) => (block.kind === 'list' ? block.items.length : block.kind === 'sentences' ? block.sentences.length : 0))).toEqual([5, 7]);
+    expect(totalled.itemsCut).toBe(4);
+    expect(totalled.leftOut).toBe(0);
+  });
+});
+
 describe('the totals of the blocks', () => {
   it('cuts rows beyond 25 from the later tables and adds them to the count of the table they were cut from', () => {
     const { blocks } = withinTotals([tableOf(20), tableOf(10, 4)]);

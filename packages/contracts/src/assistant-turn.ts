@@ -189,6 +189,8 @@ export const ASSISTANT_TABLE_CITES_MAX = 6;
 /** The bounds of the blocks of one answer: how many, and the sentences and table rows in all of them. */
 export const ASSISTANT_BLOCKS_MAX = 4;
 export const ASSISTANT_SENTENCES_MAX = 12;
+export const ASSISTANT_LIST_ITEMS_MAX = 12;
+export const ASSISTANT_LIST_LABEL_MAX = 40;
 /** The note of a table block: up to six clauses of a label (80), " in ", a unit (20) and a full stop, then the fixed sentence of 42 characters. */
 export const ASSISTANT_TABLE_NOTE_MAX = 700;
 
@@ -208,14 +210,15 @@ export const assistantTableSchema = z
 export type AssistantTable = z.infer<typeof assistantTableSchema>;
 
 const assistantSentencesBlockSchema = z.strictObject({ kind: z.literal('sentences'), sentences: z.array(summarySentenceSchema).min(1).max(ASSISTANT_SENTENCES_MAX) });
+const assistantListBlockSchema = z.strictObject({ kind: z.literal('list'), label: text.max(ASSISTANT_LIST_LABEL_MAX).optional(), items: z.array(summarySentenceSchema).min(1).max(ASSISTANT_LIST_ITEMS_MAX) });
 const assistantTableBlockSchema = z.strictObject({ kind: z.literal('table'), table: assistantTableSchema });
 
-/** The blocks of an answer in the order the model gave them: sentences and tables, one to four, with at most 12 sentences and 25 table rows in all. */
+/** The blocks of an answer in the order the model gave them: sentences, tables and lists, one to four, with at most 12 sentences and list items together and 25 table rows in all. */
 export const assistantBlocksSchema = z
-  .array(z.discriminatedUnion('kind', [assistantSentencesBlockSchema, assistantTableBlockSchema]))
+  .array(z.discriminatedUnion('kind', [assistantSentencesBlockSchema, assistantTableBlockSchema, assistantListBlockSchema]))
   .min(1)
   .max(ASSISTANT_BLOCKS_MAX)
-  .refine((blocks) => blocks.reduce((count, block) => count + (block.kind === 'sentences' ? block.sentences.length : 0), 0) <= ASSISTANT_SENTENCES_MAX, { message: 'at most 12 sentences in all the blocks' })
+  .refine((blocks) => blocks.reduce((count, block) => count + (block.kind === 'sentences' ? block.sentences.length : block.kind === 'list' ? block.items.length : 0), 0) <= ASSISTANT_SENTENCES_MAX, { message: 'at most 12 sentences and list items in all the blocks' })
   .refine((blocks) => blocks.reduce((count, block) => count + (block.kind === 'table' ? block.table.rows.length : 0), 0) <= ASSISTANT_TABLE_ROWS_MAX, { message: 'at most 25 table rows in all the blocks' });
 
 export type AssistantBlocks = z.infer<typeof assistantBlocksSchema>;
@@ -223,6 +226,8 @@ export type AssistantBlock = AssistantBlocks[number];
 
 /** The sentences of all the sentences blocks of an answer, in order. */
 export const sentencesOfBlocks = (blocks: AssistantBlocks) => blocks.flatMap((block) => (block.kind === 'sentences' ? block.sentences : []));
+/** The lists of an answer, in order. */
+export const listsOfBlocks = (blocks: AssistantBlocks) => blocks.flatMap((block) => (block.kind === 'list' ? [block] : []));
 /** The tables of an answer, in order. */
 export const tablesOfBlocks = (blocks: AssistantBlocks) => blocks.flatMap((block) => (block.kind === 'table' ? [block.table] : []));
 

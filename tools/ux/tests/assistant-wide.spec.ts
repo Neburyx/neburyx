@@ -39,6 +39,23 @@ async function answerWithTable(page: Page): Promise<void> {
   await expect(panel(page).getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
 }
 
+async function answerWithList(page: Page): Promise<void> {
+  const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+  const answer: AssistantTurnAnswer = {
+    status: 'answered',
+    route: 'view',
+    blocks: [{ kind: 'list', label: 'Where it came from', items: [{ text: `Owner: ${'a rather long item that wraps '.repeat(6)}and ends.`, cites: ['n1'] }, { text: 'Bank: another item.', cites: ['n1'] }] }],
+    citations: [{ key: 'n1', kind: 'entity', ref: cited }],
+    coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The answer cites 1 of the 1 shown elements.' },
+    model: 'claude-sonnet-5-5',
+    calls: 2,
+  };
+  await page.route((url) => url.pathname === '/v1/assistant/turns', (route) => route.fulfill({ json: answer }));
+  await page.getByLabel('Your message').fill('show where it came from');
+  await page.keyboard.press('Enter');
+  await expect(panel(page).getByRole('list', { name: 'Where it came from' })).toBeVisible();
+}
+
 test.describe('the wide Assistant panel', () => {
   test('goes wide with the keyboard to 60% of the window, 16 px from the window edge, and back to its opening width', async ({ page }) => {
     await openWorkspace(page);
@@ -180,5 +197,15 @@ test.describe('the wide Assistant panel', () => {
     const inspectorBox = await inspector.boundingBox();
     const panelBox = await floatingBox(page).boundingBox();
     expect(Math.round((panelBox?.x ?? 0) - ((inspectorBox?.x ?? 0) + (inspectorBox?.width ?? 0)))).toBe(16);
+  });
+
+  test('draws a list in the wide panel with its items wrapping, no text clipped and no sideways scroll', async ({ page }) => {
+    await openWorkspace(page);
+    await wideButton(page).click();
+    await answerWithList(page);
+    const list = panel(page).getByRole('list', { name: 'Where it came from' });
+    const whole = await list.evaluate((element) => [...element.querySelectorAll('li')].map((item) => item.scrollWidth <= item.clientWidth));
+    expect(whole).toEqual([true, true]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 });

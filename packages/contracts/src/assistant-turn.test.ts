@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sentencesOfBlocks, tablesOfBlocks, ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_CONFIRMATION_INVALID_SENTENCE, ASSISTANT_LIMITS, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_PLAN_MAX_CHARACTERS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
+import { sentencesOfBlocks, tablesOfBlocks, listsOfBlocks, ASSISTANT_LIST_ITEMS_MAX, ASSISTANT_LIST_LABEL_MAX, ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_CONFIRMATION_INVALID_SENTENCE, ASSISTANT_LIMITS, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_PLAN_MAX_CHARACTERS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
 
 const body = { sourceId: 'banking', investigationId: 'inv-1', message: 'Which accounts share a device?', viewElementKeys: ['n1', 'n2'] };
 
@@ -505,5 +505,50 @@ describe('the ask route answering a value that does not fit', () => {
     expect(assistantTurnAnswerSchema.safeParse({ status: 'answered', route: 'ask', answer: { refused } }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ status: 'answered', route: 'ask', answer: { refused }, reads: [read] }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ status: 'answered', route: 'ask', answer: { refused: { ...refused, valueNotFit: undefined } } }).success).toBe(false);
+  });
+});
+
+describe('the list block of an answer', () => {
+  const view = { status: 'answered', route: 'view', citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 't', stableId: 'e1' } }], coverage: { retrieval: '1 shown · exact', summary: 'The answer cites 1 of the 1 shown elements.' }, model: 'm', calls: 1 };
+  const item = (text = 'Owner: J. L.') => ({ text, cites: ['n1'] });
+  const withBlocks = (blocks: unknown[]) => assistantTurnAnswerSchema.safeParse({ ...view, blocks });
+
+  it('accepts a list of 1 to 12 items with an optional label of 1 to 40 characters', () => {
+    expect(withBlocks([{ kind: 'list', label: 'Where it came from', items: [item()] }]).success).toBe(true);
+    expect(withBlocks([{ kind: 'list', items: Array.from({ length: ASSISTANT_LIST_ITEMS_MAX }, () => item()) }]).success).toBe(true);
+    expect(withBlocks([{ kind: 'list', label: 'x'.repeat(ASSISTANT_LIST_LABEL_MAX), items: [item()] }]).success).toBe(true);
+  });
+
+  it('refuses no item, a thirteenth item, an empty text, a label over 40 characters, an empty label, and any other member', () => {
+    expect(withBlocks([{ kind: 'list', items: [] }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'list', items: Array.from({ length: ASSISTANT_LIST_ITEMS_MAX + 1 }, () => item()) }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'list', items: [item('')] }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'list', label: 'x'.repeat(ASSISTANT_LIST_LABEL_MAX + 1), items: [item()] }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'list', label: '', items: [item()] }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'list', items: [item()], extra: 1 }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'list', items: [{ ...item(), extra: 1 }] }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'list', label: 'Where', items: undefined }]).success).toBe(false);
+  });
+
+  it('counts the items of lists with the sentences toward 12 in all, and leaves the table and block totals as they were', () => {
+    const sentences = (count: number) => ({ kind: 'sentences', sentences: Array.from({ length: count }, () => item()) });
+    expect(withBlocks([sentences(6), { kind: 'list', items: Array.from({ length: 6 }, () => item()) }]).success).toBe(true);
+    expect(withBlocks([sentences(7), { kind: 'list', items: Array.from({ length: 6 }, () => item()) }]).success).toBe(false);
+    expect(withBlocks([sentences(1), { kind: 'list', items: [item()] }, sentences(1), { kind: 'list', items: [item()] }, sentences(1)]).success).toBe(false);
+  });
+
+  it('refuses a list inside a list item, inside a table, and inside the overview of a refusal', () => {
+    expect(withBlocks([{ kind: 'list', items: [{ ...item(), items: [item()] }] }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'list', items: [{ text: 'x', cites: ['n1'], kind: 'list' }] }]).success).toBe(false);
+    expect(withBlocks([{ kind: 'table', table: { title: 't', columns: ['A'], rows: [{ cells: ['x'], cites: ['n1'] }], note: 'n', list: { kind: 'list', items: [item()] } } }]).success).toBe(false);
+    const overview = { blocks: [{ kind: 'list', items: [item()] }], citations: view.citations, coverage: view.coverage, model: 'm' };
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'answered', route: 'refuse', cause: 'verdict', sentence: ASSISTANT_REFUSAL_SENTENCES.verdict, overview }).success).toBe(false);
+  });
+
+  it('gives the lists of an answer in order and leaves the sentences of the sentences blocks alone', () => {
+    const parsed = withBlocks([{ kind: 'sentences', sentences: [item('A.')] }, { kind: 'list', label: 'L', items: [item('B.')] }, { kind: 'list', items: [item('C.')] }]);
+    if (!parsed.success || !('blocks' in parsed.data)) throw new Error('not blocks');
+    expect(listsOfBlocks(parsed.data.blocks).map((list) => list.items[0]?.text)).toEqual(['B.', 'C.']);
+    expect(sentencesOfBlocks(parsed.data.blocks).map((sentence) => sentence.text)).toEqual(['A.']);
   });
 });
