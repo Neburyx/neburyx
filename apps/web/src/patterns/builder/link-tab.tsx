@@ -99,7 +99,7 @@ export function LinkTab({ profile, step, index, previous, nameOf, dispatch, prob
         <label className="supernode-label" htmlFor={`${id}-arrives`}>
           {LINK_COPY.arrivesAt}
         </label>
-        <select id={`${id}-arrives`} className="patterns-input" data-broken={arrivalWrong ? 'true' : undefined} aria-invalid={arrivalWrong ? true : undefined} aria-describedby={arrivalWrong ? `${id}-arrival-problem` : undefined} disabled={step.direction === undefined || (reached.length === 0 && step.arrivesAt === undefined)} value={step.arrivesAt ?? ''} onChange={(event) => dispatch({ type: 'arrives', index, arrivesAt: event.target.value === '' ? undefined : event.target.value })}>
+        <select id={`${id}-arrives`} className="select-control" data-broken={arrivalWrong ? 'true' : undefined} aria-invalid={arrivalWrong ? true : undefined} aria-describedby={arrivalWrong ? `${id}-arrival-problem` : undefined} disabled={step.direction === undefined || (reached.length === 0 && step.arrivesAt === undefined)} value={step.arrivesAt ?? ''} onChange={(event) => dispatch({ type: 'arrives', index, arrivesAt: event.target.value === '' ? undefined : event.target.value })}>
           <option value="">{LINK_COPY.chooseType}</option>
           {(step.arrivesAt === undefined || reached.includes(step.arrivesAt) ? reached : [...reached, step.arrivesAt]).map((type) => (
             <option key={type} value={type}>

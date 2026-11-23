@@ -442,7 +442,7 @@
   color: var(--color-danger);
 }
 
-.patterns-input[data-broken='true'] {
+.select-control[data-broken='true'] {
   border-color: var(--color-danger);
   color: var(--color-danger);
 }

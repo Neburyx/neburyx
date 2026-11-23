@@ -4,7 +4,7 @@
   gap: var(--space-8);
 }
 
-.paths-row .patterns-input {
+.paths-row .select-control {
   width: 100%;
 }
 
@@ -185,4 +185,12 @@
 
 .paths-add {
   align-self: flex-start;
+}
+
+/* the labels above the controls read as in the design: small, regular and muted */
+.paths-panel .patterns-field > label,
+.paths-panel .paths-search > label,
+.paths-panel .paths-types > span:first-child {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
 }

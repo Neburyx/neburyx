@@ -60,6 +60,19 @@ test.describe('the Paths tool', () => {
     await expect(panelOf(page).getByRole('heading', { name: 'Path 2 · 2 hops' })).toBeVisible();
   });
 
+  test('draws its three selects as the product draws a select: no native arrow, a thin chevron and the height of a button', async ({ page }) => {
+    await openPanel(page);
+    const selects = panelOf(page).locator('select');
+    expect(await selects.count()).toBe(3);
+    const button = await panelOf(page).getByRole('button', { name: 'Find paths' }).boundingBox();
+    for (const select of await selects.all()) {
+      await expect(select).toHaveCSS('appearance', 'none');
+      expect(await select.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/^url\(/);
+      expect(await select.evaluate((element) => parseFloat(getComputedStyle(element).paddingRight)), 'room for the chevron').toBeGreaterThan(20);
+      expect(Math.abs(((await select.boundingBox())?.height ?? 0) - (button?.height ?? 99))).toBeLessThan(4);
+    }
+  });
+
   test('highlights a chosen path without adding it, adds it on Add to graph, and offers the evidence of its steps only then', async ({ page }) => {
     await answerWith(page, pathsAnswer([['AC-1', 'AC-9', 'AC-2']]));
     await openPanel(page);

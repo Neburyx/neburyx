@@ -308,7 +308,7 @@ export function PathsPanel() {
           <div className="paths-row">
             <div className="patterns-field">
               <label htmlFor="paths-hops">{PATHS_COPY.maxHops}</label>
-              <select id="paths-hops" className="patterns-input" value={maxHops} onChange={(event) => (setMaxHops(Number(event.target.value)), changed())}>
+              <select id="paths-hops" className="select-control" value={maxHops} onChange={(event) => (setMaxHops(Number(event.target.value)), changed())}>
                 {hopChoices.map((hops) => (
                   <option key={hops} value={hops}>
                     {hops}
@@ -318,7 +318,7 @@ export function PathsPanel() {
             </div>
             <div className="patterns-field">
               <label htmlFor="paths-direction">{PATHS_COPY.direction}</label>
-              <select id="paths-direction" className="patterns-input" value={direction} onChange={(event) => (setDirection(DIRECTIONS.find((way) => way === event.target.value) ?? 'both'), changed())}>
+              <select id="paths-direction" className="select-control" value={direction} onChange={(event) => (setDirection(DIRECTIONS.find((way) => way === event.target.value) ?? 'both'), changed())}>
                 {DIRECTIONS.map((way) => (
                   <option key={way} value={way}>
                     {DIRECTION_LABELS[way]}
@@ -328,7 +328,7 @@ export function PathsPanel() {
             </div>
             <div className="patterns-field">
               <label htmlFor="paths-limit">{PATHS_COPY.limit}</label>
-              <select id="paths-limit" className="patterns-input" value={limit} onChange={(event) => (setLimit(Number(event.target.value)), changed())}>
+              <select id="paths-limit" className="select-control" value={limit} onChange={(event) => (setLimit(Number(event.target.value)), changed())}>
                 {LIMIT_CHOICES.map((cap) => (
                   <option key={cap} value={cap}>
                     {cap}

@@ -244,7 +244,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
                     <label className="supernode-label" htmlFor="pattern-builder-start">
                       {EDITOR_COPY.startType}
                     </label>
-                    <select id="pattern-builder-start" ref={startRef} className="patterns-input" disabled={ready === undefined} value={draft.anchorType ?? ''} onChange={(event) => dispatch({ type: 'start', anchorType: event.target.value === '' ? undefined : event.target.value })}>
+                    <select id="pattern-builder-start" ref={startRef} className="select-control" disabled={ready === undefined} value={draft.anchorType ?? ''} onChange={(event) => dispatch({ type: 'start', anchorType: event.target.value === '' ? undefined : event.target.value })}>
                       <option value="">{BUILDER_COPY.chooseType}</option>
                       <optgroup label={EDITOR_COPY.typesInMapping}>
                         {(ready?.entityTypes ?? []).map((type) => (

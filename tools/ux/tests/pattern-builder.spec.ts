@@ -75,6 +75,21 @@ test.describe('the pattern builder in the Patterns panel', () => {
     await expect(builderOf(page).getByText('This type is not in the mapping.').first()).toBeVisible();
   });
 
+  test('draws its start and arrival selects as the product draws a select: no native arrow, a thin chevron and the height of a button', async ({ page }) => {
+    await openBuilder(page);
+    await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Account' });
+    await builderOf(page).getByRole('button', { name: '+ Step' }).click();
+    const selects = builderOf(page).locator('select');
+    expect(await selects.count()).toBeGreaterThan(0);
+    const button = await builderOf(page).getByRole('button', { name: 'Cancel' }).boundingBox();
+    for (const select of await selects.all()) {
+      await expect(select).toHaveCSS('appearance', 'none');
+      expect(await select.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/^url\(/);
+      expect(await select.evaluate((element) => parseFloat(getComputedStyle(element).paddingRight)), 'room for the chevron').toBeGreaterThan(20);
+      expect(Math.abs(((await select.boundingBox())?.height ?? 0) - (button?.height ?? 99))).toBeLessThan(4);
+    }
+  });
+
   test('holds no control that accepts text: every control is a choice, a checkbox or a button', async ({ page }) => {
     await openBuilder(page);
     await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Account' });
