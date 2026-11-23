@@ -20,6 +20,8 @@ export interface RunOptions {
   readonly json: boolean;
   readonly out?: string;
   readonly force: boolean;
+  /** Whether the sentences the checks removed are written, with their cites and reasons, to a private file in `out`: only then, never in the record. */
+  readonly removed: boolean;
   /** The Ask folder that gives the live provider its settings. */
   readonly folder?: string;
 }
@@ -28,6 +30,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 
 const EMPTY_REPLY = JSON.stringify({ sentences: [] });
 const RECORD_FILE = 'run-record.json';
+const REMOVED_FILE = 'removed-sentences.json';
 
 /** The reply the scripted provider gives for a view: its own labelled `keep` sentences, with the keys the text sent gave its elements. */
 function scriptedReply(labelled: LabelledCase, values: string): string {
@@ -56,6 +59,8 @@ interface Run {
   current: LabelledCase | undefined;
   sent: string;
   readonly observations: ReplyObservation[];
+  /** The sentences removed from the last checked reply of each view, kept only for a run that is asked to write them. */
+  readonly removedByView: { readonly id: string; readonly sentences: readonly { readonly text: string; readonly cites: readonly string[]; readonly reason: string }[] }[];
   readonly usage: () => BudgetUsage;
   readonly signal: AbortSignal;
   /** Whether the budget is spent or the run was stopped: nothing more is run. */
@@ -87,6 +92,7 @@ async function scoreView(run: Run, summarizer: EvalSummarizer, labelled: Labelle
   const last = run.observations[run.observations.length - 1];
   const causes = last === undefined ? [] : removedOf(last.written, last.kept).map((sentence) => causeOf(sentence, labelled, keys));
   const labelledScore = last === undefined ? { wronglyRemoved: [], slipped: [] } : scoreLabelled(labelled, last.written, last.kept, keys);
+  run.removedByView.push({ id: labelled.id, sentences: last === undefined ? [] : reasonsOf(removedOf(last.written, last.kept), last.rejected) });
   const budgetRefused = after.refused > before.refused;
   if (budgetRefused) run.stopped = true;
   return {
@@ -189,6 +195,24 @@ const summarizerOfView = (made: ReadonlyMap<string, EvalSummarizer>, labelled: L
   return found;
 };
 
+/** Each removed sentence with the reason the check gave for its text, one reason for each sentence even when two share a text. */
+function reasonsOf(removed: readonly { readonly text: string; readonly cites: readonly string[] }[], rejected: readonly { readonly text: string; readonly reason: string }[]): { readonly text: string; readonly cites: readonly string[]; readonly reason: string }[] {
+  const unused = [...rejected];
+  return removed.map((sentence) => {
+    const at = unused.findIndex((each) => each.text === sentence.text);
+    const [found] = at < 0 ? [] : unused.splice(at, 1);
+    return { text: sentence.text, cites: sentence.cites, reason: found?.reason ?? 'unknown' };
+  });
+}
+
+function guardRemoved(options: RunOptions): void {
+  if (!options.removed) return;
+  if (options.out === undefined) throw new UsageError('--removed needs --out, a folder outside every git working tree');
+  requireOutsideGitTree(options.out, '--out');
+  prepareOutFolder(options.out);
+  checkPrivateTarget(join(options.out, REMOVED_FILE), options.force);
+}
+
 function guardLive(options: RunOptions): void {
   if (options.out === undefined) throw new UsageError('a live run needs --out, a folder outside every git working tree');
   if (options.folder === undefined) throw new UsageError('a live run needs --folder, an Ask folder that gives the provider its settings');
@@ -226,11 +250,12 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
   const budget = options.budget ?? (options.stub ? manifest.mostCalls : undefined);
   if (budget === undefined || !Number.isSafeInteger(budget) || budget < 1) throw new UsageError('a live run needs --budget, a whole number of calls');
   if (budget < manifest.leastCalls) throw new UsageError(`the budget ${budget} is below the ${manifest.leastCalls} calls the run needs`);
+  guardRemoved(options);
   if (!options.stub) guardLive(options);
   let current: () => LabelledCase | undefined = () => undefined;
   const live = options.stub ? undefined : await liveProviderOf(hooks, options, env, settings);
   const inner = live === undefined ? hooks.scriptedProvider((values) => scriptedReplyFor(current(), values)) : live.provider;
-  const state: Run = { current: undefined, sent: '', observations: [], usage: () => budgeted.usage(), signal, stopped: false, budget };
+  const state: Run = { current: undefined, sent: '', observations: [], removedByView: [], usage: () => budgeted.usage(), signal, stopped: false, budget };
   current = () => state.current;
   const budgeted = hooks.budgeted(inner, budget, (values) => {
     if (state.sent === '') state.sent = values;
@@ -257,6 +282,7 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
   const spent = state.stopped || usage.refused > 0;
   const report: Report = { mode, model: settings.model, instructionsSha256: instructionsHashOf(made), ...instructionsByPackOf(made), budget, usage, ...(live?.label?.kind === 'local' ? { provider: live.label } : {}), budgetSpent: spent, views: reports, ...(options.measure === 'none' ? {} : { measurements, ...(proposal === undefined ? {} : { proposal }) }) };
   if (!options.stub && options.out !== undefined) writePrivateFile(join(options.out, RECORD_FILE), `${recordOf(report)}\n`, options.force);
+  if (options.removed && options.out !== undefined) writePrivateFile(join(options.out, REMOVED_FILE), `${JSON.stringify({ views: state.removedByView }, null, 2)}\n`, options.force);
   const failed = reports.some((view) => view.status === 'failed' || view.status === 'timeLimit' || view.status === 'cancelled');
   return { code: spent || failed ? 1 : 0, lines: options.json ? [jsonOf(report)] : textOf(report), report };
 }

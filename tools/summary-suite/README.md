@@ -20,8 +20,10 @@ A check removed from the product fails the suite, and `src/removed-checks.test.t
 ```bash
 pnpm summary-eval --stub                     # every view answered with its own labelled sentences: no key, no network, no model call
 pnpm summary-eval --dry-run --measure        # what a run can cost, without a call
-pnpm summary-eval --budget <n> --out <folder outside every git working tree> --folder <an Ask folder> [--views all|demo|aml|<ids>] [--measure | --measure-only]
+pnpm summary-eval --budget <n> --out <folder outside every git working tree> --folder <an Ask folder> [--views all|demo|aml|<ids>] [--measure | --measure-only] [--removed]
 ```
+
+`--removed` (needs `--out`) also writes the sentences the checks removed from the last checked reply of each view, with their cites and the reason, to `removed-sentences.json` in `--out`: a private file (mode 0600, outside every git working tree, replaced only with `--force`). Without the flag no sentence of the model is written anywhere, and the run record and the report never hold one.
 
 It summarizes the labelled views through the product's own summarizer (assembly, size guard, drafting loop, checks), scores each view and prints a report. The key is read only from the file `NEBURYX_ASK_API_KEY_FILE` names, by the product's own reader; a live run also needs a `--budget`, and a measuring run sets `NEBURYX_SUMMARY_MAX_INPUT_TOKENS` of at least 136,000 for the heavy samples (the shipped default, 25,000, refuses them, as it should, and the run then proposes nothing), and an `--out` folder outside every git working tree (written with mode 0600). The rule of use (not a property of the command, which only asks for a budget): the person who runs it agrees the model, the views and the number of calls before a live run is made.
 

@@ -153,7 +153,7 @@ describe('the labelled comparison and the keys, through the real checks', () => 
         const built = await base.summarizer({ ...options, observe: () => undefined });
         if (!built.ok) return built;
         const good = { text: 'The accounts AC-7001, AC-7002, AC-7003 and AC-7004 are listed.', cites: [] as string[] };
-        return { ok: true, summarizer: { ...built.summarizer, summarize: async (reading, signal) => (options.observe({ written: [good], kept: [], removed: 1, keysStripped: 0, keysRemoved: 0, verdictFound: false }), built.summarizer.summarize(reading, signal)) } };
+        return { ok: true, summarizer: { ...built.summarizer, summarize: async (reading, signal) => (options.observe({ written: [good], kept: [], removed: 1, rejected: [], keysStripped: 0, keysRemoved: 0, verdictFound: false }), built.summarizer.summarize(reading, signal)) } };
       },
     };
     const { view } = await viewOf('aml-cycle', hooks);
@@ -164,7 +164,7 @@ describe('the labelled comparison and the keys, through the real checks', () => 
       summarizer: async (options) => {
         const built = await base.summarizer({ ...options, observe: () => undefined });
         if (!built.ok) return built;
-        return { ok: true, summarizer: { ...built.summarizer, summarize: async (reading, signal) => (options.observe({ written: [keep], kept: [], removed: 1, keysStripped: 0, keysRemoved: 0, verdictFound: false }), built.summarizer.summarize(reading, signal)) } };
+        return { ok: true, summarizer: { ...built.summarizer, summarize: async (reading, signal) => (options.observe({ written: [keep], kept: [], removed: 1, rejected: [], keysStripped: 0, keysRemoved: 0, verdictFound: false }), built.summarizer.summarize(reading, signal)) } };
       },
     };
     expect((await viewOf('aml-cycle', removing)).view.wronglyRemoved).toEqual(['s1']);

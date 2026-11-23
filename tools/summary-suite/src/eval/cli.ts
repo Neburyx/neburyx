@@ -12,9 +12,10 @@ export interface Io {
 }
 
 const USAGE = [
-  'usage: summary-eval [--stub | --budget <n> --out <folder> --folder <ask folder>] [--dry-run] [--views all|demo|aml|<id,id>] [--measure | --measure-only] [--json] [--force]',
+  'usage: summary-eval [--stub | --budget <n> --out <folder> --folder <ask folder>] [--dry-run] [--views all|demo|aml|<id,id>] [--measure | --measure-only] [--json] [--force] [--removed]',
   '  --stub     answer every view with its own labelled sentences: no key, no network, no model call',
   '  --dry-run  make no call: print what a run can cost',
+  '  --removed  also write each sentence the checks removed, with its cites and the reason, to removed-sentences.json in --out (a private file outside every git working tree; the record itself holds no sentence)',
   '  --measure  also measure the size of the text sent (the views and the samples of 10, 100 and the element cap, plain, with short properties and with long ones) against the tokens the provider counts; --measure-only measures and does not score',
   '  a live run needs NEBURYX_ASK_API_KEY_FILE in the environment; a measuring run also needs NEBURYX_SUMMARY_MAX_INPUT_TOKENS of at least 136000, or the long-property samples are refused and nothing is proposed',
 ];
@@ -29,6 +30,7 @@ function parse(args: readonly string[]): RunOptions {
   let out: string | undefined;
   let force = false;
   let folder: string | undefined;
+  let removed = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     const value = (): string => {
@@ -43,6 +45,7 @@ function parse(args: readonly string[]): RunOptions {
     else if (arg === '--measure-only') measure = 'only';
     else if (arg === '--json') json = true;
     else if (arg === '--force') force = true;
+    else if (arg === '--removed') removed = true;
     else if (arg === '--budget') {
       const text = value();
       if (!/^\d+$/u.test(text)) throw new UsageError('--budget is a whole number of calls');
@@ -52,7 +55,7 @@ function parse(args: readonly string[]): RunOptions {
     else if (arg === '--folder') folder = value();
     else throw new UsageError(`unknown argument ${arg ?? ''}`);
   }
-  return { stub, measure, dryRun, ...(budget === undefined ? {} : { budget }), views, json, ...(out === undefined ? {} : { out }), force, ...(folder === undefined ? {} : { folder }) };
+  return { stub, measure, dryRun, ...(budget === undefined ? {} : { budget }), views, json, ...(out === undefined ? {} : { out }), force, removed, ...(folder === undefined ? {} : { folder }) };
 }
 
 /** Runs the command; returns the exit code: 0 for a run that finished within its budget, 1 for one that did not, 2 for a usage error. */

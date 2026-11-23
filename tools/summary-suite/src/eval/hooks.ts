@@ -17,6 +17,7 @@ export interface ReplyObservation {
   readonly written: readonly SummarySentence[];
   readonly kept: readonly SummarySentence[];
   readonly removed: number;
+  readonly rejected: readonly { readonly text: string; readonly reason: string }[];
   readonly keysStripped: number;
   readonly keysRemoved: number;
   readonly verdictFound: boolean;

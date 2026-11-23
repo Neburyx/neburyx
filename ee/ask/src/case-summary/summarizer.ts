@@ -1,7 +1,7 @@
 import { renderForExport } from './export-render.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { AuditResult, AuditSink, CaseSummarizer, CaseSummaryAuditDetail, CaseSummaryInput, CaseSummaryOutcome, SummarySentence } from '@neburyx/contracts';
-import { AuditUnavailableError, createCheckRunner, type AuditedModelCall, type CheckRunner, type Judged } from '@neburyx/ee-ai-runtime';
+import { AuditUnavailableError, createCheckRunner, type AuditedModelCall, type CheckRunner, type Judged, type RejectedSentence } from '@neburyx/ee-ai-runtime';
 import { canonicalText } from '../questions/canonical.js';
 import { citationsOf, retrievalLine, summaryLine } from './coverage.js';
 import { checkedTextOf, judgeCheck } from './judge.js';
@@ -28,6 +28,8 @@ export interface ReplyObservation {
   readonly written: readonly SummarySentence[];
   readonly kept: readonly SummarySentence[];
   readonly removed: number;
+  /** The sentences the checks removed, each with its reason: what the evaluation command writes only when it is asked to. */
+  readonly rejected: readonly RejectedSentence[];
   readonly keysStripped: number;
   readonly keysRemoved: number;
   readonly verdictFound: boolean;
@@ -86,7 +88,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
     if (options.observe === undefined) return;
     try {
       // a promise the observer returns is let go too: a rejection of it is not an unhandled one
-      void Promise.resolve(options.observe(structuredClone({ written, kept: judged.kept, removed: judged.removed, keysStripped: judged.keysStripped, keysRemoved: judged.keysRemoved, verdictFound: judged.verdictFound }))).catch(() => undefined);
+      void Promise.resolve(options.observe(structuredClone({ written, kept: judged.kept, removed: judged.removed, rejected: judged.rejected, keysStripped: judged.keysStripped, keysRemoved: judged.keysRemoved, verdictFound: judged.verdictFound }))).catch(() => undefined);
     } catch {
       // an observer that fails changes nothing of the click
     }
