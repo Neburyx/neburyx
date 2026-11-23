@@ -165,9 +165,28 @@ describe('a view question on the agent', () => {
     const instructions = store.runs[0]?.callStarts[1]?.instructionsText ?? '';
     expect(instructions).toContain('cites the line c1, the coverage of the view');
     expect(instructions).toContain('a sentence about what a read did not return cites that read\'s own line, and states only what that line says');
-    expect(instructions).toContain('take the second step: read the neighbours of that element before you say the rest is not shown, within the steps allowed');
+    expect(instructions).toContain('take the second step: read the neighbours of that element (expand or linked-entities) before you say the rest is not shown, within the steps allowed');
+    expect(instructions).toContain('The line c1 never replaces a read');
+    expect(instructions).toContain('a sentence that the view shows no relationship is no answer to it');
+    expect(instructions).toContain('find that element in the lines, then take the second step');
+    expect(instructions).toContain('exactly as that line writes it, with its label');
     expect(instructions).toContain('or that compares (the latest, the largest, the most), cites every element it speaks of in that same sentence, as a count does');
     expect(instructions).toContain('Name a link between two elements only when a relationship line you cite holds it');
+  });
+
+  it('shows the corrected sentence the model sends again after a check removed it, together with the kept one, and the feedback told it to send every sentence again', async () => {
+    const store = createMemoryAssistantRunStore();
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} A-1 has 7311 rows.`, cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} A-2 is in view.`, cites: ['n2'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, runStore: store });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 is in view.` }, { text: `${V.title} A-2 is in view.` }] });
+    const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(told).toContain('Your next answer replaces this one: call answer again with every sentence you want shown');
+    expect(told).toContain('copy a figure as the line writes it, with its label');
   });
 
   it('keeps a sentence that names the element and states the count when it cites the element and the degree line, and removes it when it cites the line alone', async () => {
@@ -692,13 +711,17 @@ describe('the input limit of the agent turn', () => {
         .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
         .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
         .respond(new AIMessage('Done.'));
-    const fits = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 7_400 }, run: () => ({ status: 'ok', result: degreeResult() }) });
-    const answer = await answerOf(fits.route.handler(fits.request(VIEW_BODY)));
+    // the sizes depend on the texts of the turn, so the limit at which the second read is left out is found, from the top down, not written
+    let answer: Awaited<ReturnType<typeof answerOf>> | undefined;
+    for (let limit = 14_000; limit >= 3_000 && !(answer !== undefined && 'stoppedAt' in answer && answer.stoppedAt === 'input'); limit -= 100) {
+      const fits = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: limit }, run: () => ({ status: 'ok', result: degreeResult() }) });
+      answer = await answerOf(fits.route.handler(fits.request(VIEW_BODY)));
+    }
     expect(answer).toMatchObject({ status: 'answered', stoppedAt: 'input', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }], reads: [{ tool: 'view' }] });
     expect(JSON.stringify(answer)).not.toContain('degree-preview');
     const none = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 3_000 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     expect(await answerOf(none.route.handler(none.request(VIEW_BODY)))).toMatchObject({ status: 'limit', limit: 'input' });
-  });
+  }, 30_000);
 
   describe('a read left out because the next request is too large', () => {
     /** The answer of the first limit, from the top down, at which the read was left out and the turn still answered: the sizes depend on the texts of the turn, so the limit is found, not written. */
@@ -855,7 +878,9 @@ describe('counts and what the model is told of a removal, through the answer too
     expect(JSON.stringify(answer)).not.toContain('Removed:');
     expect(JSON.stringify(answer)).not.toContain(removed.text);
     const [, told] = feedbackOf(model);
-    expect(told).toBe(`Checked: 1 sentences kept, 1 removed. Call answer again with sentences that cite elements, or reply "Done.".\n${removalNoteOf([{ text: removed.text, reason: 'number' }])}`);
+    expect(told).toMatch(/^Checked: 1 sentences kept, 1 removed\. Your next answer replaces this one: call answer again with every sentence you want shown, the kept ones and each removed one corrected/u);
+    expect(told).toContain('A removed sentence is not dropped because it was removed');
+    expect(told.endsWith(`\n${removalNoteOf([{ text: removed.text, reason: 'number' }])}`)).toBe(true);
     const clean = answering([kept]);
     await turn(clean, listed(2));
     expect(feedbackOf(clean).join('\n')).not.toContain('Removed:');
@@ -866,7 +891,8 @@ describe('counts and what the model is told of a removal, through the answer too
     const model = answering([invented]);
     await turn(model, listed(2));
     const [, told] = feedbackOf(model);
-    expect(told).toBe(`Checked: 0 sentences kept, 1 removed. Call answer again with sentences that cite elements, or reply "Done.".\n${removalNoteOf([{ text: invented.text, reason: 'name' }])}`);
+    expect(told).toMatch(/^Checked: 0 sentences kept, 1 removed\. Your next answer replaces this one/u);
+    expect(told.endsWith(`\n${removalNoteOf([{ text: invented.text, reason: 'name' }])}`)).toBe(true);
     expect(told).not.toContain('A-2');
   });
 

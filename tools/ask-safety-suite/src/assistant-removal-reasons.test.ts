@@ -40,7 +40,7 @@ describe('what the model is told when the check removes a sentence', () => {
     const invented = 'Account Zed-9 is in view.';
     const answer = await rig.turn('What is in view?', [VIEW, READ_VIEW, DONE, sentences({ text: invented, cites: ['n1'] })], { viewElementKeys: [WIDGET_KEY] });
     const told = toldOf().join('\n');
-    expect(told).toMatch(/^Checked: 0 sentences kept, 1 removed\. Call answer again with sentences that cite elements, or reply "Done\."\.\nRemoved: "Account Zed-9 is in view\." \([^"]+\)\.$/);
+    expect(told).toMatch(/^Checked: 0 sentences kept, 1 removed\. Your next answer replaces this one: call answer again with every sentence you want shown[^\n]+ Or reply "Done\." to leave the answer as it stands\.\nRemoved: "Account Zed-9 is in view\." \([^"]+\)\.$/);
     expect(told).not.toContain('W-1');
     expect(JSON.stringify(answer.body)).not.toContain('Removed:');
     expect(JSON.stringify(answer.body)).not.toContain('Zed-9');
