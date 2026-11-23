@@ -17,7 +17,7 @@ export const ASSISTANT_VARIABLES = {
   threadReadTurns: 'NEBURYX_ASSISTANT_THREAD_READ_TURNS',
 } as const;
 
-/** Defaults and ceilings are hypotheses to be measured, except the timeout of a call, the calls, the words of a message and the turns of context, which are given. */
+/** Defaults and ceilings are hypotheses to be measured, except the timeout of a call, the words of a message and the turns of context, which are given, and the calls and the input tokens of a call, which were measured. */
 export const DEFAULTS = {
   model: SUMMARY_DEFAULTS.model,
   timeoutMs: 60_000,
@@ -27,7 +27,8 @@ export const DEFAULTS = {
   maxSteps: 4,
   contextTurns: 3,
   maxMessageWords: 1000,
-  maxInputTokens: SUMMARY_DEFAULTS.maxInputTokens,
+  // 45,000 estimated tokens (the estimate counts about 1.6 times what the provider reports): about a third above the largest call measured on a 12-turn thread, about 20,500 provider tokens or 34,000 estimated.
+  maxInputTokens: 45_000,
   maxOutputTokens: SUMMARY_DEFAULTS.maxOutputTokens,
   runRetentionDays: SUMMARY_DEFAULTS.retentionDays,
 } as const;

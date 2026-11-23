@@ -46,10 +46,10 @@ describe('the token figures', () => {
     const runRecord = join(folder, 'run-record.json');
     const loop = join(folder, 'loop-cost-record.json');
     writeFileSync(runRecord, JSON.stringify({ outcomes: [] }));
-    writeFileSync(loop, JSON.stringify({ rows: [{ name: 'a', on: { total: 5, inputTokens: 5000, outputTokens: 500, steps: 2, maxInputTokens: 30_000, maxOutputTokens: 100, rows: 1 } }] }));
+    writeFileSync(loop, JSON.stringify({ rows: [{ name: 'a', on: { total: 5, inputTokens: 5000, outputTokens: 500, steps: 2, maxInputTokens: 50_000, maxOutputTokens: 100, rows: 1 } }] }));
     const result = runDefaults(sets, { runRecord, loopCost: loop, force: false }, hooksWith(() => ({ failure: 'timeout' })));
     const text = result.lines.join('\n');
-    expect(text).toMatch(/input tokens of a call.*max 30000.*over/);
+    expect(text).toMatch(/input tokens of a call.*max 50000.*over/);
     expect(text).toMatch(/output tokens of a call.*max 100.*inside/);
     expect(text).toContain('mean of its calls');
   });

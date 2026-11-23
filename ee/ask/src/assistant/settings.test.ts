@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTANT_VARIABLES, readAssistantSettings, rowsAllowed } from './settings.js';
+import { ASSISTANT_VARIABLES, DEFAULTS, RANGES, readAssistantSettings, rowsAllowed } from './settings.js';
 
 const read = (env: Record<string, string | undefined> = {}) => readAssistantSettings(env);
 const settingsOf = (env: Record<string, string | undefined> = {}) => {
@@ -8,9 +8,16 @@ const settingsOf = (env: Record<string, string | undefined> = {}) => {
   return result.settings;
 };
 
+describe('the default of the input limit', () => {
+  it('is about a third above the largest call of the trial\'s thread (about 34,000 estimated tokens) and stays under the ceiling', () => {
+    expect(DEFAULTS.maxInputTokens).toBeGreaterThanOrEqual(34_000 * 1.3);
+    expect(DEFAULTS.maxInputTokens).toBeLessThanOrEqual(RANGES.maxInputTokens.max);
+  });
+});
+
 describe('the assistant settings by environment', () => {
   it('have the default of each setting when none is given', () => {
-    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 7, maxSteps: 4, contextTurns: 3, maxMessageWords: 1000, maxInputTokens: 25_000, maxOutputTokens: 4000, runRetentionDays: 30, threadRetention: 'close', threadReadTurns: 100 });
+    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 7, maxSteps: 4, contextTurns: 3, maxMessageWords: 1000, maxInputTokens: 45_000, maxOutputTokens: 4000, runRetentionDays: 30, threadRetention: 'close', threadReadTurns: 100 });
   });
 
   it('take a value of every setting, and treat an empty value as not given', () => {
