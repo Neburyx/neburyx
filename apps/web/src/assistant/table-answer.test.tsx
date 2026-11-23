@@ -54,7 +54,6 @@ describe('the Assistant panel: a table answer', () => {
     expect(screen.getByText('Sources · 2')).toBeTruthy();
     expect(screen.getByText('2 of 2 figures in view shown · exact')).toBeTruthy();
     expect(screen.queryByText(ASSISTANT_COPY.moreNotShownTitle)).toBeNull();
-    expect(document.querySelector('.assistant-state')?.textContent).toBe(ASSISTANT_COPY.stateChecked);
   });
 
   it('selects the element a row cites from its chip', async () => {

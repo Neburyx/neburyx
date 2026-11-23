@@ -69,15 +69,6 @@ describe('the Assistant panel: the step in progress', () => {
     expect(progress()?.textContent).not.toMatch(/\d+ rows?/);
   });
 
-  it('says the state of the turn at the right of the header: Reading, then Checking the answer', async () => {
-    const { h, turns } = held();
-    render(h.tree());
-    await typeAndSend('hello');
-    expect(document.querySelector('.assistant-state')?.textContent).toBe(ASSISTANT_COPY.stateReading);
-    await act(async () => turns[0]?.onStep?.({ n: 1, phase: 'answering' }));
-    expect(document.querySelector('.assistant-state')?.textContent).toBe(ASSISTANT_COPY.stateChecking);
-  });
-
   it('announces the step in the panel’s one live region, which holds the waiting sentence first and one step at a time after', async () => {
     const { h, turns } = held();
     render(h.tree());

@@ -88,9 +88,6 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   // the one live region of the panel says the step in progress when the server reports one, and the waiting sentence until then
   const step = turns.flatMap((turn) => (turn.outcome.kind === 'pending' ? (turn.outcome.steps ?? []).slice(-1) : []))[0];
   const announced = pending ? (step === undefined ? ASSISTANT_COPY.working : stepSentenceOf(step)) : '';
-  // the state of the turn, at the right of the header: reading, checking the answer, or the checked answer once an answer of cited sentences is settled (a refusal, a stop or an Ask answer is not one)
-  const lastTurn = turns.at(-1);
-  const stateLabel = pending ? (step?.phase === 'answering' ? ASSISTANT_COPY.stateChecking : ASSISTANT_COPY.stateReading) : lastTurn?.outcome.kind === 'view-answer' ? ASSISTANT_COPY.stateChecked : undefined;
   const close = (): void => {
     onClose();
     focusAssistantControl();
@@ -128,7 +125,6 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           <h2>{ASSISTANT_COPY.title}</h2>
           <p>{model.title}</p>
         </div>
-        {stateLabel === undefined ? null : <span className="assistant-state">{stateLabel}</span>}
         <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} onClick={close}>
           ×
         </button>
@@ -175,7 +171,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
         <textarea
           id="assistant-message"
           ref={field}
-          rows={3}
+          rows={1}
           value={unavailable ? '' : input}
           readOnly={pending}
           aria-disabled={pending ? true : undefined}
@@ -183,7 +179,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           className={tooLongNotice === undefined ? undefined : 'assistant-over'}
           placeholder={unavailable ? ASSISTANT_COPY.unavailableField : pending ? ASSISTANT_COPY.waitingPlaceholder : summary?.status === 'attached' ? ASSISTANT_COPY.summaryPlaceholder : ASSISTANT_COPY.placeholder}
           aria-invalid={tooLongNotice !== undefined}
-          aria-describedby="assistant-counter assistant-keys"
+          aria-describedby={unavailable ? "assistant-counter assistant-keys" : "assistant-counter assistant-keys assistant-standing"}
           onChange={(event) => model.setInput(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -211,7 +207,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
             </button>
           )}
         </div>
-        <p id="assistant-keys" className="ask-keys">
+        <p id="assistant-keys" className={model.canCancel || unavailable || tooLongNotice !== undefined ? 'ask-keys' : 'ask-keys visually-hidden'}>
           {model.canCancel ? ASSISTANT_COPY.cancelHint : unavailable ? ASSISTANT_COPY.unavailableSend : tooLongNotice !== undefined ? TOO_LONG_NOTE : limit === undefined ? '' : hintText(limit)}
         </p>
         {unavailable ? null : <StandingNote />}

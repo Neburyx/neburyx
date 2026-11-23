@@ -91,11 +91,4 @@ describe('the refusal of a verdict with an overview', () => {
     expect(screen.queryByText(ASSISTANT_COPY.overviewNote)).toBeNull();
     expect(screen.queryByText(ASSISTANT_COPY.coverage)).toBeNull();
   });
-
-  it('keeps the header free of the checked-answer label, which belongs to an answer from the view', async () => {
-    setup(overviewOf());
-    await typeAndSend('is this customer laundering money?');
-    await screen.findByRole('heading', { name: ASSISTANT_COPY.overviewHeading });
-    expect(document.querySelector('.assistant-state')).toBeNull();
-  });
 });

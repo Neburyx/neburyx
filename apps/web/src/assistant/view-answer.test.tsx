@@ -54,22 +54,6 @@ describe('the Assistant panel: an answer from the view', () => {
     expect(h.sent[0]?.viewElementKeys).toEqual(expect.arrayContaining([elementKey(A), elementKey(B)]));
   });
 
-  it('says The checked answer at the right of the header once cited sentences are shown, and nothing for a refusal', async () => {
-    const h = harness(async () => ok(ANSWER));
-    shown(h);
-    render(h.tree());
-    expect(document.querySelector('.assistant-state')).toBeNull();
-    await typeAndSend('what is linked?');
-    await screen.findByText('AI-drafted');
-    expect(document.querySelector('.assistant-state')?.textContent).toBe(ASSISTANT_COPY.stateChecked);
-    cleanup();
-    const refused = harness(async () => ok(REFUSE));
-    render(refused.tree());
-    await typeAndSend('is it fraud?');
-    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
-    expect(document.querySelector('.assistant-state')).toBeNull();
-  });
-
   it('selects a drawn element from a marker and says why a hidden one cannot be selected', async () => {
     const h = harness(async () => ok(ANSWER));
     shown(h);

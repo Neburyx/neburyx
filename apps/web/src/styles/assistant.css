@@ -264,10 +264,6 @@
   margin: 0;
 }
 
-.assistant-standing {
-  margin: 0;
-}
-
 .assistant-newthread {
   display: flex;
   flex-direction: column;
@@ -445,15 +441,55 @@
   background: transparent;
 }
 
-/* the panel keeps a 16 px gap above and below it: a long thread scrolls inside the panel and never grows past the window */
+/* the panel fills the canvas from 16 px under the header to 16 px above the window's bottom, as the frames draw it: a long thread scrolls inside it and the composer stays at the bottom */
 .assistant-panel {
+  height: calc(var(--full-height) - var(--header-height) - 2 * var(--space-16) - 2 * var(--border-width));
   max-height: calc(var(--full-height) - var(--header-height) - 2 * var(--space-16));
+}
+
+.assistant-panel .assistant-body:has(.assistant-thread) > :first-child {
+  margin-top: auto;
+}
+
+.panel-frame:has(> .panel[data-panel='assistant']) > .panel-toggle {
+  display: none;
+}
+
+.assistant-panel .ask-head {
+  gap: var(--space-8);
+  padding: var(--space-10) var(--space-16);
+}
+
+.assistant-panel .ask-sparkle {
+  width: var(--assistant-head-icon-size);
+  height: var(--assistant-head-icon-size);
+}
+
+.assistant-panel .ask-close {
+  padding: 0;
+}
+
+.assistant-panel .ask-form {
+  gap: var(--space-8);
+  padding: var(--space-12);
+  border-top: var(--border-width) solid var(--color-border);
+  border-bottom: 0;
+}
+
+.assistant-panel .ask-form textarea {
+  box-sizing: border-box;
+  min-height: var(--assistant-input-height);
+  max-height: var(--assistant-input-max-height);
+  padding: var(--space-10) var(--space-12);
+  line-height: var(--assistant-input-line-height);
+  field-sizing: content;
 }
 
 .assistant-panel .assistant-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  padding-bottom: var(--space-16);
 }
 
 .assistant-summary-context {
@@ -664,13 +700,6 @@
 .assistant-current-checking {
   background: var(--color-surface-muted);
   border-color: var(--color-border);
-}
-
-.assistant-state {
-  margin-left: auto;
-  font-size: var(--font-size-small);
-  color: var(--color-text-muted);
-  white-space: nowrap;
 }
 
 /* a table answer: the table scrolls inside the card, the page never does */

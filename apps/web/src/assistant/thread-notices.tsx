@@ -2,7 +2,7 @@ import type { AssistantThreadResponse } from '@neburyx/contracts';
 import { ASSISTANT_COPY, causeText, earlierText, sourcesText } from './copy.js';
 
 export function StandingNote() {
-  return <p className="ask-note assistant-standing">{ASSISTANT_COPY.standing}</p>;
+  return <p id="assistant-standing" className="visually-hidden">{ASSISTANT_COPY.standing}</p>;
 }
 
 export function NewThreadCard() {

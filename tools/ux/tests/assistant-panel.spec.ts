@@ -73,10 +73,10 @@ async function open(page: Page): Promise<void> {
 }
 
 test.describe('the Assistant panel', () => {
-  test('shows the standing note under the input, the turns the server kept as compact rows above the live thread, and the new-thread card for a cleared one', async ({ page }) => {
+  test('gives the input the keyboard hint and the standing note as its accessible description instead of visible lines, shows the turns the server kept as compact rows above the live thread, and the new-thread card for a cleared one', async ({ page }) => {
     await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 2, steps: 1 }, { seq: 2, at: '2026-11-18T10:05:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 }], earlierTurns: 0, previousThreadClearedAt: null });
     await open(page);
-    await expect(panel(page).getByText('The thread is cleared when the investigation closes.')).toBeVisible();
+    await expect(page.getByLabel('Your message')).toHaveAccessibleDescription(/Your message goes to the model as typed\. .*Esc closes\..*The thread is cleared when the investigation closes\./);
     await expect(panel(page).getByRole('heading', { name: 'Earlier in this thread' })).toBeVisible();
     await expect(panel(page).getByRole('listitem', { name: 'Read from the source, Answered' })).toContainText('shared-devices');
     await expect(panel(page).getByRole('listitem', { name: 'Refused, Refused' })).toContainText('Verdict');
@@ -201,13 +201,11 @@ test.describe('the Assistant panel', () => {
       await expect(panel(page).locator('.assistant-read')).toContainText('Ran Devices of an account');
       await expect(panel(page).locator('.assistant-read')).toContainText('AC-1 · 2 rows · complete');
       await expect(panel(page).locator('.assistant-current')).toContainText('Reading Accounts using a device');
-      await expect(panel(page).locator('.assistant-state')).toHaveText('Reading');
       await push({ event: 'step', n: 4, phase: 'read-done', read: { tool: 'accounts-using-a-device', label: 'Accounts using a device', kind: 'template', subject: 'DEV-884', read: true, rows: 3, quality: 'exact', partial: false } });
       await push({ event: 'step', n: 5, phase: 'answering' });
       await expect(panel(page).locator('.assistant-read')).toHaveCount(2);
       await expect(panel(page).locator('.assistant-current')).toContainText('Checking the answer…');
       await expect(panel(page).locator('.assistant-current')).toContainText('Every sentence must cite something that was read.');
-      await expect(panel(page).locator('.assistant-state')).toHaveText('Checking the answer');
       await expect(panel(page).locator('.ask-progress, progress, [role="progressbar"]')).toHaveCount(0);
       const box = await panel(page).boundingBox();
       for (const target of [panel(page).locator('.assistant-current'), panel(page).getByRole('button', { name: 'Cancel' })]) {
@@ -394,6 +392,13 @@ test.describe('the Assistant panel', () => {
       expect(headerBox !== null && panelBox !== null && Math.round(panelBox.y - (headerBox.y + headerBox.height))).toBe(16);
       await page.getByLabel('Your message').fill('what is in view?');
       await page.keyboard.press('Enter');
+      const field = page.getByLabel('Your message');
+      expect((await field.boundingBox())?.height).toBe(40);
+      expect(Math.round(panelBox?.height ?? 0)).toBe(820);
+      await field.fill('one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three twenty-four twenty-five twenty-six');
+      const grown = (await field.boundingBox())?.height ?? 0;
+      expect(grown > 40 && grown <= 120).toBe(true);
+      await field.fill('');
       await page.setViewportSize({ width, height: 560 });
       await expect(page.getByLabel('Your message')).toBeInViewport();
       const shorter = await page.locator('aside.floating-panel').boundingBox();

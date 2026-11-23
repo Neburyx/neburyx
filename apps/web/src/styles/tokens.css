@@ -59,6 +59,10 @@
   --header-height: 48px;
   --region-top: 64px;
   --sources-icon-size: 10px;
+  --assistant-input-height: 40px;
+  --assistant-input-line-height: 17px;
+  --assistant-head-icon-size: 10px;
+  --assistant-input-max-height: 120px;
   --source-status-max-width: 320px;
   --scope-left: 24px;
   --scope-top: 16px;
