@@ -770,6 +770,21 @@ test.describe('the Assistant panel', () => {
     await page.keyboard.press('Tab');
     await page.keyboard.press('Shift+Tab');
     await expect(page.locator('.assistant-table-tip')).toHaveText(narratives[0] ?? '');
+  
+    // the line of folded rows is centred in the frame that is seen, at any scroll position, and so is the line that closes the fold
+    const centred = () => table.evaluate((element) => {
+      const frame = (element.closest('.assistant-table-scroll') as HTMLElement).getBoundingClientRect();
+      const button = (element.querySelector('.assistant-table-fold-button') as HTMLElement).getBoundingClientRect();
+      return Math.abs(button.left + button.width / 2 - (frame.left + frame.width / 2));
+    });
+    expect(await centred()).toBeLessThanOrEqual(2);
+    await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+    await expect(scroller).not.toHaveClass(/assistant-table-scrolls/);
+    expect(await centred()).toBeLessThanOrEqual(2);
+    await table.getByRole('button', { name: /more rows/ }).click();
+    await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth / 2; });
+    await expect(table.getByRole('button', { name: 'Fold the rows again' })).toBeVisible();
+    expect(await centred()).toBeLessThanOrEqual(2);
   });
 
   test('keeps the date and the time of every time stamp whole in a mixed answer at the default panel width: a sentence, a table of four columns and a list', async ({ page }) => {

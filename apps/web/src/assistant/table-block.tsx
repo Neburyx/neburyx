@@ -93,6 +93,8 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
     const element = scroller.current;
     if (element === null) return undefined;
     const measure = (): void => {
+      // the fold line is centred in the frame the person sees, wherever the table is scrolled to
+      element.style.setProperty("--assistant-table-frame", `${element.clientWidth}px`);
       setScrollsOn(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
       // the title column keeps its content width until the table overflows with every cell at its cap: only then does it give way (with its ellipsis) down to a floor; measured without the squeeze, so that a wider panel lets it go
       element.classList.remove("assistant-table-squeezed");
@@ -170,9 +172,11 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
   const foldRow = (
     <tr key="fold" className="assistant-table-fold">
       <td colSpan={table.columns.length + 1}>
-        <button type="button" className="assistant-table-fold-button" aria-expanded={!folds} onClick={() => setUnfolded(!unfolded)}>
-          {folds ? foldedRowsText(foldedCount) : ASSISTANT_COPY.foldClose}
-        </button>
+        <div className="assistant-table-fold-frame">
+          <button type="button" className="assistant-table-fold-button" aria-expanded={!folds} onClick={() => setUnfolded(!unfolded)}>
+            {folds ? foldedRowsText(foldedCount) : ASSISTANT_COPY.foldClose}
+          </button>
+        </div>
       </td>
     </tr>
   );

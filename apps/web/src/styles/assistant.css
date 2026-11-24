@@ -1048,9 +1048,22 @@
   border-bottom: 0;
 }
 
-.assistant-table-fold td {
-  text-align: center;
+.assistant-table-fold td,
+.assistant-table tr.assistant-table-fold td,
+.assistant-surface-page .assistant-table tr.assistant-table-fold td {
+  max-width: none;
+  padding: 0;
+  overflow: visible;
   background: var(--color-surface-muted);
+}
+
+/* the line of folded rows stays as wide as the frame and sticks to its left edge, so it is centred in what is seen at any scroll position */
+.assistant-table-fold-frame {
+  position: sticky;
+  left: 0;
+  width: var(--assistant-table-frame, 100%);
+  padding: var(--space-4) 0;
+  text-align: center;
 }
 
 .assistant-table-fold-button {
