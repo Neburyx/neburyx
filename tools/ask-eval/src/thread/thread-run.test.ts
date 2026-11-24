@@ -361,14 +361,15 @@ describe('the manifest', () => {
 describe('the edges view', () => {
   const EDGES = { neighbourTypes: ['gadget', 'tag'], entities: 4, relationships: 3 };
   const REF = (entityType: string, stableId: string, sourceId = 'demo-source') => ({ sourceId, entityType, stableId });
-  const EDGE = (toType: string, to: string, n: number, over: { sourceId?: string; stored?: boolean; type?: string; fromType?: string; toType?: string } = {}) => ({
-    ref: over.stored === false ? { sourceId: over.sourceId ?? 'demo-source', aggregate: { type: 'HAS', from: REF('widget', 'W-1'), to: REF(toType, to) } } : { sourceId: over.sourceId ?? 'demo-source', type: over.type ?? 'HAS', from: over.fromType ?? 'widget', to: over.toType ?? toType, stableId: `e-${n}` },
+  const EDGE = (toType: string, to: string, n: number, over: { sourceId?: string; kind?: 'aggregate' | 'derived'; type?: string; fromType?: string; toType?: string } = {}) => ({
+    ref: over.kind === 'derived' ? { sourceId: over.sourceId ?? 'demo-source', derived: { ruleId: 'rule-1', from: REF('widget', 'W-1'), to: REF(toType, to) } } : over.kind === 'aggregate' ? { sourceId: over.sourceId ?? 'demo-source', aggregate: { type: 'HAS', from: REF('widget', 'W-1'), to: REF(toType, to) } } : { sourceId: over.sourceId ?? 'demo-source', type: over.type ?? 'HAS', from: over.fromType ?? 'widget', to: over.toType ?? toType, stableId: `e-${n}` },
     from: REF('widget', 'W-1'),
     to: REF(toType, to),
     type: 'HAS',
     direction: 'out',
-    semantics: 'stored',
-    ...(over.stored === false ? { memberCount: { quality: 'exact', value: 2, scope: 'test' } } : {}),
+    semantics: over.kind === 'derived' ? 'derived' : 'stored',
+    ...(over.kind === 'derived' ? { derivation: { ruleId: 'rule-1', ruleVersion: 1, supportingEdgeRefs: [] } } : {}),
+    ...(over.kind === 'aggregate' ? { memberCount: { quality: 'exact', value: 2, scope: 'test' } } : {}),
     properties: [],
     evidenceRefs: [],
     qualityFlags: [],
@@ -413,9 +414,18 @@ describe('the edges view', () => {
     expect(file.view).toEqual({ entities: 4, relationships: 3 });
   });
 
+  it('takes the relationships of the expansion that are aggregates of stored ones (the account and its transactions) as stored, and sends the key the panel sends for an aggregate', async () => {
+    const { code, s, file } = await run({ ...MANIFEST, edgesView: EDGES }, { expand: expand({ edges: [EDGE('gadget', 'g.1', 1, { kind: 'aggregate' }), EDGE('gadget', 'g.2', 2), EDGE('tag', 't.1', 3, { kind: 'aggregate' })] }) });
+    expect(code).toBe(0);
+    const keys = (s.requests.find((request) => request.path === '/v1/assistant/turns')?.body as { viewElementKeys: string[] }).viewElementKeys;
+    expect(keys).toContain(JSON.stringify(['edge', 'demo-source', 'aggregate', 'HAS', JSON.stringify(['node', 'demo-source', 'widget', 'W-1']), JSON.stringify(['node', 'demo-source', 'gadget', 'g.1'])]));
+    expect(keys).toContain(JSON.stringify(['edge', 'demo-source', 'stored', 'HAS', 'widget', 'gadget', 'e-2']));
+    expect(file.view).toEqual({ entities: 4, relationships: 3 });
+  });
+
   it.each([
     ['too few relationships', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2)] }, /relationships/],
-    ['a relationship that is not a stored one', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), EDGE('tag', 't.1', 3, { stored: false })] }, /not a stored one/],
+    ['a relationship that is not a stored one', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), EDGE('tag', 't.1', 3, { kind: 'derived' })] }, /not a stored one/],
     ['a reference of another relationship type than the relationship', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), { ...EDGE('tag', 't.1', 3), type: 'OTHER' }] }, /does not agree/],
     ['a reference with other end types than the relationship', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), EDGE('tag', 't.1', 3, { toType: 'gadget' })] }, /does not agree/],
     ['a relationship twice', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.1', 1), EDGE('tag', 't.1', 3)] }, /relationship twice/],

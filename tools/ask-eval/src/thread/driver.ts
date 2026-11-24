@@ -109,7 +109,15 @@ async function buildView(options: RepeatOptions): Promise<ViewBuild> {
   return { keys: entities.map(keyOf), entities: entities.length };
 }
 
-const edgeKeyOf = (ref: { readonly sourceId: string; readonly type: string; readonly from: string; readonly to: string; readonly stableId: string }): string => JSON.stringify(['edge', ref.sourceId, 'stored', ref.type, ref.from, ref.to, ref.stableId]);
+type ExpandEdge = ReturnType<typeof expandResponseSchema.parse>['edges'][number];
+
+/** The key the panel sends for a relationship of the view: a stored one by its id, an aggregate (the expansion's relationships of one type between two elements) by its type and ends. A derived one has no key here: the view is the stored relationships only. */
+function edgeKeyOf(edge: ExpandEdge): string {
+  const ref = edge.ref;
+  if ('stableId' in ref) return JSON.stringify(['edge', ref.sourceId, 'stored', ref.type, ref.from, ref.to, ref.stableId]);
+  if ('aggregate' in ref) return JSON.stringify(['edge', ref.sourceId, 'aggregate', ref.aggregate.type, keyOf(ref.aggregate.from), keyOf(ref.aggregate.to)]);
+  throw new RepeatFailure('the view holds a relationship that is not a stored one');
+}
 
 /**
  * The edges view: the anchor expanded to the types of neighbours the manifest names, by the bounded expansion the canvas uses, with the relationships between the elements the expansion returned. It holds exactly the entities and
@@ -129,17 +137,23 @@ async function buildEdgesView(options: RepeatOptions, shape: NonNullable<RepeatO
   if (entities.some((ref) => !isAnchor(ref) && !shape.neighbourTypes.includes(ref.entityType))) throw new RepeatFailure('the view holds an element of a type the manifest does not name');
   if (new Set(entities.map(keyOf)).size !== entities.length) throw new RepeatFailure('the view holds an element twice');
   if (entities.length !== shape.entities) throw new RepeatFailure(`the view holds ${entities.length} entities, not ${shape.entities}`);
-  const edges = body.data.edges.map((edge) => edge.ref);
-  const stored = edges.flatMap((ref) => ('stableId' in ref ? [ref] : []));
-  if (stored.length !== edges.length) throw new RepeatFailure('the view holds a relationship that is not a stored one');
-  if (stored.some((ref) => ref.sourceId !== manifest.sourceId)) throw new RepeatFailure('the view holds a relationship of another source than the manifest names');
-  // the reference that names a relationship in the key must be the relationship the expansion returned: its type and the entity types of its ends are those the relationship itself carries
-  if (body.data.edges.some((edge) => !('stableId' in edge.ref) || edge.ref.type !== edge.type || edge.ref.from !== edge.from.entityType || edge.ref.to !== edge.to.entityType)) throw new RepeatFailure('the view holds a relationship whose reference does not agree with the relationship');
+  const edges = body.data.edges;
+  // stored relationships only: one by its id, or an aggregate of stored ones; a derived relationship is another view
+  if (edges.some((edge) => edge.semantics !== 'stored' || 'derived' in edge.ref)) throw new RepeatFailure('the view holds a relationship that is not a stored one');
+  if (edges.some((edge) => edge.ref.sourceId !== manifest.sourceId)) throw new RepeatFailure('the view holds a relationship of another source than the manifest names');
+  // the reference that names a relationship in the key must be the relationship the expansion returned: its type and ends are those the relationship itself carries
+  const agrees = (edge: ExpandEdge): boolean => {
+    const ref = edge.ref;
+    if ('stableId' in ref) return ref.type === edge.type && ref.from === edge.from.entityType && ref.to === edge.to.entityType;
+    return 'aggregate' in ref && ref.aggregate.type === edge.type && keyOf(ref.aggregate.from) === keyOf(edge.from) && keyOf(ref.aggregate.to) === keyOf(edge.to);
+  };
+  if (edges.some((edge) => !agrees(edge))) throw new RepeatFailure('the view holds a relationship whose reference does not agree with the relationship');
   const held = new Set(entities.map(keyOf));
-  if (body.data.edges.some((edge) => !held.has(keyOf(edge.from)) || !held.has(keyOf(edge.to)))) throw new RepeatFailure('the view holds a relationship with an end that is not an element of the view');
-  if (new Set(stored.map(edgeKeyOf)).size !== stored.length) throw new RepeatFailure('the view holds a relationship twice');
-  if (stored.length !== shape.relationships) throw new RepeatFailure(`the view holds ${stored.length} relationships, not ${shape.relationships}`);
-  return { keys: [...entities.map(keyOf), ...stored.map(edgeKeyOf)], entities: entities.length, relationships: stored.length };
+  if (edges.some((edge) => !held.has(keyOf(edge.from)) || !held.has(keyOf(edge.to)))) throw new RepeatFailure('the view holds a relationship with an end that is not an element of the view');
+  const edgeKeys = edges.map(edgeKeyOf);
+  if (new Set(edgeKeys).size !== edgeKeys.length) throw new RepeatFailure('the view holds a relationship twice');
+  if (edges.length !== shape.relationships) throw new RepeatFailure(`the view holds ${edges.length} relationships, not ${shape.relationships}`);
+  return { keys: [...entities.map(keyOf), ...edgeKeys], entities: entities.length, relationships: edges.length };
 }
 
 /** One request, with a transport failure (no answer, a timeout, a redirect) turned into a named failure of the repeat, never an exception that loses the turns already recorded. */
