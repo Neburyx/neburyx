@@ -363,6 +363,40 @@ function timeAsNumber(raw: unknown, dataClass: string): bigint | undefined {
   return Number.isNaN(milliseconds) ? undefined : BigInt(milliseconds) * 1_000_000n + BigInt((zoned[2] ?? '').padEnd(9, '0'));
 }
 
+/** The elements a ranking sentence names in a list after `of`, `among` or `between` (two or more, all cited, of one type), and the sentence without that list: the set the sentence ranks, when it names it in full. */
+function enumeratedSet(text: string, held: ReadonlyMap<string, HeldElement>, cited: readonly string[]): { readonly keys: readonly string[]; readonly outside: string } | undefined {
+  const names = [...held.values()].flatMap((element) => element.names).filter((name) => name !== '').sort((first, second) => second.length - first.length);
+  if (names.length === 0) return undefined;
+  const one = `(?<![\\p{L}\\p{N}_-])(?:${names.map(escapeText).join('|')})(?![\\p{L}\\p{N}_-])`;
+  const found = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:of|among|amongst|between|out of)\\s+(?:(?:the|these|those)\\s+)?(?:[\\p{L}\\p{N}_-]+\\s+){0,2}?(${one}(?:(?:[\\s,;&()]|(?<![\\p{L}\\p{N}_-])(?:and|to|through)(?![\\p{L}\\p{N}_-]))+${one})+)`, 'iu').exec(text);
+  const whole = found?.[1];
+  if (found === null || whole === undefined) return undefined;
+  // a list names each element once: a name that comes again is the subject of what follows, not a member
+  const seen = new Set<string>();
+  const repeat = [...whole.matchAll(new RegExp(one, 'giu'))].find((mention) => seen.size === seen.add(mention[0].toLowerCase()).size);
+  const list = repeat === undefined ? whole : whole.slice(0, repeat.index).replace(/[\s,;&()]*(?:(?:and|to|through)\s*)?$/iu, '');
+  const first = found.index + found[0].length - whole.length;
+  // the list stands at the ranking word: a few words from it in the same stretch of the sentence, before or after
+  const unnamed = text.replace(new RegExp(one, 'giu'), (mention) => ' '.repeat(mention.length));
+  const between = (from: number, to: number): number | undefined => (/[.;:!?]/u.test(unnamed.slice(from, to)) || /(?<![\p{L}\p{N}_-])(?:and|but|while|whereas|or)(?![\p{L}\p{N}_-])/iu.test(unnamed.slice(from, to)) ? undefined : (unnamed.slice(from, to).match(/[\p{L}\p{N}_-]+/gu) ?? []).length);
+  const listEnd = first + list.length;
+  const widening = /(?<![\p{L}\p{N}_-])(?:and|or|as|also|too|plus|elsewhere|rest|others|remaining|than|more|whole|entire|everywhere|any|all|every|each|throughout|including|of|among|across|within|in|from)(?![\p{L}\p{N}_-])/iu;
+  const attached = [...unnamed.matchAll(/[\p{L}\p{N}_-]+/gu)].filter((word) => RANK_UP.has(word[0].toLowerCase().split('-')[0] ?? '') || RANK_DOWN.has(word[0].toLowerCase().split('-')[0] ?? '')).some((word) => {
+    const after = between(word.index + word[0].length, found.index);
+    const before = between(listEnd, word.index);
+    // after the ranking word the list must be closed (a clause end, the figure, or the holder's verb); opening the sentence it is closed by a comma and nothing after the ranking opens another set
+    const widensAfterList = widening.test(unnamed.slice(first + list.length));
+    return (word.index + word[0].length <= found.index && after !== undefined && after <= 3 && /^\s*(?:$|[,.;]|[-+]?\d|(?:is|are|was|were|has|have|had|belongs|goes)(?![\p{L}\p{N}_-]))/iu.test(unnamed.slice(first + list.length)) && !widensAfterList) || (word.index >= listEnd && before !== undefined && before <= 5 && text.slice(0, found.index).trim() === '' && /^\s*,/u.test(text.slice(listEnd)) && !widening.test(unnamed.slice(listEnd)));
+  });
+  if (!attached) return undefined;
+  const keys = cited.filter((key) => held.get(key)?.names.some((name) => name !== '' && list.includes(name)));
+  const types = new Set(keys.map((key) => held.get(key)?.type));
+  if (keys.length < 2 || types.size !== 1) return undefined;
+  const mentions = [...list.matchAll(new RegExp(one, 'giu'))].map((mention) => mention[0]);
+  if (!mentions.every((mention) => keys.some((key) => held.get(key)?.names.includes(mention) === true))) return undefined;
+  return { keys, outside: `${text.slice(0, first)}${' '.repeat(list.length)}${text.slice(first + list.length)}` };
+}
+
 /**
  * The suite's own statement of the rule for a ranking sentence, from the sent text and the data class each property declares in the fixture (the sent text does not carry the class). A sentence that says the largest, smallest, latest,
  * earliest, fewest or least must name, right after the word, a property of the elements it cites; every element of the type that carries it must be cited with a shown, unmasked value of an orderable class; the extreme must be held by
@@ -385,13 +419,20 @@ export function rankingBroken(sentence: SummarySentence, sent: string, classes: 
   const namedAfter = (index: number): boolean => keysOfCited.some((key) => key.toLowerCase().startsWith((tokens[index] ?? '').toLowerCase()) && key.toLowerCase().slice((tokens[index] ?? '').length) === tokens.slice(index + 1, index + 1 + 3).join('').toLowerCase().slice(0, key.length - (tokens[index] ?? '').length));
   if (tokens.some((token, index) => index > at && (RANK_UP.has(token.toLowerCase()) || RANK_DOWN.has(token.toLowerCase())) && !namedAfter(index))) return true;
   const cited = sentence.cites.filter((key) => held.has(key));
-  const property = [...new Set(cited.flatMap((key) => [...(held.get(key)?.values.keys() ?? [])]))].find((key) => [1, 2, 3, 4].some((count) => tokens.slice(at + 1, at + 1 + count).join('').toLowerCase() === key.toLowerCase()));
+  const propertyKeys = [...new Set(cited.flatMap((key) => [...(held.get(key)?.values.keys() ?? [])]))];
+  const after = propertyKeys.find((key) => [1, 2, 3, 4].some((count) => tokens.slice(at + 1, at + 1 + count).join('').toLowerCase() === key.toLowerCase()));
+  // a property written whole before the ranking word (`has amount 12, the largest of them`) is the one ranked, when it is the only one written there
+  const writtenBefore = propertyKeys.flatMap((key) => [1, 2, 3, 4].flatMap((count) => tokens.slice(0, at).flatMap((_token, index) => (index + count <= at && tokens.slice(index, index + count).join('').toLowerCase() === key.toLowerCase() ? [{ key, end: index + count - 1 }] : []))));
+  const before = new Set(writtenBefore.map((entry) => entry.key)).size === 1 ? writtenBefore[writtenBefore.length - 1] : undefined;
+  const property = after ?? before?.key;
   if (property === undefined) return true;
   const count = [1, 2, 3, 4].find((length) => tokens.slice(at + 1, at + 1 + length).join('').toLowerCase() === property.toLowerCase()) ?? 1;
   const last = (tokens[at + count] ?? '').toLowerCase();
-  const afterProperty = sentence.text.toLowerCase().indexOf(last, sentence.text.toLowerCase().indexOf(word)) + last.length;
+  const lastBefore = (tokens[before?.end ?? 0] ?? '').toLowerCase();
+  const afterProperty = after === undefined ? sentence.text.toLowerCase().indexOf(lastBefore) + lastBefore.length : sentence.text.toLowerCase().indexOf(last, sentence.text.toLowerCase().indexOf(word)) + last.length;
   const type = defined(cited.map((key) => held.get(key)).find((element) => element?.values.has(property)), 'an element with the property').type;
-  const population = [...held].filter(([, element]) => element.type === type);
+  const listed = enumeratedSet(sentence.text, held, cited);
+  const population = [...held].filter(([key, element]) => element.type === type && (listed === undefined || listed.keys.includes(key)));
   const dataClass = classes.get(property);
   if (dataClass === undefined || !['number', 'date', 'dateTime'].includes(dataClass)) return true;
   const numbers = new Map<string, bigint>();
@@ -407,10 +448,11 @@ export function rankingBroken(sentence: SummarySentence, sent: string, classes: 
   const order = [...numbers].sort(([, first], [, second]) => (first === second ? 0 : (first > second) === up ? -1 : 1));
   const [top, next] = order;
   if (top === undefined || (next !== undefined && next[1] === top[1])) return true;
-  const named = population.filter(([key, element]) => cited.includes(key) && element.names.some((name) => sentence.text.includes(name)));
+  const outside = listed?.outside ?? sentence.text;
+  const named = population.filter(([key, element]) => cited.includes(key) && element.names.some((name) => outside.includes(name)));
   if (named.length > 1 || (named[0] !== undefined && named[0][0] !== top[0])) return true;
-  const after = tokens.slice(at + 2).join(' ');
-  const figure = dataClass === 'number' ? /-?\d[\d,]*(?:\.\d+)?/u.exec(sentence.text.slice(afterProperty)) : /\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))?/u.exec(after);
+  const afterText = after === undefined ? sentence.text.slice(afterProperty) : tokens.slice(at + 2).join(' ');
+  const figure = dataClass === 'number' ? /-?\d[\d,]*(?:\.\d+)?/u.exec(sentence.text.slice(afterProperty)) : /\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))?/u.exec(afterText);
   if (figure === null) return named.length === 0;
   const claimed = dataClass === 'number' ? scaledDecimal(figure[0].replaceAll(',', '')) : timeAsNumber(figure[0], dataClass === 'date' && figure[0].includes('T') ? 'dateTime' : dataClass);
   return claimed === undefined || claimed !== top[1];
