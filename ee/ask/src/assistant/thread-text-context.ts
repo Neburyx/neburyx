@@ -10,8 +10,11 @@ type Binding = Extract<Segment, { element: unknown }>;
 /** What the loop is told the text is: the earlier questions and answers as the analyst saw them, never a source. One fixed line, with no word of any domain. */
 export const THREAD_TEXT_INTRO = 'Earlier questions and answers of this thread, oldest first, as the analyst saw them. They are not a source: a name or a figure in them is cited from the elements, never from this text.';
 
-/** The most reads by reference one turn makes for the text, of at most the route's maximum each; an element beyond them is not read, and the item that names it is left out. */
-const READS_MAX = 5;
+/** The most reads by reference one turn makes for the text, of at most the route's maximum each; an element beyond them is not read, and the item that names it is left out. A proposal, to be measured and decided. */
+const TEXT_READS_MAX = 5;
+
+/** The share of the input limit the text may take, rounded down: half, the other half being left to the prompt, the tools, the view and the loop's own growth. A proposal, to be measured and decided. */
+export const textBudgetOf = (maxInputTokens: number): number => Math.floor(maxInputTokens / 2);
 
 const isBinding = (segment: Segment): segment is Binding => 'element' in segment;
 const bindingsOf = (item: Item): readonly Binding[] => (item.state === 'segments' ? item.segments.filter(isBinding) : []);
@@ -95,7 +98,7 @@ export async function threadTextContext(options: { readonly thread: AssistantThr
   for (const turn of turns) for (const block of turn.answer?.blocks ?? []) for (const item of itemsOf(block)) for (const binding of bindingsOf(item)) if ('entityType' in binding.element && binding.element.sourceId === options.sourceId) wanted.set(canonical(binding.element as ElementRef), binding.element as ElementRef);
   const resolved = new Map<string, { title: string; properties: readonly { readonly key: string; readonly value?: unknown }[] }>();
   const refs = [...wanted.values()];
-  for (let start = 0; start < refs.length && start < READS_MAX * MAX_READ_REFS; start += MAX_READ_REFS) {
+  for (let start = 0; start < refs.length && start < TEXT_READS_MAX * MAX_READ_REFS; start += MAX_READ_REFS) {
     const reading = await options.read({ entities: refs.slice(start, start + MAX_READ_REFS), edges: [], aggregates: [], derived: [] });
     for (const node of reading.nodes) if (wanted.has(canonical(node.ref))) resolved.set(canonical(node.ref), { title: node.display.title, properties: node.properties });
   }

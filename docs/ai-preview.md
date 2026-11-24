@@ -237,7 +237,7 @@ The assistant's settings are read when a provider key is set and the assistant i
 | `NEBURYX_ASSISTANT_MAX_STEPS` (reads a turn) | 4 | 8 |
 | `NEBURYX_ASSISTANT_MAX_ROWS` (rows read a turn) | the source's own page limit times the steps | an operator may only lower it |
 | `NEBURYX_ASSISTANT_CONTEXT_TURNS` (earlier turns the router, the answer from the view and the answer after tool steps see: references and titles only, read again through the gate, with the relationships those turns cited and the titles of their ends) | 3 | 6 |
-| `NEBURYX_ASSISTANT_CONTEXT_TEXT` (`true` or `false`; whether the loop that reads through tools is also given the text of the last turns' questions and answers, as the thread shows them under the current masking and with each value read again through the gate; whole turns, newest first, within half of `NEBURYX_ASSISTANT_MAX_INPUT_TOKENS`; the router and the answer from the view are not given it) | `false` | |
+| `NEBURYX_ASSISTANT_CONTEXT_TEXT` (`true` or `false`; whether the loop that reads through tools is also given the text of the last turns' questions and answers, oldest first, as the thread shows them under the current masking, with each bound value read again through the gate (text kept as written is given as kept); the oldest whole turns are dropped to fit within half of `NEBURYX_ASSISTANT_MAX_INPUT_TOKENS`; the router and the answer from the view are not given it) | `false` | |
 | `NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS` | 1000 | 3000 |
 | `NEBURYX_ASSISTANT_MAX_INPUT_TOKENS` | 45000 | 100000 |
 | `NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS` | 4000 | 32000 |

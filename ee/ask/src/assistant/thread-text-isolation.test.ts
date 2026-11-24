@@ -27,10 +27,14 @@ const REACHES_TEXT = /\b(?:thread-present|AssistantThreadRead|StoredTurnText|pre
 const ALLOWED_READERS = new Set(['ee/ask/src/assistant/thread-route.ts', 'ee/ask/src/assistant/turn-thread.ts', 'ee/ask/src/assistant/thread-present.ts', 'ee/ask/src/assistant/thread-store.ts', 'packages/contracts/src/assistant-thread.ts', 'packages/contracts/src/index.ts']);
 const forbiddenReaders = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => REACHES_TEXT.test(file.text) && !ALLOWED_READERS.has(file.path)).map((file) => file.path);
 
-/** The files that call the thread store's read, which returns the stored text, without naming any of the words above: the thread route, and the turn's thread handle that presents the read at once. */
-const RAW_READ = /\b(?:store|threads?|assistantThreads)\.read\(/u;
+/**
+ * The raw read of the thread store returns the stored text. A module that names the store's type or its constructors, or that takes a store from the `threads` option, may not call a method named `read` (also optionally, `?.read(` or `.read?.(`), whatever it
+ * calls the store; only the thread route and the turn's thread handle (which presents the read at once) may. Spelling of the variable is not what is checked.
+ */
+const HANDLES_STORE = /\bAssistantThreadStore\b|\b(?:createPg|createMemory)AssistantThreadStore\b|\bthreads(?:\?\.|\.)?\(\)|\.threads\b/u;
+const READS_RAW = /(?:\?\.|\.)read(?:\?\.)?\(/u;
 const RAW_READERS = new Set(['ee/ask/src/assistant/thread-route.ts', 'ee/ask/src/assistant/turn-thread.ts', 'ee/ask/src/assistant/thread-store.ts']);
-const forbiddenRawReaders = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => RAW_READ.test(file.text) && !RAW_READERS.has(file.path)).map((file) => file.path);
+const forbiddenRawReaders = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => HANDLES_STORE.test(file.text) && READS_RAW.test(file.text) && !RAW_READERS.has(file.path)).map((file) => file.path);
 
 /** Whether the statement that gives the router its context selects any text of a stored turn. */
 const contextSelectsText = (statement: string): boolean => /question_text|\banswer\b|mask_on|sensitivity_version/u.test(statement);
@@ -65,8 +69,11 @@ describe('the text a thread keeps', () => {
     expect(forbiddenRawReaders(sources.map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf8') })))).toEqual([]);
   });
 
-  it('canary: the check of the raw read fails a module that calls it and passes the two readers', () => {
-    expect(forbiddenRawReaders([{ path: 'ee/ask/src/assistant/new-context.ts', text: 'const turns = await threads.read(investigationId, userId, 3);' }, { path: 'ee/ask/src/assistant/turn-thread.ts', text: 'await store.read(a, b, c)' }, { path: 'ee/ask/src/assistant/thread-route.ts', text: 'await store.read(a, b, c)' }, { path: 'ee/ask/src/assistant/context.ts', text: 'await options.read({})' }])).toEqual(['ee/ask/src/assistant/new-context.ts']);
+  it('canary: the check of the raw read fails a module that handles the store and calls a read of any spelling, passes the two readers, and passes a module that reads something else', () => {
+    const named = (text: string) => ({ path: 'ee/ask/src/assistant/new-context.ts', text: `import type { AssistantThreadStore } from './thread-store.js';\n${text}` });
+    for (const call of ['await threads.read(a, b, 3);', 'await reader.read(a, b, 3);', 'await options.threads().read(a, b, 3);', 'await store?.read(a, b, 3);', 'await store.read?.(a, b, 3);']) expect(forbiddenRawReaders([named(call)]), call).toEqual(['ee/ask/src/assistant/new-context.ts']);
+    expect(forbiddenRawReaders([{ path: 'ee/ask/src/assistant/new-context.ts', text: 'const reading = await options.threads().read(a, b, 3);' }])).toEqual(['ee/ask/src/assistant/new-context.ts']);
+    expect(forbiddenRawReaders([{ path: 'ee/ask/src/assistant/turn-thread.ts', text: "import type { AssistantThreadStore } from './thread-store.js';\nawait store.read(a, b, c)" }, { path: 'ee/ask/src/assistant/thread-route.ts', text: 'await options.threads().read(a, b, c)' }, { path: 'ee/ask/src/assistant/context.ts', text: 'await options.read({})' }])).toEqual([]);
   });
 
   it('canary: the same check fails a new module that imports the presenter or names the stored text, and the check of the context statement fails one that selects it', () => {

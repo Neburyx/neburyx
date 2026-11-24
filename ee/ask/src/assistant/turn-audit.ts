@@ -142,7 +142,7 @@ export const noteTurnStarted = async (started: { readonly sourceId: string; read
 export const readTurnContext = async (limit: number): Promise<readonly AssistantContextTurn[]> => (await scope.getStore()?.thread?.context(limit)) ?? [];
 
 /** The caller's last `limit` turns of the thread of the turn that is running, as a read of the thread presents them; none outside a turn, before the turn started or when the thread cannot be read. */
-export const readTurnText = async (limit: number, maskNow: boolean, sensitivityVersion: string | undefined): Promise<AssistantThreadResponse | undefined> => scope.getStore()?.thread?.text(limit, maskNow, sensitivityVersion);
+export const readTurnText = async (limit: number, maskNow: boolean, sensitivityVersion: () => string | undefined): Promise<AssistantThreadResponse | undefined> => scope.getStore()?.thread?.text(limit, maskNow, sensitivityVersion);
 
 /** The id of the run of the turn that is running, for the events it writes; absent outside a turn and before the turn started. */
 export const currentRunId = (): string | undefined => scope.getStore()?.run?.id;

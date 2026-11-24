@@ -23,7 +23,7 @@ export interface TurnThread {
   /** The person's last `limit` turns of the thread as the router's context; a thread that cannot be read is counted as a failed record and gives none, so the turn goes on without it. */
   context(limit: number): Promise<readonly AssistantContextTurn[]>;
   /** The person's last `limit` turns of the thread as a read of it presents them for this mask and sensitivity version, for the loop's text context; a thread that cannot be read is counted as a failed record and gives none. */
-  text(limit: number, maskNow: boolean, sensitivityVersion: string | undefined): Promise<AssistantThreadResponse | undefined>;
+  text(limit: number, maskNow: boolean, sensitivityVersion: () => string | undefined): Promise<AssistantThreadResponse | undefined>;
 }
 
 /**
@@ -78,7 +78,9 @@ export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionReq
     },
     async text(limit, maskNow, sensitivityVersion) {
       try {
-        return presentThread(await store.read(started.investigationId, request.principalId, limit), maskNow, sensitivityVersion);
+        // the version is looked up after the read, as the thread route does, so that a text is never presented under a version older than the one it was read under
+        const read = await store.read(started.investigationId, request.principalId, limit);
+        return presentThread(read, maskNow, sensitivityVersion());
       } catch {
         failed('context-text');
         return undefined;

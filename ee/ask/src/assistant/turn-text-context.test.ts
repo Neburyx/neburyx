@@ -1,4 +1,4 @@
-import { assistantTurnAuditDetailSchema, auditDetailSchema, type AssistantThreadTurnWrite, type AuditEvent, type RecordQueue } from '@neburyx/contracts';
+import { ExtensionRefusal, assistantTurnAuditDetailSchema, auditDetailSchema, type AssistantThreadTurnWrite, type AuditEvent, type RecordQueue } from '@neburyx/contracts';
 import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
@@ -47,17 +47,18 @@ interface Turn {
 }
 
 /** One turn through the real route whose loop is a stand-in that notes what it is given; the thread holds the turns the test seeds. */
-async function run(over: { readonly env?: Record<string, string>; readonly mask?: boolean; readonly version?: string | null; readonly signal?: AbortSignal; readonly seed?: readonly AssistantThreadTurnWrite[]; readonly store?: (inner: AssistantThreadStore) => AssistantThreadStore } & Partial<RigOptions> = {}): Promise<Turn> {
+async function run(over: { readonly env?: Record<string, string>; readonly mask?: boolean; readonly version?: string | null; readonly versionOf?: () => string; readonly signal?: AbortSignal; readonly rigOut?: { r?: Rig }; readonly seed?: readonly AssistantThreadTurnWrite[]; readonly store?: (inner: AssistantThreadStore) => AssistantThreadStore } & Partial<RigOptions> = {}): Promise<Turn> {
   failures.length = 0;
   const threads = createMemoryAssistantThreadStore();
   for (const turn of over.seed ?? [stored()]) await threads.append(turn, 0);
   const reads = { count: 0 };
   const counted: AssistantThreadStore = { ...threads, read: (...args) => (reads.count++, threads.read(...args)) };
   const given: Turn['given'] = [];
-  const { env, mask, version, signal, seed, store, ...options } = over;
+  const { env, mask, version, versionOf, signal, rigOut, seed, store, ...options } = over;
   void seed;
   const made = await rig({ reply: UNPLACED, threadStore: store === undefined ? counted : store(counted), records: immediate, settingsEnv: env ?? {}, loopStub: async (input) => (given.push({ context: input.context }), undefined), readNodes: () => [nodeOf('A-1', 'Live title')], ...options });
-  const answer = await made.route.handler(made.request({ ...BODY, investigationId: INVESTIGATION, ...(mask === true ? { mask: true } : {}) }, { principalId: PERSON, ...(signal === undefined ? {} : { signal }), sensitivityVersion: () => { if (version === null) throw new Error('no version'); return version ?? VERSION; } }));
+  if (rigOut !== undefined) rigOut.r = made;
+  const answer = await made.route.handler(made.request({ ...BODY, investigationId: INVESTIGATION, ...(mask === true ? { mask: true } : {}) }, { principalId: PERSON, ...(signal === undefined ? {} : { signal }), sensitivityVersion: () => { if (version === null) throw new Error('no version'); return versionOf?.() ?? version ?? VERSION; } }));
   await drain();
   return { given, rig: made, threads, reads, answer };
 }
@@ -157,13 +158,6 @@ describe('the stored text of the thread given to the loop, by the real route', (
     expect(failures).toEqual([]);
   });
 
-  it('ends a turn cancelled while the elements are read as cancelled, with no loop call', async () => {
-    const controller = new AbortController();
-    const given: unknown[] = [];
-    await expect(run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, signal: controller.signal, onViewRead: () => controller.abort(), viewReadThrows: new Error('aborted'), loopStub: async (input) => (given.push(input), undefined) })).rejects.toThrow('the request was cancelled');
-    expect(given).toEqual([]);
-  });
-
   it('keeps the text out of every audit event and log, and records the setting in the run record, in both states', async () => {
     const logs: { fields: Record<string, unknown>; message: string }[] = [];
     for (const on of [true, false]) {
@@ -174,6 +168,84 @@ describe('the stored text of the thread given to the loop, by the real route', (
       expect(runs.runs[0]?.start.settings).toMatchObject({ contextText: on });
     }
     expect(JSON.stringify(logs)).not.toContain('Two items are listed');
+  });
+
+  it('presents the text under the version it has when the store has been read, not the one it had before: a mapping that changes during the read gives no text of the turn', async () => {
+    const current = { version: VERSION };
+    const t = await run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, mask: true, versionOf: () => current.version, store: (inner) => ({ ...inner, read: async (...args) => { const read = await inner.read(...args); current.version = 'sv1:changed'; return read; } }) });
+    expect(t.given[0]?.context).toContain('Answer: (no text of it is shown)');
+    expect(t.given[0]?.context).not.toContain('Two items');
+  });
+
+  it('gives no text at all when the mapping changes while the bound elements are read', async () => {
+    const current = { version: VERSION };
+    const t = await run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, mask: true, versionOf: () => current.version, readNodes: () => { current.version = 'sv1:changed'; return [nodeOf('A-1', '*****')]; } });
+    expect(t.given).toHaveLength(1);
+    expect(t.given[0]?.context).not.toContain(THREAD_TEXT_INTRO);
+    expect(t.given[0]?.context).not.toContain('*****');
+  });
+
+  it('leaves the loop\'s context, the identifiers and the gate reads as they were with the setting off, and the text read adds one read of the bound elements', async () => {
+    const seed = [stored({ route: 'ask', intent: 'shared', entities: [{ role: 'id', ref: A1 }], citationRefs: [A1] })];
+    const off = await run({ seed });
+    const absent = await run({ seed, env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'false' } });
+    const on = await run({ seed, env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } });
+    const golden = `Earlier turns of this thread, oldest first:\n1. ask "shared"; ran for id = c1; cited c1\n\nElements of those turns, by key | title | type:\nc1 | "Live title" | "${V.anchor}"\nIdentifiers of those elements, to give a tool as values:\nc1 = ${V.anchor} A-1`;
+    expect(off.given[0]?.context).toBe(golden);
+    expect(absent.given[0]?.context).toBe(golden);
+    expect(on.given[0]?.context?.startsWith(`${golden}\n\n${THREAD_TEXT_INTRO}\n`)).toBe(true);
+    expect(absent.rig.elementReads.length).toBe(off.rig.elementReads.length);
+    expect(on.rig.elementReads.length).toBe(off.rig.elementReads.length + 1);
+  });
+
+  it('gives no text when the older turn has it and the turns of the window, which is all the store limits, have none', async () => {
+    const seed = [stored({ question: 'older question' }), stored({ question: undefined, answer: undefined, maskOn: undefined, sensitivityVersion: undefined }), stored({ question: undefined, answer: undefined, maskOn: undefined, sensitivityVersion: undefined })];
+    const t = await run({ seed, env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true', NEBURYX_ASSISTANT_CONTEXT_TURNS: '2' } });
+    expect(t.given[0]?.context).not.toContain('older question');
+    expect(t.given[0]?.context).not.toContain(THREAD_TEXT_INTRO);
+  });
+
+  it('ends a turn whose request was cancelled before the read as cancelled, reads no text and makes no loop call', async () => {
+    const given: unknown[] = [];
+    const reads = { count: 0 };
+    const threads = createMemoryAssistantThreadStore();
+    await threads.append(stored(), 0);
+    const made = await rig({ reply: UNPLACED, threadStore: { ...threads, read: (...args) => (reads.count++, threads.read(...args)) }, records: immediate, settingsEnv: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, loopStub: async (input) => (given.push(input), undefined) });
+    await expect(made.route.handler(made.request({ ...BODY, investigationId: INVESTIGATION }, { principalId: PERSON, signal: AbortSignal.abort() }))).rejects.toThrow('the request was cancelled');
+    expect(reads.count).toBe(0);
+    expect(given).toEqual([]);
+  });
+
+  it('ends a turn cancelled during a read that succeeds as cancelled, with no loop call', async () => {
+    const controller = new AbortController();
+    const given: unknown[] = [];
+    await expect(run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, signal: controller.signal, onViewRead: () => controller.abort(), loopStub: async (input) => (given.push(input), undefined) })).rejects.toThrow('the request was cancelled');
+    expect(given).toEqual([]);
+  });
+
+  it('ends a turn whose time ran out while the elements were read as a timeout, with no loop call, whether the read failed or succeeded', async () => {
+    for (const fails of [true, false]) {
+      const given: unknown[] = [];
+      const holder: { r?: Rig } = {};
+      const t = await run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, onViewRead: () => holder.r?.expire(), ...(fails ? { viewReadThrows: new Error('aborted') } : {}), loopStub: async (input) => (given.push(input), undefined), rigOut: holder });
+      expect(t.answer).toMatchObject({ status: 'unavailable', kind: 'timeout' });
+      expect(given).toEqual([]);
+    }
+  });
+
+  it.each([
+    ['the source is unavailable', new ExtensionRefusal({ code: 'SOURCE_UNAVAILABLE', reason: 'unreachable' }), { status: 'unavailable', kind: 'source-unavailable' }],
+    ['the source is busy', new ExtensionRefusal({ code: 'SOURCE_BUSY' }), { status: 'unavailable', kind: 'busy' }],
+  ] as const)('answers a gate that refuses because %s as the references\' context is answered, with no loop call and none of the text in any audit event or log', async (_name, error, expected) => {
+    const logs: { fields: Record<string, unknown>; message: string }[] = [];
+    const t = await run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, viewReadThrows: error, logs });
+    expect(t.answer).toMatchObject(expected);
+    expect(t.given).toHaveLength(0);
+    expect(JSON.stringify([t.rig.events, logs])).not.toContain('Two items are listed');
+  });
+
+  it('lets an access refusal of the gate through as the refusal it is, with no loop call', async () => {
+    await expect(run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, viewReadThrows: new ExtensionRefusal({ code: 'ACCESS_DENIED' }) })).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
   });
 });
 
@@ -196,15 +268,26 @@ describe('the stored text and the loop that is really run', () => {
     const reads = { count: 0 };
     const counted: AssistantThreadStore = { ...threads, read: (...args) => (reads.count++, threads.read(...args)) };
     const pending = createMemoryAssistantPendingStore();
-    const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), step: sequence(byId('A-2'), byId('A-9'), DONE), answer: GOOD, pending, run: heavyFor('A-9'), threadStore: counted, records: immediate, settingsEnv: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, readNodes: () => [nodeOf('A-1', 'Live title')] });
+    const runs = (await import('./run-store.js')).createMemoryAssistantRunStore();
+    const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), step: sequence(byId('A-2'), byId('A-9'), DONE), answer: GOOD, pending, run: heavyFor('A-9'), runStore: runs, threadStore: counted, records: immediate, settingsEnv: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' }, readNodes: () => [nodeOf('A-1', 'Live title')] });
     const request = (body: unknown) => r.request(body, { principalId: PERSON, sensitivityVersion: () => VERSION });
     const first = await answerOf(r.route.handler(request({ ...BODY, investigationId: INVESTIGATION })));
     if (first.status !== 'confirmation') throw new Error(`not waiting: ${JSON.stringify(first).slice(0, 160)}`);
     expect(reads.count).toBe(1);
+    const callTexts = (): string[] => runs.runs.flatMap((run) => run.callStarts.map((call) => `${call.instructionsText}\n${call.valuesText}`));
+    // the turn that began holds the seeded text in the input of its model calls
+    const before = callTexts();
+    expect(before.some((text) => text.includes(THREAD_TEXT_INTRO))).toBe(true);
     const again = await answerOf(r.route.handler(request({ ...BODY, investigationId: INVESTIGATION, confirmation: { pendingId: first.pendingId, plan: first.plan, decision } })));
     expect(again.status).not.toBe('confirmation-invalid');
-    // the decision itself reads no text
+    // the decision itself reads no text, and no model call made after it holds any of it
     expect(reads.count).toBe(1);
+    const after = callTexts().slice(before.length);
+    expect(after.length).toBeGreaterThan(0);
+    for (const text of after) {
+      expect(text).not.toContain(THREAD_TEXT_INTRO);
+      expect(text).not.toContain('Two items are listed');
+    }
   });
 
   it('drops a sentence that states a figure only the text holds, as it does without the text: the text adds no source to cite and changes no check', async () => {

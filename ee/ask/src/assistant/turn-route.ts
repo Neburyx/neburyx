@@ -278,15 +278,21 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     const limit = options.contextTurns?.();
     const { readElements } = request;
     if (maxTokens === undefined || limit === undefined || readElements === undefined) return undefined;
-    let version: string | undefined;
-    try {
-      version = request.sensitivityVersion?.(body.sourceId);
-    } catch {
-      version = undefined;
-    }
-    const thread = await readTurnText(limit, body.mask === true, version);
+    signal.throwIfAborted();
+    const versionNow = (): string | undefined => {
+      try {
+        return request.sensitivityVersion?.(body.sourceId);
+      } catch {
+        return undefined;
+      }
+    };
+    let presentedUnder: string | undefined;
+    const thread = await readTurnText(limit, body.mask === true, () => (presentedUnder = versionNow()));
     if (thread === undefined) return undefined;
     const text = await threadTextContext({ thread, sourceId: body.sourceId, maxTokens, read: (refs) => readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, refs) });
+    // a request that ended, or a time that ran out, while the elements were read ends the turn; and a mapping whose sensitivity changed while they were read gives no text, since what was presented may no longer be what the panel would show
+    signal.throwIfAborted();
+    if (versionNow() !== presentedUnder) return undefined;
     // the text holds what the analyst was shown, which may be the value of a property
     if (text !== undefined) notePropertyValuesSent(true);
     return text;

@@ -190,6 +190,28 @@ describe('the stored text given to the loop', () => {
     expect(await textOf(readOf(short, long), false, gate({}), estimateTokens(alone ?? '') + 5)).toBeUndefined();
   });
 
+  it('leaves out a whole item when one of several bindings in it cannot be drawn, and keeps another item', async () => {
+    const A2 = { ...REF, stableId: 'A-2' };
+    const both = { form: 'bound', segments: [{ element: REF, property: '(title)' }, { literal: ' and ' }, { element: A2, property: '(title)' }], cites: [REF, A2] };
+    const text = await textOf(readOf(turn(stored(sentences(both, frozen('kept item'))))), false, gate({ 'A-1': 'First' }));
+    expect(text).toContain('"kept item"');
+    expect(text).not.toContain('First');
+    expect(text).not.toContain('First and');
+  });
+
+  it('makes at most five reads for more than 500 elements, and leaves out the items whose elements were not read', async () => {
+    const titles = Object.fromEntries(Array.from({ length: 520 }, (_, index) => [`A-${index}`, `T${index}`]));
+    const items = Array.from({ length: 520 }, (_, index) => bound('(title)', { ...REF, stableId: `A-${index}` }));
+    const g = gate(titles);
+    const text = await textOf(readOf(turn(stored(sentences(...items)))), false, g);
+    expect(g.reads).toHaveLength(5);
+    expect(g.reads.flatMap((refs) => refs.entities)).toHaveLength(500);
+    expect(text).toContain('"T0 holds it."');
+    expect(text).toContain('"T499 holds it."');
+    expect(text).not.toContain('T500 ');
+    expect(text).not.toContain('T519 ');
+  });
+
   it('names no entity type, property or relationship of any pack in its fixed line', () => {
     expect(THREAD_TEXT_INTRO).toMatch(/^[A-Za-z ,.:'-]+$/u);
     expect(THREAD_TEXT_INTRO).not.toMatch(/account|customer|transaction|person|claim|policy/iu);
