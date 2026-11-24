@@ -8,6 +8,7 @@ export const WIDTH_DEPENDENT: readonly string[] = [
   'ai-header.spec.ts',
   'ask-panel.spec.ts',
   'assistant-clear.spec.ts',
+  'assistant-page.spec.ts',
   'assistant-panel.spec.ts',
   'assistant-wide.spec.ts',
   'compare.spec.ts',

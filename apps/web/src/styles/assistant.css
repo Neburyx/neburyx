@@ -1218,3 +1218,192 @@
   white-space: nowrap;
   pointer-events: none;
 }
+
+.page-shell main.page-bare {
+  gap: 0;
+  padding: 0;
+}
+
+.assistant-page {
+  display: flex;
+  flex-direction: column;
+  height: var(--full-height);
+  min-width: 0;
+}
+
+.assistant-page .assistant-surface-page {
+  height: 100%;
+  overflow: hidden;
+}
+
+.assistant-page-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-10);
+  box-sizing: border-box;
+  height: var(--assistant-page-head-height);
+  padding: 0 var(--space-32);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.assistant-page-head-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.assistant-page-head-text h1 {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-page-head-text p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-page-button {
+  display: inline-flex;
+  gap: var(--space-6);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: var(--assistant-page-button-height);
+  padding: 0 var(--space-12);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.assistant-page-button:disabled {
+  color: var(--color-neutral-text);
+  cursor: default;
+}
+
+.assistant-surface-page .assistant-body {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-24) max(var(--space-32), calc((100% - var(--assistant-page-column)) / 2));
+  overflow-y: auto;
+}
+
+.assistant-surface-page .ask-form {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--assistant-page-column) + 2 * var(--space-32));
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-32) var(--space-16);
+  border-top: 0;
+}
+
+.assistant-compose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  padding: var(--space-8) var(--space-16);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.assistant-surface-page .assistant-compose textarea {
+  min-height: var(--assistant-page-input-height);
+  padding: var(--space-4) 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+}
+
+.assistant-page-note {
+  margin: var(--space-8) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  text-align: center;
+}
+
+.assistant-empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  padding: 0 0 var(--assistant-empty-lift);
+  text-align: center;
+}
+
+.assistant-empty h2 {
+  margin: 0;
+  font-size: var(--font-size-heading-2);
+  font-weight: var(--font-weight-semibold);
+}
+
+.assistant-empty p {
+  max-width: var(--assistant-empty-text-max);
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.assistant-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--assistant-empty-icon-size);
+  height: var(--assistant-empty-icon-size);
+  border-radius: 50%;
+  background: var(--color-accent-surface);
+}
+
+.assistant-empty-icon .icon {
+  background: var(--color-accent);
+}
+
+.assistant-empty-suggestions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-10);
+  margin: var(--space-4) 0;
+}
+
+.assistant-empty-suggestions button {
+  max-width: 100%;
+  min-height: var(--assistant-page-button-height);
+  padding: 0 var(--space-16);
+  overflow: hidden;
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.assistant-empty-suggestions button:disabled {
+  color: var(--color-neutral-text);
+  cursor: default;
+}
+
+.assistant-empty .assistant-empty-line {
+  font-size: var(--font-size-small);
+}

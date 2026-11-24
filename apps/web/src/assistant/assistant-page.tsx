@@ -1,0 +1,95 @@
+import { Link, Navigate, useParams } from 'react-router';
+import type { ApiClient } from '../api/client.js';
+import { canRetry, FailureNotice } from '../failure-notice.js';
+import { AttemptedSource } from '../investigations/attempted-source.js';
+import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, TRY_AGAIN } from '../investigations/messages.js';
+import { useOpenInvestigation } from '../investigations/use-open-investigation.js';
+import { PageFrame } from '../shell/page-shell.js';
+import { PageHeading } from '../shell/page-heading.js';
+import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
+import { ASSISTANT_PATH, INVESTIGATIONS_PATH } from '../shell/navigation.js';
+import { useClientState } from '../state/context.js';
+import { useStoreSelector } from '../state/store.js';
+import { AssistantSurface } from './assistant-panel.js';
+import { assistantSessionOf, AssistantSessionProvider } from './assistant-session.js';
+import { ASSISTANT_COPY } from './copy.js';
+
+function Message({ title, text, children }: { readonly title: string; readonly text?: string; readonly children?: React.ReactNode }) {
+  return (
+    <PageFrame>
+      <section>
+        <PageHeading title={title} description={text} source={null} />
+        {children}
+        <p>
+          <Link to="/">{BACK_TO_HOME}</Link>
+        </p>
+      </section>
+    </PageFrame>
+  );
+}
+
+/** `/assistant`: with an investigation held in this window the page of that investigation; with none, the way to open one. */
+export function AssistantEntry() {
+  const state = useClientState();
+  const held = useStoreSelector(state.investigation, (investigation) => investigation.id);
+  if (held !== null) return <Navigate to={`${ASSISTANT_PATH}/${encodeURIComponent(held)}`} replace />;
+  return (
+    <PageFrame>
+      <section>
+        <PageHeading title={ASSISTANT_COPY.pageNeedsInvestigationTitle} description={ASSISTANT_COPY.pageNeedsInvestigation} source={null} />
+        <p>
+          <Link to={INVESTIGATIONS_PATH}>{ASSISTANT_COPY.toInvestigations}</Link>
+        </p>
+      </section>
+    </PageFrame>
+  );
+}
+
+/** `/assistant/{investigationId}`: the Assistant on a full page, over the one thread the panel shows. */
+export function AssistantPage({ client }: { readonly client: ApiClient }) {
+  const { investigationId } = useParams();
+  const state = useClientState();
+  const shell = useShellData();
+  const principalId = answeredData(shell.me)?.principal.id;
+  const principalFailure = principalId === undefined ? retainedFailure(shell.me) : undefined;
+  const { status, again } = useOpenInvestigation(client, investigationId, principalId, (shownId) => (shownId === null ? '/' : `${ASSISTANT_PATH}/${encodeURIComponent(shownId)}`));
+  const shownId = useStoreSelector(state.investigation, (investigation) => investigation.id);
+  const session = assistantSessionOf(state);
+  if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT}>{status.sourceId === undefined ? null : <AttemptedSource sourceId={status.sourceId} />}</Message>;
+  const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
+  if (failure !== undefined) {
+    const retry = (): void => {
+      if (principalId === undefined) shell.reload();
+      again();
+    };
+    return (
+      <Message title={ASSISTANT_COPY.title}>
+        <div role="group" aria-label="Opening failed">
+          <FailureNotice failure={failure} />
+          {status.kind === 'failed' && status.sourceId !== undefined ? <AttemptedSource sourceId={status.sourceId} /> : null}
+          {canRetry(failure) ? (
+            <button type="button" className="secondary" onClick={retry}>
+              {TRY_AGAIN}
+            </button>
+          ) : null}
+        </div>
+      </Message>
+    );
+  }
+  if (status.kind === 'loading' || shownId !== investigationId || session === undefined) {
+    return (
+      <PageFrame>
+        <p role="status">{ASSISTANT_COPY.pageOpening}</p>
+      </PageFrame>
+    );
+  }
+  return (
+    <PageFrame bare>
+      <div className="assistant-page">
+        <AssistantSessionProvider value={session}>
+          <AssistantSurface variant="page" />
+        </AssistantSessionProvider>
+      </div>
+    </PageFrame>
+  );
+}

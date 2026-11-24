@@ -151,6 +151,10 @@ nav a[aria-current='page'] .icon {
   --icon: url('../assets/folder-open.svg');
 }
 
+.icon-assistant {
+  --icon: url('../assets/assistant.svg');
+}
+
 .icon-sources {
   --icon: url('../assets/database.svg');
 }

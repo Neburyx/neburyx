@@ -188,6 +188,7 @@ describe('the source of the page', () => {
     await userEvent.tab();
     await userEvent.tab();
     await userEvent.tab();
+    await userEvent.tab();
     expect(screen.getAllByRole('combobox', { name: 'Source' }).some((entry) => entry === document.activeElement)).toBe(true);
   });
 });

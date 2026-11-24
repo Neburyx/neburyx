@@ -82,6 +82,21 @@ export function useAssistantWordLimitWhenProvided(): number | undefined {
   });
 }
 
+/** The model the operator configured for the Assistant, from the status of the AI features; nothing while it is not available or the status is not here. */
+export function useAssistantModelWhenProvided(): string | undefined {
+  const store = useContext(ShellDataContext);
+  return useStoreSelector<ShellData | undefined, string | undefined>(store ?? NO_ONE, (data) => {
+    const status = data === undefined ? undefined : answeredData(data.aiStatus);
+    return status?.assistant.available === true ? status.assistant.model : undefined;
+  });
+}
+
+/** The shell data when it is provided, and nothing in a part of the app drawn without it. */
+export function useShellDataWhenProvided(): ShellData | undefined {
+  const store = useContext(ShellDataContext);
+  return useStoreSelector<ShellData | undefined, ShellData | undefined>(store ?? NO_ONE, (data) => data);
+}
+
 export function answeredData<T>(state: RequestState<T>): T | undefined {
   return state.phase === 'ready' || state.phase === 'loading' ? state.data : undefined;
 }

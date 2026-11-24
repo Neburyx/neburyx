@@ -14,11 +14,11 @@ import { SourceLine } from './source-line.js';
 const identity = () => screen.getByRole('region', { name: 'Identity' });
 
 describe('the sidebar', () => {
-  it('holds the brand, the four links in order and the identity block last, beside the content', async () => {
+  it('holds the brand, the five links in order and the identity block last, beside the content', async () => {
     renderApp('/', clientWith({ me: me(), sources: [source('a')] }));
     const aside = screen.getByRole('complementary');
     expect(within(aside).getByText('Neburyx')).toBeTruthy();
-    expect(within(aside).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Patterns', 'Sources']);
+    expect(within(aside).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources']);
     const bottom = aside.lastElementChild;
     expect(bottom?.lastElementChild?.getAttribute('aria-label')).toBe('Identity');
     expect(bottom?.children[0]?.className).toBe('help-menu');
@@ -43,7 +43,7 @@ describe('the sidebar', () => {
     const server: ApiClient = fakeClient({ getMe: async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'The data source is not available. Try again shortly.', retryable: true, traceId: 'trace-9' } }) });
     const view = renderApp('/', server);
     expect((await within(identity()).findByRole('alert')).textContent).toBe('The source did not answer. Try again shortly. · trace trace-9');
-    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Patterns', 'Sources', 'Investigations', 'Saved views']);
+    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources', 'Investigations', 'Saved views']);
     view.unmount();
     renderApp('/', fakeClient());
     expect((await within(identity()).findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
@@ -61,16 +61,16 @@ describe('the sidebar', () => {
     expect(calls).toEqual({ me: 1, sources: 1 });
   });
 
-  it('lets Tab reach the four links in order and marks the current page by more than colour', async () => {
+  it('lets Tab reach the five links in order and marks the current page by more than colour', async () => {
     renderApp('/investigations', clientWith({ me: me(), sources: [] }));
     const user = userEvent.setup();
     const seen: string[] = [];
-    for (let presses = 0; presses < 4; presses += 1) {
+    for (let presses = 0; presses < 5; presses += 1) {
       await user.tab();
       const active = document.activeElement;
       if (active instanceof HTMLAnchorElement) seen.push(active.textContent ?? '');
     }
-    expect(seen).toEqual(['Home', 'Investigations', 'Patterns', 'Sources']);
+    expect(seen).toEqual(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources']);
     expect(screen.getByRole('link', { name: 'Investigations' }).getAttribute('aria-current')).toBe('page');
   });
 });

@@ -37,7 +37,7 @@ describe('routes and navigation', () => {
 
   it('shows the four links in the navigation of every other page, in order', () => {
     renderAt('/sources');
-    expect(within(screen.getByRole('navigation')).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Patterns', 'Sources']);
+    expect(within(screen.getByRole('navigation')).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources']);
   });
 
   it('shows a not-found page with a link back to Home for a path that matches none, and for an unknown path under a known one', async () => {

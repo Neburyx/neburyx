@@ -61,6 +61,13 @@
   --tool-strip-clear: calc(var(--space-16) * 4 + var(--space-8));
   --sources-icon-size: 10px;
   --assistant-input-height: 40px;
+  --assistant-page-head-height: 64px;
+  --assistant-page-column: 720px;
+  --assistant-page-button-height: 32px;
+  --assistant-page-input-height: 44px;
+  --assistant-empty-icon-size: 48px;
+  --assistant-empty-text-max: 480px;
+  --assistant-empty-lift: 96px;
   --assistant-input-line-height: 17px;
   --assistant-head-icon-size: 10px;
   --assistant-input-max-height: 120px;

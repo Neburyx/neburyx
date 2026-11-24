@@ -16,6 +16,8 @@ import { useRefReads } from './stored-reads.js';
 import { useRereadWhenShown, useStoredThread } from './stored-thread.js';
 import { SummaryContext } from './summary-context.js';
 import { TurnView, stepSentenceOf } from './turn-cards.js';
+import { useSuggestions } from './suggestions.js';
+import { EmptyThread, PageHeader } from './page-parts.js';
 import { useAssistant } from './use-assistant.js';
 
 function Chat() {
@@ -68,7 +70,12 @@ function focusInside(element: HTMLElement | null | undefined, thread: HTMLElemen
   thread.scrollTop += turn.getBoundingClientRect().top - thread.getBoundingClientRect().top;
 }
 
-function Intro() {
+function Compose({ page, children }: { readonly page: boolean; readonly children: React.ReactNode }) {
+  return page ? <div className="assistant-compose">{children}</div> : <>{children}</>;
+}
+
+function Intro({ limit }: { readonly limit: number | undefined }) {
+  const suggestions = useSuggestions(limit);
   return (
     <div className="assistant-intro">
       <h3>{ASSISTANT_COPY.introTitle}</h3>
@@ -76,8 +83,8 @@ function Intro() {
       <div className="assistant-examples">
         <p>{ASSISTANT_COPY.forExample}</p>
         <ul>
-          {ASSISTANT_COPY.examples.map((example) => (
-            <li key={example}>{example}</li>
+          {suggestions.map((suggestion) => (
+            <li key={suggestion.question}>{`“${suggestion.label}”`}</li>
           ))}
         </ul>
       </div>
@@ -99,7 +106,15 @@ function NotAvailable() {
   );
 }
 
+export type AssistantVariant = 'panel' | 'page';
+
 export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
+  return <AssistantSurface variant="panel" onClose={onClose} />;
+}
+
+/** The thread, the cards and the composer of the Assistant, drawn in the floating panel and on the page: one set of components, one session. */
+export function AssistantSurface({ variant, onClose }: { readonly variant: AssistantVariant; readonly onClose?: () => void }) {
+  const page = variant === 'page';
   const model = useAssistant();
   const availability = useAiAvailabilityWhenProvided('assistant');
   const stored = useStoredThread(availability === 'available');
@@ -123,6 +138,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const bound = useMemo(() => boundElementsOf(storedTurns.flatMap((turn) => (turn.answer === undefined ? [] : [turn.answer]))), [storedTurns]);
   const reads = useRefReads(bound, stored.kind === 'ready' && !off);
   const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
+  const pageEmpty = page && !unavailable && stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && notice?.kind !== 'access-lost' && notice?.kind !== 'masking-cleared';
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
   const hasThread = !off && investigationId !== null && principalId !== undefined && (storedTurns.length > 0 || turns.length > 0);
   useEffect(() => {
@@ -140,6 +156,9 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
     session.clear({});
     session.stored.setState({ kind: 'ready', thread: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
     setClearedNote(true);
+  };
+  const askToClear = (): void => {
+    if (investigationId !== null && principalId !== undefined) setConfirming({ investigationId, principalId, epoch: session.store.getState().epoch });
   };
   const closeConfirm = (): void => {
     setConfirming(undefined);
@@ -162,7 +181,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const step = turns.flatMap((turn) => (turn.outcome.kind === 'pending' ? (turn.outcome.steps ?? []).slice(-1) : []))[0];
   const announced = pending ? (step === undefined ? ASSISTANT_COPY.working : stepSentenceOf(step)) : '';
   const close = (): void => {
-    onClose();
+    onClose?.();
     focusAssistantControl();
   };
   const tooLongNotice = notice?.kind === 'too-long' ? notice : model.tooLong && limit !== undefined ? { kind: 'too-long' as const, words: model.words, limit } : undefined;
@@ -184,30 +203,32 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
 
   return (
     <div
-      className="ask-panel assistant-panel"
+      className={page ? 'ask-panel assistant-panel assistant-surface-page' : 'ask-panel assistant-panel'}
       onKeyDown={(event) => {
-        if (event.key !== 'Escape') return;
+        if (page || event.key !== 'Escape') return;
         event.preventDefault();
         event.stopPropagation();
         close();
       }}
     >
-      <header className="ask-head">
-        <Chat />
-        <div className="ask-head-text">
-          <h2>{ASSISTANT_COPY.title}</h2>
-          <p>{model.title}</p>
-        </div>
-        <WideButton />
-        {hasThread ? (
-          <button ref={clearButton} type="button" className="assistant-clear" aria-label={ASSISTANT_COPY.clearChat} data-tip={ASSISTANT_COPY.clearChat} disabled={pending} onClick={() => investigationId !== null && principalId !== undefined && setConfirming({ investigationId, principalId, epoch: session.store.getState().epoch })}>
-            <TrashIcon />
+      {page ? <PageHeader clearButton={clearButton} hasThread={hasThread} pending={pending} onClear={askToClear} /> : (
+        <header className="ask-head">
+          <Chat />
+          <div className="ask-head-text">
+            <h2>{ASSISTANT_COPY.title}</h2>
+            <p>{model.title}</p>
+          </div>
+          <WideButton />
+          {hasThread ? (
+            <button ref={clearButton} type="button" className="assistant-clear" aria-label={ASSISTANT_COPY.clearChat} data-tip={ASSISTANT_COPY.clearChat} disabled={pending} onClick={askToClear}>
+              <TrashIcon />
+            </button>
+          ) : null}
+          <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} data-tip={ASSISTANT_COPY.close} onClick={close}>
+            ×
           </button>
-        ) : null}
-        <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} data-tip={ASSISTANT_COPY.close} onClick={close}>
-          ×
-        </button>
-      </header>
+        </header>
+      )}
       <p className="visually-hidden" role="status" aria-live="polite">
         {clearedNote ? ASSISTANT_COPY.cleared : announced}
       </p>
@@ -225,7 +246,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
         ) : null}
         {!unavailable && storedTurns.length > 0 ? <StoredTurns turns={storedTurns} earlier={stored.kind === 'ready' ? stored.thread.earlierTurns : 0} reads={reads} drawsValues={bound.length > 0} /> : null}
         {!unavailable && summary !== undefined ? <SummaryContext summary={summary} /> : null}
-        {unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread ? null : <Intro />}
+        {pageEmpty ? <EmptyThread send={model.sendText} busy={model.busy || !available || model.sourceChanged} limit={limit} /> : page || unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread ? null : <Intro limit={limit} />}
         {!unavailable && turns.length > 0 ? (
           <ol className="assistant-thread" aria-label={ASSISTANT_COPY.thread}>
             {turns.map((turn) => (
@@ -252,6 +273,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
             </button>
           </p>
         ) : null}
+        <Compose page={page}>
         <label htmlFor="assistant-message" className="visually-hidden">
           {ASSISTANT_COPY.fieldLabel}
         </label>
@@ -264,7 +286,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           aria-disabled={pending ? true : undefined}
           disabled={!available}
           className={tooLongNotice === undefined ? undefined : 'assistant-over'}
-          placeholder={unavailable ? ASSISTANT_COPY.unavailableField : pending ? ASSISTANT_COPY.waitingPlaceholder : summary?.status === 'attached' ? ASSISTANT_COPY.summaryPlaceholder : ASSISTANT_COPY.placeholder}
+          placeholder={unavailable ? ASSISTANT_COPY.unavailableField : pending ? ASSISTANT_COPY.waitingPlaceholder : summary?.status === 'attached' ? ASSISTANT_COPY.summaryPlaceholder : page ? ASSISTANT_COPY.pagePlaceholder(model.title) : ASSISTANT_COPY.placeholder}
           aria-invalid={tooLongNotice !== undefined}
           aria-describedby={unavailable ? "assistant-counter assistant-keys" : "assistant-counter assistant-keys assistant-standing"}
           onChange={(event) => model.setInput(event.target.value)}
@@ -294,10 +316,11 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
             </button>
           )}
         </div>
+        </Compose>
         <p id="assistant-keys" className={model.canCancel || unavailable || tooLongNotice !== undefined ? 'ask-keys' : 'ask-keys visually-hidden'}>
           {model.canCancel ? ASSISTANT_COPY.cancelHint : unavailable ? ASSISTANT_COPY.unavailableSend : tooLongNotice !== undefined ? TOO_LONG_NOTE : limit === undefined ? '' : hintText(limit)}
         </p>
-        {unavailable ? null : <StandingNote />}
+        {unavailable ? null : page ? <p className="assistant-page-note">{ASSISTANT_COPY.pageNote}</p> : <StandingNote />}
         {model.sourceChanged ? <p className="ask-note">{ASSISTANT_COPY.sourceChanged}</p> : null}
       </form>
     </div>

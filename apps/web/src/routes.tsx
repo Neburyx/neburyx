@@ -4,7 +4,7 @@ import type { ApiClient } from './api/client.js';
 import { ProfileProvider } from './canvas/profile-context.js';
 import { createProfileStore } from './canvas/profile-store.js';
 import { PageHeading } from './shell/page-heading.js';
-import { EXPLORE_PATH } from './shell/navigation.js';
+import { ASSISTANT_PATH, EXPLORE_PATH } from './shell/navigation.js';
 import { PageShell } from './shell/page-shell.js';
 import { SearchPage } from './search/search-page.js';
 import { ApiClientProvider } from './api/client-context.js';
@@ -43,6 +43,7 @@ import { InvestigationsPage } from './investigations-page/investigations-page.js
 import { createRecentInvestigations } from './home/recent-store.js';
 import { DeepLinkPage } from './investigations/deep-link-page.js';
 import { ExploreInvestigation } from './investigations/explore-investigation.js';
+import { AssistantEntry, AssistantPage } from './assistant/assistant-page.js';
 import { BareExplore } from './workspace/bare-explore.js';
 import { ShortcutSheet } from './workspace/shortcut-sheet.js';
 import { TourHost } from './tour/tour-host.js';
@@ -176,6 +177,8 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
             { path: '*', element: <NotFound /> },
           ],
         },
+        { path: ASSISTANT_PATH, element: <AssistantEntry /> },
+        { path: `${ASSISTANT_PATH}/:investigationId`, element: <AssistantPage client={client} /> },
         { path: EXPLORE_PATH, element: <BareExplore /> },
         { path: `${EXPLORE_PATH}/:investigationId`, element: <ExploreInvestigation client={client} /> },
         ...workspaceDevelopmentRoutes(),

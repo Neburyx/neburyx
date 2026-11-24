@@ -1,0 +1,115 @@
+import { expect, test, type Page } from '@playwright/test';
+import type { AssistantTurnAnswer } from '@neburyx/contracts';
+
+const STATUS = { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } };
+const EMPTY = { turns: [], earlierTurns: 0, previousThreadClearedAt: null };
+
+async function routes(page: Page, answer?: AssistantTurnAnswer): Promise<void> {
+  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
+  await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: EMPTY }));
+  if (answer !== undefined) await page.route((url) => url.pathname === '/v1/assistant/turns', (route) => route.fulfill({ json: answer }));
+}
+
+async function openPage(page: Page): Promise<void> {
+  await page.goto('/dev/open-entity');
+  await page.getByRole('button', { name: 'banking-demo' }).click();
+  const form = page.getByRole('form', { name: 'Open an entity' });
+  await form.getByLabel('Stable ID').fill('AC-1');
+  await form.getByRole('button', { name: 'Open' }).click();
+  await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+  await page.getByRole('navigation').getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('link', { name: 'Assistant' }).click();
+  await expect(page).toHaveURL(/\/assistant\/[0-9a-f-]{36}$/);
+}
+
+const TABLE: AssistantTurnAnswer = {
+  status: 'answered',
+  route: 'view',
+  blocks: [{ kind: 'table', table: { title: 'Accounts · 6 rows', columns: ['Element', 'A rather long column label to widen it', 'Another long column label'], rows: Array.from({ length: 6 }, (_, index) => ({ cells: [`row-${index + 1}`, `a long cell text for row ${index + 1} of the table`, 'value'], cites: ['n1'] })), note: 'Each row selects its elements on the graph.' } }],
+  citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' } }],
+  coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '6 accounts in view shown · exact' },
+  model: 'claude-sonnet-5-5',
+  calls: 2,
+};
+
+test.describe('The Assistant page', () => {
+  test('fits its header, thread column and composer, with nothing overlapping or wider than the area', async ({ page }) => {
+    await routes(page, TABLE);
+    await openPage(page);
+    const area = await page.locator('.assistant-page').boundingBox();
+    const head = await page.locator('.assistant-page-head').boundingBox();
+    expect(head?.height).toBe(64);
+    expect((await page.locator('.sidebar').boundingBox())?.width).toBe(208);
+    await expect(page.getByRole('link', { name: 'Open graph' })).toBeVisible();
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
+    const table = await page.getByRole('table', { name: 'Accounts · 6 rows' }).boundingBox();
+    expect(table && area ? table.width <= Math.min(720, area.width) + 1 : false).toBe(true);
+    const form = await page.locator('.assistant-compose').boundingBox();
+    const body = await page.locator('.assistant-surface-page .assistant-body').boundingBox();
+    expect(form && body ? form.y >= body.y + body.height - 1 : false).toBe(true);
+    const input = await page.getByLabel('Your message').boundingBox();
+    const column = await page.locator('.assistant-thread').boundingBox();
+    expect(input && area ? input.width <= 720 + 1 : false).toBe(true);
+    expect(column && area ? Math.abs(column.x + column.width / 2 - (area.x + area.width / 2)) <= 2 && column.width <= 720 + 1 : false).toBe(true);
+    expect(head && form ? head.y + head.height <= form.y : false).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('reaches Open graph, the thread controls and the composer by keyboard in reading order, and Enter in the composer sends', async ({ page }) => {
+    await routes(page, TABLE);
+    await openPage(page);
+    await page.getByLabel('Your message').fill('first');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
+    const seen: string[] = [];
+    await page.getByRole('link', { name: 'Assistant' }).focus();
+    for (let presses = 0; presses < 40 && !seen.includes('composer'); presses += 1) {
+      await page.keyboard.press('Tab');
+      seen.push(await page.evaluate(() => (document.activeElement?.id === 'assistant-message' ? 'composer' : (document.activeElement?.textContent ?? '').trim().slice(0, 20))));
+    }
+    expect(seen.indexOf('Open graph')).toBeGreaterThanOrEqual(0);
+    expect(seen.indexOf('Clear chat')).toBeGreaterThan(seen.indexOf('Open graph'));
+    expect(seen.indexOf('composer')).toBeGreaterThan(seen.indexOf('Clear chat'));
+  });
+
+  test('shows the empty thread with its suggestions and the model line, and a suggestion sends its text', async ({ page }) => {
+    await routes(page, TABLE);
+    await openPage(page);
+    await expect(page.getByRole('button', { name: 'Summarize what is on screen' })).toBeVisible();
+    await expect(page.getByText(/Model: claude-sonnet-5-5/)).toBeVisible();
+    const sent = page.waitForRequest((request) => request.url().endsWith('/v1/assistant/turns'));
+    await page.getByRole('button', { name: 'Summarize what is on screen' }).click();
+    expect((await sent).postDataJSON()).toMatchObject({ message: 'Summarize what is on screen' });
+  });
+
+  test('shows the not-available message and no usable composer when the Assistant is unavailable, reachable by keyboard', async ({ page }) => {
+    await routes(page);
+    await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: false }, summary: { available: false }, assistant: { available: false } } }));
+    await openPage(page);
+    await expect(page.getByText('Not available', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Your message')).toBeDisabled();
+    await page.getByRole('link', { name: 'Assistant' }).focus();
+    await expect(page.getByRole('link', { name: 'Assistant' })).toBeFocused();
+  });
+
+  test('shows in the panel of Explore the question sent on the page', async ({ page }) => {
+    await routes(page, TABLE);
+    await openPage(page);
+    await page.getByLabel('Your message').fill('asked on the page');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
+    await page.getByRole('link', { name: 'Open graph' }).click();
+    await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+    await page.getByRole('banner', { name: 'Investigation' }).getByRole('button', { name: 'Assistant' }).click();
+    await expect(page.locator('.assistant-panel').getByText('asked on the page')).toBeVisible();
+  });
+
+  test('says an investigation must be opened first when none is held', async ({ page }) => {
+    await routes(page);
+    await page.goto('/assistant');
+    await expect(page.getByRole('heading', { name: 'Open an investigation first' })).toBeVisible();
+    await expect(page.getByLabel('Your message')).toHaveCount(0);
+  });
+});

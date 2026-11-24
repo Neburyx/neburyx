@@ -63,6 +63,8 @@
     { "name": "Explore with the delete view dialog open", "route": "explore/:investigationId" },
     { "name": "Explore with a closed investigation", "route": "explore/:investigationId" },
     { "name": "Explore without an investigation", "route": "explore" },
+    { "name": "Assistant with the empty thread", "route": "assistant/:investigationId" },
+    { "name": "Assistant without an investigation", "route": "assistant" },
     { "name": "The deep-link page failed", "route": ":sourceId/entity/:entityType/:stableId" },
     { "name": "Investigations", "route": "investigations" },
     { "name": "Investigations with rows", "route": "investigations" },

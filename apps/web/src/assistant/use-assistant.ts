@@ -41,6 +41,8 @@ export interface AssistantModel {
   readonly focus: { readonly target: 'input' | number; readonly tick: number };
   setInput(text: string): void;
   send(): void;
+  /** Sends a text that is not the composer's (a suggestion) under the same rules; what the person has typed stays in the composer. */
+  sendText(text: string): void;
   cancel(): void;
   retry(turnId: number): void;
   continueRun(turnId: number): void;
@@ -347,6 +349,11 @@ export function useAssistant(): AssistantModel {
     setInput: (text) => patch({ input: text, notice: view.notice?.kind === 'too-long' ? undefined : view.notice }),
     viewTooLarge: keys.length > ASSISTANT_VIEW_KEYS_MAX,
     send: () => submit(store.getState().input, undefined),
+    sendText: (text) => {
+      const typed = store.getState().input;
+      submit(text, undefined);
+      restoreInput(typed);
+    },
     cancel: () => {
       const turn = store.getState().turns.find((held) => held.outcome.kind === 'pending');
       const controller = turn === undefined ? undefined : requests.get(turn.id);

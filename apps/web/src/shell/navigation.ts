@@ -2,6 +2,7 @@ export const EXPLORE_PATH = '/explore';
 export const SOURCES_PATH = '/sources';
 export const INVESTIGATIONS_PATH = '/investigations';
 export const PATTERNS_PATH = '/patterns';
+export const ASSISTANT_PATH = '/assistant';
 
 export interface NavigationItem {
   readonly to: string;
@@ -16,6 +17,7 @@ export interface NavigationItem {
 export const NAVIGATION: readonly NavigationItem[] = [
   { to: '/', label: 'Home', icon: 'icon-home', end: true },
   { to: '/investigations', label: 'Investigations', icon: 'icon-investigations', end: false, alsoCurrentOn: [EXPLORE_PATH] },
+  { to: ASSISTANT_PATH, label: 'Assistant', icon: 'icon-assistant', end: false, inRail: false },
   { to: PATTERNS_PATH, label: 'Patterns', icon: 'icon-patterns', end: false, inRail: false },
   { to: SOURCES_PATH, label: 'Sources', icon: 'icon-sources', end: false },
 ];

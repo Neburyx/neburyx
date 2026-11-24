@@ -1,4 +1,3 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
@@ -12,7 +11,7 @@ import { AttemptedSource } from './attempted-source.js';
 import { useStoreSelector } from '../state/store.js';
 import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, OPENING, openingOver, RESUMED, TRY_AGAIN } from './messages.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
-import { openById } from './open-flow.js';
+import { useOpenInvestigation } from './use-open-investigation.js';
 import { SOME_ITEMS_UNAVAILABLE } from '../draft/copy.js';
 import { restoreNoticeOf } from '../views/restore-notice.js';
 import { DraftAnnouncer, DraftConflictBanner, DraftStatusLine } from '../draft/draft-status.js';
@@ -22,12 +21,6 @@ import { ReadOnlyBannerSync } from '../lifecycle/read-only-banner.js';
 import { restoreIntentOf } from '../investigations-page/restore-intent.js';
 import { viewNotLoaded } from '../investigations-page/copy.js';
 import { RestoreConfirm } from '../views/restore-confirm.js';
-
-type Status =
-  | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly someMissing?: true }
-  | { readonly kind: 'not-found'; readonly sourceId?: string }
-  | { readonly kind: 'failed'; readonly failure: ApiFailure; readonly sourceId?: string };
 
 function Message({ title, text, source, attempted }: { readonly title: string; readonly text: string; readonly source: string | null; readonly attempted?: string | undefined }) {
   return (
@@ -58,54 +51,19 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const location = useLocation();
   const resumed = arrivedByResuming(location.state);
   const restoreAsked = restoreIntentOf(location.state);
-  const [attempt, setAttempt] = useState(0);
-  const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, state.mask.getState()) ? { kind: 'ready' } : { kind: 'loading' }));
+  const { status, again } = useOpenInvestigation(client, investigationId, principalId);
   const onScreen = useStoreSelector(state.investigation, (held) => held);
   const sync = draftSyncOf(state, client);
   const maskRead = useStoreSelector(maskSwitchOf(state, client).status, (current) => current);
-  const loadingNow = useRef(false);
-  loadingNow.current = status.kind === 'loading';
   const draftKind = useStoreSelector(sync.status, (current) => current.kind);
   const restoredMissing = useStoreSelector(restoreNoticeOf(state).missing, (missing) => missing);
   const previousTitle = onScreen.id !== null && onScreen.id !== investigationId ? (onScreen.record?.title ?? null) : null;
-
-  // a change of the masking setting while the investigation is being opened opens it again with the new setting; once it is shown, the setting changes the view where it stands
-  useEffect(() => state.mask.subscribe(() => loadingNow.current && setAttempt((count) => count + 1)), [state]);
-
-  // A layout effect, so that a new address never paints the previous investigation before this page has marked it as loading.
-  useLayoutEffect(() => {
-    if (investigationId === undefined || principalId === undefined) return undefined;
-    // another investigation that is held is shown at once, unless the one on screen has changes to write first: the open then settles them
-    const mustSettle = state.investigation.getState().id !== investigationId && sync.needsSettle();
-    if (!mustSettle && state.resume(investigationId, state.mask.getState()) !== undefined) {
-      setStatus({ kind: 'ready' });
-      return undefined;
-    }
-    const controller = new AbortController();
-    setStatus({ kind: 'loading' });
-    void openById(client, state, investigationId, { principalId, mask: state.mask.getState() }, controller.signal).then((outcome) => {
-      if (controller.signal.aborted) return;
-      if (outcome.kind === 'held') {
-        // the open was given up (another took its place): the address goes back to the investigation that stayed on screen, which is no longer being left
-        const shownId = state.investigation.getState().id;
-        setStatus({ kind: 'ready' });
-        navigate(shownId === null ? '/' : `${EXPLORE_PATH}/${shownId}`, { replace: true });
-        return;
-      }
-      if (outcome.kind === 'shown') setStatus(outcome.someMissing === true ? { kind: 'ready', someMissing: true } : { kind: 'ready' });
-      else {
-        const tried = outcome.sourceId === undefined ? {} : { sourceId: outcome.sourceId };
-        setStatus(outcome.failure.code === 'NOT_FOUND' ? { kind: 'not-found', ...tried } : { kind: 'failed', failure: outcome.failure, ...tried });
-      }
-    });
-    return () => controller.abort();
-  }, [client, state, sync, navigate, investigationId, principalId, attempt]);
 
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT} source={null} attempted={status.sourceId} />;
   const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
   const retry = (): void => {
     if (principalId === undefined) shell.reload();
-    setAttempt((count) => count + 1);
+    again();
   };
   const statusLine = status.kind === 'loading' && failure === undefined ? <p role="status">{previousTitle === null ? OPENING : openingOver(previousTitle)}</p> : status.kind === 'ready' && resumed ? <p role="status">{RESUMED}</p> : status.kind === 'ready' && (status.someMissing === true || restoredMissing) ? <p role="status">{SOME_ITEMS_UNAVAILABLE}</p> : undefined;
   const record = onScreen.id === investigationId ? onScreen.record : null;

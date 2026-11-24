@@ -492,6 +492,19 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.goto('/explore');
     await expect(page.locator('main, [role="application"]').first()).toBeVisible();
   },
+  'Assistant with the empty thread': async (page) => {
+    await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } } }));
+    await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } }));
+    await openEntity(page, 'banking-demo', `PS-${unique()}`);
+    await page.getByRole('navigation').getByRole('link', { name: 'Home' }).click();
+    await page.getByRole('link', { name: 'Assistant' }).click();
+    await expect(page).toHaveURL(/\/assistant\/[0-9a-f-]{36}$/);
+    await expect(page.getByRole('button', { name: 'Summarize what is on screen' })).toBeVisible();
+  },
+  'Assistant without an investigation': async (page) => {
+    await page.goto('/assistant');
+    await expect(page.getByRole('link', { name: 'Go to Investigations' })).toBeVisible();
+  },
   'The deep-link page failed': async (page) => {
     await abort(page, (url) => url.pathname === '/v1/investigations' && url.search === '');
     await page.goto('/banking-demo/entity/account/PD-1');

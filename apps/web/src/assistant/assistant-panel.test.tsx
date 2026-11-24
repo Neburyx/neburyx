@@ -7,10 +7,11 @@ import type { ApiResult } from '../api/client.js';
 import { ApiClientProvider } from '../api/client-context.js';
 import { ShellDataProvider } from '../shell/shell-data.js';
 import { ClientStateProvider } from '../state/context.js';
+import { key, node } from '../state/test-data.js';
 import { createToolRegistry, ToolsProvider } from '../workspace/tool-registry.js';
 import { AssistantPanel } from './assistant-panel.js';
 import { AssistantSessionProvider } from './assistant-session.js';
-import { harness, messageOf, REFUSE, typeAndSend, VIEW } from './assistant-kit.js';
+import { harness, messageOf, RECORD, REFUSE, typeAndSend, VIEW } from './assistant-kit.js';
 import { ASSISTANT_COPY, hintText } from './copy.js';
 
 afterEach(cleanup);
@@ -124,3 +125,23 @@ describe('the Assistant panel: the keyboard', () => {
   });
 });
 
+
+describe('the Assistant panel: the examples of the empty thread', () => {
+  it('shows two examples and the neutral note when the view holds no entity', async () => {
+    const h = harness(async () => ({ ok: true, value: REFUSE }));
+    render(h.tree());
+    expect(await screen.findByText('“What am I looking at?”')).toBeTruthy();
+    expect(screen.getByText('“Summarize what is on screen”')).toBeTruthy();
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByText('It gives no verdict on guilt or intent. It never writes queries.')).toBeTruthy();
+  });
+
+  it.each(['Title one', 'A different title of another source'])('names the entity on screen by its own title (%s)', async (title) => {
+    const h = harness(async () => ({ ok: true, value: REFUSE }));
+    const entity = { ...node('a', 'e1'), display: { title, type: 'type-a' } };
+    h.state.show({ id: 'inv-2', sourceId: 'a', record: RECORD, resultKeys: [key('a')], nodeRefs: [entity.ref], edgeRefs: [] }, [{ key: key('a'), result: { sourceId: 'a', nodes: [entity], edges: [] } }]);
+    render(h.tree());
+    expect(await screen.findByText(`“What is connected to ${title}?”`)).toBeTruthy();
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+  });
+});
