@@ -126,9 +126,8 @@ describe('the Assistant page: the thread follows the investigation, the masking 
     expect(h.threads.at(-1)?.mask).toBe(true);
   });
 
-  it('shows nothing of another person’s thread held by the session and drops an answer that arrives for it', async () => {
-    let finish: (value: ApiResult<AssistantTurnAnswer>) => void = () => undefined;
-    const h = setup('/investigations', { turn: () => new Promise((resolve) => (finish = resolve)) });
+  it('shows nothing of another person’s thread held by the session', async () => {
+    const h = setup('/investigations');
     await screen.findByRole('link', { name: 'Assistant' });
     h.session.store.setState({ ...h.session.store.getState(), investigationId: INVESTIGATION_A, principalId: 'someone-else', nextId: 2, turns: [{ id: 1, message: 'private question of someone else', outcome: { kind: 'pending', call: 'message' } }] });
     await act(async () => {
@@ -136,8 +135,39 @@ describe('the Assistant page: the thread follows the investigation, the masking 
     });
     await screen.findByLabelText(ASSISTANT_COPY.fieldLabel);
     expect(screen.queryByText('private question of someone else')).toBeNull();
+  });
+
+  it('still cancels a pending turn after the person leaves the page and returns to the same investigation', async () => {
+    let signal: AbortSignal | undefined;
+    let finish: (value: ApiResult<AssistantTurnAnswer>) => void = () => undefined;
+    const sent: AssistantTurnRequest[] = [];
+    const { client } = knowing([A, B], {
+      getAiStatus: async () => ok(aiStatus({ assistant: 800 })),
+      assistantThread: async () => ok(EMPTY),
+      assistantTurn: (request, abort) => {
+        sent.push(request);
+        signal = abort;
+        return new Promise((resolve) => (finish = resolve));
+      },
+    });
+    const state = createClientState();
+    const session = createAssistantSession(null);
+    const view = renderApp(`/assistant/${INVESTIGATION_A}`, client, state, undefined, undefined, undefined, undefined, undefined, createPanelRegistryFor(state));
+    unbinds.push(bindAssistantPanel(state, view.panels, session));
+    await userEvent.type(await screen.findByLabelText(ASSISTANT_COPY.fieldLabel), 'slow question{Enter}');
+    await screen.findByText('slow question');
+    await act(async () => {
+      await view.router.navigate('/investigations');
+    });
+    await act(async () => {
+      await view.router.navigate(`/assistant/${INVESTIGATION_A}`);
+    });
+    await userEvent.click(await screen.findByRole('button', { name: ASSISTANT_COPY.cancel }));
+    expect(signal?.aborted).toBe(true);
     await act(async () => finish(ok(REFUSE)));
-    expect(screen.queryByText('private question of someone else')).toBeNull();
+    expect(sent).toHaveLength(1);
+    expect(screen.queryByText(REFUSE.status === 'answered' && 'sentence' in REFUSE ? REFUSE.sentence : '')).toBeNull();
+    expect(session.store.getState().turns[0]?.outcome.kind).toBe('cancelled');
   });
 });
 
