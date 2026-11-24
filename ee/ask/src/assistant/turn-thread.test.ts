@@ -99,6 +99,8 @@ describe('a turn kept in the thread as references and metadata', () => {
       expect(kept?.maskOn).toBe(mask);
       const read = await turn.threads.read(INVESTIGATION, PERSON, 10);
       expect(read.turns[0]?.stored?.answer?.blocks.some((block) => block.kind === 'ask-result')).toBe(true);
+      const sentences = kept?.answer?.blocks.find((block) => block.kind === 'sentences');
+      expect(sentences?.kind === 'sentences' ? sentences.items.map((item) => item.form) : []).not.toContain('unbound');
     }
   });
 

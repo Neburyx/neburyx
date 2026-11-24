@@ -434,6 +434,9 @@ describe('choosing a candidate', () => {
       expect(chosen?.answer?.blocks.find((block) => block.kind === 'ask-result'), JSON.stringify(chosen?.answer)).toMatchObject({ kind: 'ask-result', templateId: 'shared-attribute' });
       const read = await t.threads.read(INVESTIGATION, PERSON, 10);
       expect(read.turns[1]?.stored?.answer?.blocks.some((block) => block.kind === 'ask-result')).toBe(true);
+      // the summary sentences of an answer written with the mask off are bound to the titles they cite or frozen, never an unbound text that the mask would withhold
+      const sentences = chosen?.answer?.blocks.find((block) => block.kind === 'sentences');
+      expect(sentences?.kind === 'sentences' ? sentences.items.map((item) => item.form) : []).not.toContain('unbound');
     }
   });
 

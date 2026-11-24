@@ -1,5 +1,5 @@
 import type { AssistantThreadTurnWrite, AssistantTurnAnswer, StoredAnswer } from '@neburyx/contracts';
-import { THREAD_SEGMENTS_MAX, storedAskResultOf } from '@neburyx/contracts';
+import { SENSITIVE_TITLE_KEY, THREAD_SEGMENTS_MAX, storedAskResultOf } from '@neburyx/contracts';
 import { classifyItem, type Classified, type ClassifyContext } from './sensitive-items.js';
 
 type Cite = AssistantThreadTurnWrite['citationRefs'][number];
@@ -14,6 +14,8 @@ const refsOf = (citations: readonly Citation[]): Map<string, Cite> => new Map(ci
 
 /** The text an item was made from, by the item the conversion made: what a binding is checked against, since a bound item keeps none of its values. */
 const ORIGINAL = new WeakMap<object, string>();
+/** For an item of an Ask summary bound to the titles of the elements it cites: the title each element had in the result, by the element's reference, that its binding is checked against. */
+const ASK_TITLES = new WeakMap<object, ReadonlyMap<string, string>>();
 
 /** How an item of an answer written with the mask off is classified, by its text and the keys of the elements it cites; absent, every such item is `unbound`. */
 export type ClassifyItem = (text: string, cited: readonly string[]) => Classified;
@@ -58,12 +60,66 @@ export interface StoredAnswerResult {
 const withMade = (result: StoredAnswerResult, made: Pick<StoredAnswer, 'model' | 'coverage'>): StoredAnswerResult => ({ ...result, answer: { ...made, ...result.answer } });
 
 /** The stored form of Ask's own answer inside a turn: its refusal as a refusal block, and its cited summary as a block of sentences, written with the mask on as frozen and otherwise as written (unbound, since nothing was sent to a model to classify them against). */
-function askAnswerStored(ask: Extract<AssistantTurnAnswer, { answer: unknown }>['answer'], maskOn: boolean, result: (blocks: Block[], refs?: ReadonlyMap<string, Cite>) => StoredAnswerResult, sentences: (list: readonly Sentence[], refs: ReadonlyMap<string, Cite>) => unknown[]): StoredAnswerResult | undefined {
+type AskCitation = { readonly key: string; readonly title: string }
+
+const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+
+/**
+ * An item of the cited summary of an Ask answer, written with the mask off. The sentence is built from the result alone: titles of the elements it cites, names of types and counts. Each title of a cited element is bound to that element (its title, read again under the current
+ * mask on return); a sentence that holds the title of an element it does not cite, or of a relationship (whose title holds the titles of its ends), is `unbound`; a sentence with no title in it is `frozen`.
+ */
+function askItemOf(text: string, cites: readonly string[], citations: ReadonlyMap<string, AskCitation>, refs: ReadonlyMap<string, Cite>): Item {
+  const unbound: Item = { form: 'unbound', text };
+  const titles = [...citations.values()].map((citation) => citation.title).filter((title) => title !== '').sort((first, second) => second.length - first.length);
+  if (titles.length === 0) return { form: 'frozen', text };
+  const alternatives = titles.map(escaped).join('|');
+  const found = [...text.normalize('NFC').matchAll(new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives})(?![\\p{L}\\p{N}_])`, 'gu'))];
+  if (found.length === 0) return { form: 'frozen', text };
+  const bindable = new Map<string, { ref: Cite; title: string }>();
+  for (const key of cites) {
+    const citation = citations.get(key);
+    const ref = refs.get(key);
+    if (citation !== undefined && ref !== undefined && 'entityType' in ref && citation.title !== '') bindable.set(citation.title, { ref, title: citation.title });
+  }
+  const segments: ({ literal: string } | { element: Cite; property: string })[] = [];
+  const known = new Map<string, string>();
+  const written = text.normalize('NFC');
+  let at = 0;
+  for (const match of found) {
+    const entry = bindable.get(match[0]);
+    // the same text may be the title of two elements: it is bound only where one cited element has it
+    const sharing = [...citations.values()].filter((citation) => citation.title === match[0]).length;
+    if (entry === undefined || sharing !== 1) return unbound;
+    if (match.index > at) segments.push({ literal: written.slice(at, match.index) });
+    segments.push({ element: entry.ref, property: SENSITIVE_TITLE_KEY });
+    known.set(JSON.stringify(entry.ref), entry.title);
+    at = match.index + match[0].length;
+  }
+  if (at < written.length) segments.push({ literal: written.slice(at) });
+  if (segments.length > THREAD_SEGMENTS_MAX || text.length > 2000) return unbound;
+  const item: Item = { form: 'bound', segments };
+  ORIGINAL.set(item, text);
+  ASK_TITLES.set(item, known);
+  return item;
+}
+
+/** The stored form of Ask's own answer inside a turn: its refusal as a refusal block, and its cited summary as a block of sentences (written with the mask on as frozen; with it off bound to the titles it cites), and the result card. */
+function askAnswerStored(ask: Extract<AssistantTurnAnswer, { answer: unknown }>['answer'], maskOn: boolean, result: (blocks: Block[], refs?: ReadonlyMap<string, Cite>) => StoredAnswerResult): StoredAnswerResult | undefined {
   if ('refused' in ask) return result([{ kind: 'refusal', sentence: { form: 'frozen', text: ask.refused.sentence } }]);
   const { summary } = ask.answered;
   const refs = new Map((summary?.citations ?? []).map((citation) => [citation.key, citation.element] as const));
+  const citations = new Map((summary?.citations ?? []).map((citation) => [citation.key, citation] as const));
+  const items = (summary?.sentences ?? []).map((sentence) => {
+    const cited = sentence.cites.flatMap((key) => (refs.has(key) ? [refs.get(key) as Cite] : []));
+    const item = maskOn ? ({ form: 'frozen', text: sentence.text } as const) : askItemOf(sentence.text, sentence.cites, citations, refs);
+    const withCites = { ...item, cites: cited };
+    ORIGINAL.set(withCites, sentence.text);
+    const known = ASK_TITLES.get(item);
+    if (known !== undefined) ASK_TITLES.set(withCites, known);
+    return withCites;
+  });
   const card = storedAskResultOf(ask, maskOn);
-  const blocks = [...(summary === undefined ? [] : [{ kind: 'sentences', items: sentences(summary.sentences, refs) }]), ...(card === undefined ? [] : [card])];
+  const blocks = [...(items.length === 0 ? [] : [{ kind: 'sentences', items }]), ...(card === undefined ? [] : [card])];
   return blocks.length === 0 ? undefined : result(blocks as Block[], refs);
 }
 
@@ -91,7 +147,7 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
   }
   if (answer.status === 'no-description') return result([{ kind: 'sentences', items: [{ ...fixed(answer.sentence), cites: [] as Cite[] }] }] as Block[]);
   if (answer.status !== 'answered') return undefined;
-  if ('answer' in answer) return askAnswerStored(answer.answer, maskOn, result, sentences);
+  if ('answer' in answer) return askAnswerStored(answer.answer, maskOn, result);
   if (answer.route === 'refuse') {
     const refs = answer.overview === undefined ? new Map<string, Cite>() : refsOf(answer.overview.citations);
     return result([{ kind: 'refusal', sentence: fixed(answer.sentence), ...(answer.overview === undefined ? {} : { overview: sentences(answer.overview.sentences, refs) }) }] as Block[], refs);
@@ -126,6 +182,21 @@ export function bindingsApproved(stored: StoredAnswer, context: ClassifyContext,
     block.kind === 'ask-result' ? [] : block.kind === 'sentences' || block.kind === 'list' ? block.items.map((item) => ({ item, cites: item.cites })) : block.kind === 'table' ? block.rows.flatMap((row) => row.cells.map((item) => ({ item, cites: row.cites }))) : (block.overview ?? []).map((item) => ({ item, cites: item.cites }));
   for (const { item, cites } of stored.blocks.flatMap(itemsOf)) {
     if (item.form !== 'bound') continue;
+    const titles = ASK_TITLES.get(item);
+    if (titles !== undefined) {
+      // an item of an Ask summary: its bindings are to the titles of cited elements of this source, and it must read as the text it was made from
+      let rebuilt = '';
+      for (const segment of item.segments ?? []) {
+        if ('literal' in segment) rebuilt += segment.literal;
+        else {
+          const title = titles.get(JSON.stringify(segment.element));
+          if (title === undefined || segment.property !== SENSITIVE_TITLE_KEY || keyOf(segment.element) === undefined || (sourceId !== undefined && (segment.element as { sourceId?: string }).sourceId !== sourceId)) return false;
+          rebuilt += title;
+        }
+      }
+      if (ORIGINAL.get(item)?.normalize('NFC') !== rebuilt) return false;
+      continue;
+    }
     if (context.sentValues === undefined || context.sensitiveKeys === undefined) return false;
     let text = '';
     const expected: { start: number; end: number; element: string; property: string }[] = [];
