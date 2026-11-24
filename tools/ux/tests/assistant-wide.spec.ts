@@ -243,14 +243,19 @@ test.describe('the wide Assistant panel', () => {
       const source = element.querySelector('th:last-child') as HTMLElement;
       return [...element.querySelectorAll('tbody tr')].map((row) => {
         const cell = row.children[3] as HTMLElement;
-        return { oneLine: new Set([...cell.querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().top))).size === 1, clear: cell.getBoundingClientRect().right <= source.getBoundingClientRect().left + 1, clipped: cell.scrollWidth > cell.clientWidth };
+        return { oneLine: new Set([...cell.querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().top))).size === 1, clear: cell.getBoundingClientRect().right <= source.getBoundingClientRect().left + 1, inside: cell.getBoundingClientRect().left >= (element.closest('.assistant-table-scroll') as HTMLElement).getBoundingClientRect().left - 1, clipped: cell.scrollWidth > cell.clientWidth };
       });
     });
-    for (const stamp of await stamps()) expect(stamp).toMatchObject({ clear: true, clipped: false });
+    const scroller = panel(page).locator('.assistant-table-scroll');
+    const toEnd = async () => { await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth; }); await expect(scroller).not.toHaveClass(/assistant-table-scrolls/); };
+    // the title column keeps a readable identifier, so at the default width the table may scroll inside itself: its end is what is measured
+    await toEnd();
+    for (const stamp of await stamps()) expect(stamp).toMatchObject({ clear: true, inside: true, clipped: false });
     await wideButton(page).click();
     await expect.poll(async () => (await stamps()).every((stamp) => stamp.oneLine)).toBe(true);
     await wideButton(page).click();
-    await expect.poll(async () => (await stamps()).every((stamp) => stamp.clear && !stamp.clipped)).toBe(true);
-    expect(await panel(page).locator('.assistant-table-scroll').evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await toEnd();
+    await expect.poll(async () => (await stamps()).every((stamp) => stamp.clear && stamp.inside && !stamp.clipped)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 });

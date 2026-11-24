@@ -945,7 +945,7 @@
   width: 100%;
   max-width: 0;
   /* the title never gives way below a readable identifier: what it measures when whole, up to the floor */
-  min-width: min(var(--assistant-table-title-natural, var(--assistant-table-title-floor)), var(--assistant-table-title-floor));
+  min-width: calc(min(var(--assistant-table-title-natural, var(--assistant-table-title-floor)), var(--assistant-table-title-floor)) + var(--assistant-table-title-pad, 0px));
 }
 
 .assistant-table th.assistant-table-title-cell,
@@ -970,11 +970,13 @@
   content: attr(data-full) / "";
   display: none;
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 50%;
   left: 0;
   z-index: 1;
-  padding: inherit;
+  padding-block: 0;
+  padding-left: inherit;
+  padding-right: inherit;
+  transform: translateY(-50%);
   max-width: var(--assistant-table-room, 20ch);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -983,8 +985,8 @@
   pointer-events: none;
 }
 
-.assistant-table-row:hover td.assistant-table-title-cell::after,
-.assistant-table-row:focus-within td.assistant-table-title-cell::after {
+.assistant-table-row:hover td.assistant-table-title-cell[data-cut]::after,
+.assistant-table-row:focus-within td.assistant-table-title-cell[data-cut]::after {
   display: block;
 }
 
@@ -1033,7 +1035,13 @@
   padding-right: var(--space-12);
 }
 
+.assistant-table-cite .summary-chips {
+  line-height: 0;
+  vertical-align: top;
+}
+
 .assistant-table-cite .assistant-marker {
+  vertical-align: top;
   background: transparent;
   padding: 0;
   line-height: var(--line-height-pill);

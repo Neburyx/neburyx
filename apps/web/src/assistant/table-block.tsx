@@ -62,6 +62,13 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
       const source = element.querySelector<HTMLElement>("th:last-child");
       if (title !== null && source !== null) element.style.setProperty("--assistant-table-room", `${Math.max(0, element.clientWidth - source.offsetWidth - (title.offsetLeft - element.scrollLeft))}px`);
     };
+    // the full title is drawn over a cell only where the cell cuts it
+    const markCut = (): void => {
+      for (const clip of element.querySelectorAll<HTMLElement>(".assistant-table-title-clip")) {
+        const cell = clip.parentElement;
+        if (cell !== null) cell.toggleAttribute("data-cut", clip.scrollWidth > clip.clientWidth);
+      }
+    };
     const measure = (probe = true): void => {
       setScrollsOn(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
       // scrolling changes none of the widths: only a change of size or of rows probes the layout again
@@ -73,7 +80,13 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
       const wasTight = element.classList.contains("assistant-table-tight");
       element.classList.remove("assistant-table-tight", "assistant-table-squeezed");
       const titleHead = element.querySelector<HTMLElement>("th.assistant-table-title-cell");
-      if (titleHead !== null) element.style.setProperty("--assistant-table-title-natural", `${titleHead.getBoundingClientRect().width}px`);
+      if (titleHead !== null) {
+        // the floor of the title column is a width of its text: its own width without the padding, which the column keeps besides
+        const style = getComputedStyle(titleHead);
+        const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        element.style.setProperty("--assistant-table-title-pad", `${padding}px`);
+        element.style.setProperty("--assistant-table-title-natural", `${Math.max(0, titleHead.getBoundingClientRect().width - padding)}px`);
+      }
       const naturalOverflow = element.scrollWidth > element.clientWidth;
       if (naturalOverflow) element.classList.add("assistant-table-squeezed");
       // a table is tight when it overflows with its time stamps kept whole, even squeezed: measured without the breaks, so that a wider panel lets them go
@@ -82,17 +95,22 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
       setSqueezed(naturalOverflow);
       setTight(overflows);
       placeRoom();
+      markCut();
     };
     measure();
     const onScroll = (): void => measure(false);
     element.addEventListener("scroll", onScroll);
     const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => measure());
     observer?.observe(element);
+    // the widths measured are those of the fallback face until the fonts of the page are loaded
+    let gone = false;
+    if (typeof document !== "undefined" && document.fonts !== undefined) void document.fonts.ready.then(() => { if (!gone) measure(); });
     return () => {
+      gone = true;
       element.removeEventListener("scroll", onScroll);
       observer?.disconnect();
     };
-  }, [table.rows.length, unfolded, tight, squeezed]);
+  }, [table, unfolded, tight, squeezed]);
   const longTable = table.rows.length > TABLE_FOLD_ABOVE;
   const folds = longTable && !unfolded;
   const rows = table.rows.map((row, index) => ({ row, index }));

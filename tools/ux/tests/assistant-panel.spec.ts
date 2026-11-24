@@ -655,6 +655,7 @@ test.describe('the Assistant panel', () => {
       return { shown: after.display !== 'none', right: cell.getBoundingClientRect().left + parseFloat(after.width), sourceLeft: source.getBoundingClientRect().left };
     });
     expect(overlay.shown).toBe(true);
+    expect(await table.locator('tbody tr td.assistant-table-title-cell').first().getAttribute('data-cut')).not.toBeNull();
     expect(overlay.right).toBeLessThanOrEqual(overlay.sourceLeft + 1);
     const floor = await table.evaluate((element) => {
       const title = element.querySelector('thead th.assistant-table-title-cell') as HTMLElement;
@@ -735,6 +736,8 @@ test.describe('the Assistant panel', () => {
     const floor = await table.evaluate((element) => { const title = element.querySelector('thead th.assistant-table-title-cell') as HTMLElement; return { width: title.getBoundingClientRect().width, least: parseFloat(getComputedStyle(title).minWidth) }; });
     expect(floor.width).toBeGreaterThanOrEqual(floor.least - 1);
     for (const identifier of measured.identifiers) expect(identifier.cut, identifier.text ?? '').toBe(false);
+    await table.locator('tbody tr').first().hover();
+    expect(await table.evaluate((element) => getComputedStyle(element.querySelector('tbody td.assistant-table-title-cell') as HTMLElement, '::after').display), 'no overlay over a title that is not cut').toBe('none');
     expect(measured.sourceInView).toBe(true);
     expect(measured.pageScrolls).toBe(false);
   });
@@ -763,17 +766,19 @@ test.describe('the Assistant panel', () => {
     await page.keyboard.press('Enter');
     const table = panel(page).getByRole('table', { name: 'Transactions · 5 rows' });
     await expect(table).toBeVisible();
+    // the title column keeps a readable identifier, so at this width the table may scroll inside itself: its end is what is measured
+    await panel(page).locator('.assistant-table-scroll').evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+    await expect(panel(page).locator('.assistant-table-scroll')).not.toHaveClass(/assistant-table-scrolls/);
     const measured = await table.evaluate((element) => {
       const source = element.querySelector('th:last-child') as HTMLElement;
       return [...element.querySelectorAll('tbody tr')].map((row) => {
         const cell = row.children[3] as HTMLElement;
         const box = cell.getBoundingClientRect();
         const parts = [...cell.querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().height));
-        return { clipped: cell.scrollWidth > cell.clientWidth, clear: box.right <= source.getBoundingClientRect().left + 1, text: cell.textContent, partsOneLine: parts.every((height) => height < 24) };
+        return { clipped: cell.scrollWidth > cell.clientWidth, clear: box.right <= source.getBoundingClientRect().left + 1, inside: box.left >= (element.closest('.assistant-table-scroll') as HTMLElement).getBoundingClientRect().left - 1, text: cell.textContent, partsOneLine: parts.every((height) => height < 24) };
       });
     });
-    for (const [index, stamp] of measured.entries()) expect(stamp).toEqual({ clipped: false, clear: true, text: `2022-09-09 23:5${index}:00`, partsOneLine: true });
-    expect(await panel(page).locator('.assistant-table-scroll').evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    for (const [index, stamp] of measured.entries()) expect(stamp).toEqual({ clipped: false, clear: true, inside: true, text: `2022-09-09 23:5${index}:00`, partsOneLine: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
