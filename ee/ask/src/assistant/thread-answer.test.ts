@@ -1,9 +1,15 @@
 import type { AskRunResult, AssistantTurnAnswer } from '@neburyx/contracts';
 import { buildSummary } from '../summary/index.js';
+import { presentThread } from './thread-present.js';
 import { assistantThreadTurnWriteSchema } from '@neburyx/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { bindingsApproved, storedAnswerOf } from './thread-answer.js';
 import { classifyItem, type ClassifyContext } from './sensitive-items.js';
+
+vi.mock('../summary/index.js', async (original) => {
+  const module = await original<typeof import('../summary/index.js')>();
+  return { ...module, buildSummary: vi.fn(module.buildSummary) };
+});
 
 const REF = { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' };
 const citation = { key: 'n1', kind: 'entity', ref: REF } as const;
@@ -157,6 +163,43 @@ describe('the stored form of an answer', () => {
       const element = item.segments.find((segment) => 'element' in segment) as { property: string };
       element.property = 'holder';
       expect(approved(stored)).toBe(false);
+    });
+
+    it('instruments the ends of a derived relationship too, so that their titles are bound or the sentence is unbound, and never frozen in clear: builder, storage and masked read', () => {
+      const end = (stableId: string, title: string) => ({ ref: { ...REF, stableId }, title, type: 'widget' });
+      const derived = { templateId: 'derived-edge-support', result: { ref: { sourceId: 'demo', derived: { ruleId: 'r', from: { ...REF, stableId: 'a1' }, to: { ...REF, stableId: 'a2' } } }, type: 'LINKED', from: end('a1', 'Jordan Lee'), to: end('a2', 'Maria Gomez'), rule: { id: 'r', version: 1 }, supports: { count: { value: 0, quality: 'exact', scope: 's' }, groups: [] } } } as unknown as AskRunResult;
+      const summary = buildSummary(derived);
+      expect(summary?.sentences[0]?.text).toContain('Jordan Lee');
+      const stored = storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: derived, summary } } } as unknown as AssistantTurnAnswer, false);
+      expect(JSON.stringify(itemsOf(stored))).not.toMatch(/Jordan|Maria/u);
+      expect(approved(stored)).toBe(true);
+      const turn = { id: '0192f000-0000-7000-8000-0000000000f2', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask' as const, outcome: 'answered' as const, citedElements: 2, steps: 0, stored: { maskOn: false, answer: stored?.answer, sensitivityVersion: 'sv1:a' } };
+      const read = presentThread({ turns: [turn], earlierTurns: 0, previousThreadClearedAt: null } as never, true, 'sv1:a');
+      expect(JSON.stringify(read)).not.toMatch(/Jordan|Maria/u);
+    });
+
+    it('finds the anchor of a run among elements that share a title by the citations too, not by the text alone', () => {
+      const result = shared([nodeOf('a1', 'Same'), nodeOf('a2', 'Same')]);
+      const second = { ...REF, stableId: 'a2' };
+      const built = buildSummary(result, { anchor: second });
+      const stored = storedAnswerOf(answered(result, built), false);
+      expect(itemsOf(stored)[0]).toMatchObject({ form: 'bound' });
+      expect(approved(stored)).toBe(true);
+    });
+
+    it('builds the summary again once for a template that does not name an anchor, and at most once for each candidate and never more than the tries allow for one that does', () => {
+      const calls = vi.mocked(buildSummary);
+      const many = Array.from({ length: 200 }, (_, index) => nodeOf(`n${index}`, `Title ${index}`));
+      const fileQuery = { templateId: 'file-query', result: { status: 'ok', intent: 'q', count: { value: 200, quality: 'exact', scope: 's' }, nodes: many, edges: [], notices: [], warnings: [] } } as unknown as AskRunResult;
+      const summary = buildSummary(fileQuery);
+      calls.mockClear();
+      storedAnswerOf(answered(fileQuery, summary), false);
+      expect(calls).toHaveBeenCalledTimes(1);
+      const run = shared(many);
+      const anchored = buildSummary(run, { anchor: { ...REF, stableId: 'n150' } });
+      calls.mockClear();
+      storedAnswerOf(answered(run, anchored), false);
+      expect(calls.mock.calls.length).toBeLessThanOrEqual(51);
     });
 
     it('stores every sentence frozen as it was shown when the mask was on', () => {

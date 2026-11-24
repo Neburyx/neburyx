@@ -66,6 +66,9 @@ const MARK = 0xe000;
 const PAD = 0xe001;
 const ID0 = 0xe100;
 const ID_MAX = 0xefff;
+/** The templates whose summary names the anchor of the run, and how many elements are tried as that anchor at most. */
+const ANCHORED_TEMPLATES: ReadonlySet<string> = new Set(['shared-attribute', 'linked-entities', 'saved-pattern']);
+const ANCHOR_TRIES_MAX = 50;
 const SENTINEL = /\ue000[\ue100-\uefff]\ue001*|[\ue100-\uefff]/gu;
 
 interface Probe {
@@ -100,17 +103,21 @@ function probeOf(result: AskRunResult): Probe | undefined {
     const entries = Object.entries(value as Record<string, unknown>);
     const ref = (value as Record<string, unknown>)['ref'];
     const display = (value as Record<string, unknown>)['display'];
-    const isNode = isElementRef(ref) && typeof display === 'object' && display !== null && typeof (display as Record<string, unknown>)['title'] === 'string';
-    const mapped = Object.fromEntries(entries.map(([key, entry]) => [key, key === 'display' && isNode ? entry : walk(entry)]));
-    if (!isNode) return mapped;
-    const title = (display as { title: string }).title;
+    const shownTitle = typeof display === 'object' && display !== null ? (display as Record<string, unknown>)['title'] : undefined;
+    const plainTitle = (value as Record<string, unknown>)['title'];
+    // an element is held with its title in `display` (a node) or beside its reference (an end of a derived relationship)
+    const isNode = isElementRef(ref) && typeof shownTitle === 'string';
+    const isEnd = isElementRef(ref) && typeof plainTitle === 'string' && !isNode;
+    const mapped = Object.fromEntries(entries.map(([key, entry]) => [key, (key === 'display' && isNode) || (key === 'title' && isEnd) ? entry : walk(entry)]));
+    if (!isNode && !isEnd) return mapped;
+    const title = isNode ? (shownTitle as string) : (plainTitle as string);
     const shown = title.trim() === '' ? ref.stableId : title;
     const index = owners.size;
     if (ID0 + index > ID_MAX || /[\ue000-\uefff]/u.test(shown)) doubtful = true;
     owners.set(index, ref);
     written.set(index, shown);
     if (title.trim() !== '') bindable.add(index);
-    return { ...mapped, display: { ...(display as object), title: sentinelOf(index, [...shown].length) } };
+    return isNode ? { ...mapped, display: { ...(display as object), title: sentinelOf(index, [...shown].length) } } : { ...mapped, title: sentinelOf(index, [...shown].length) };
   };
   const probe = walk(result) as AskRunResult;
   return doubtful ? undefined : { result: probe, owners, written, bindable };
@@ -186,15 +193,35 @@ function askAnswerStored(ask: Extract<AssistantTurnAnswer, { answer: unknown }>[
   if (!maskOn && summary !== undefined) {
     const probe = probeOf(ask.answered.result);
     if (probe !== undefined) {
-      // the build may have been given the anchor of the run, which the answer does not name: the one that gives the sentences of the answer is the anchor
-      const anchors: (ElementRef | undefined)[] = [undefined, ...new Map([...probe.owners.values()].map((ref) => [JSON.stringify(ref), ref] as const)).values()];
-      const builds = anchors.flatMap((anchor) => {
+      const cites = (key: string): string | undefined => refs.get(key) === undefined ? undefined : JSON.stringify(refs.get(key));
+      const agrees = (built: AskSummaryShape): boolean => {
+        const keyed = new Map(built.citations.map((citation) => [citation.key, JSON.stringify(citation.element)] as const));
+        return built.sentences.every((sentence, index) => {
+          const original = summary.sentences[index];
+          const mine = new Set(sentence.cites.map((key) => keyed.get(key)));
+          const theirs = new Set((original?.cites ?? []).map(cites));
+          return withTitles(sentence.text, probe) === original?.text && mine.size === theirs.size && [...theirs].every((ref) => mine.has(ref));
+        });
+      };
+      const build = (anchor: ElementRef | undefined): AskSummaryShape | undefined => {
         const built = buildSummary(probe.result, anchor === undefined ? {} : { anchor });
-        return built !== undefined && built.sentences.length === summary.sentences.length ? [built] : [];
-      });
-      const same = (built: AskSummaryShape): boolean => built.sentences.every((sentence, index) => withTitles(sentence.text, probe) === summary.sentences[index]?.text);
-      const chosen = builds.find(same) ?? builds[0];
-      if (chosen !== undefined) again = { summary: chosen, probe };
+        return built !== undefined && built.sentences.length === summary.sentences.length ? built : undefined;
+      };
+      const first = build(undefined);
+      let chosen = first !== undefined && agrees(first) ? first : undefined;
+      // only a template that names the anchor of its run in its sentences can have been built with one the answer does not name: it is looked for among the elements the result holds, one build at a time, and the search stops at the first that gives the sentences and their citations
+      if (chosen === undefined && ANCHORED_TEMPLATES.has(ask.answered.result.templateId)) {
+        const candidates = [...new Map([...probe.owners.values()].map((ref) => [JSON.stringify(ref), ref] as const)).values()].slice(0, ANCHOR_TRIES_MAX);
+        for (const anchor of candidates) {
+          const built = build(anchor);
+          if (built !== undefined && agrees(built)) {
+            chosen = built;
+            break;
+          }
+        }
+      }
+      const fallback = chosen ?? first;
+      if (fallback !== undefined) again = { summary: fallback, probe };
     }
   }
   const items = (summary?.sentences ?? []).map((sentence, index) => {
