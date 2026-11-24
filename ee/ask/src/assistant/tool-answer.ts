@@ -1,4 +1,4 @@
-import { ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_READ_FINDING_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
+import { tableTitle, ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_READ_FINDING_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
 import type { RankedProperty } from '@neburyx/ee-ai-runtime';
 import { type AssembledText, edgeDetailOf, propertiesOf, rankedOf, sentValuesOf, valueKeysOf, type SentValue } from '../case-summary/assemble.js';
 import { retrievalLine, viewCoverageOf } from '../case-summary/coverage.js';
@@ -7,8 +7,8 @@ import { checkedTextOf } from '../case-summary/judge.js';
 import { provenanceOf, type Provenance } from './sensitive-items.js';
 import { listedElements } from '../summary/index.js';
 import { countOf, coverageOf, degreeCountsOf, inexactCountOf } from './coverage.js';
-import { rowsPhrase, subjectPluralOf, subjectTypeOf } from './table.js';
-import { noteOfTable } from './blocks.js';
+import { rowsPhrase, subjectPluralOf, subjectTypeOf, tableFactsOf } from './table.js';
+import { noteOfTable, unitsOfTable } from './blocks.js';
 import type { NoteSentence, StepScope } from './tool-step.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
 import { refId } from '../summary/title.js';
@@ -309,7 +309,7 @@ export function outcomeOfDraft(context: DraftContext): ToolAnswerOutcome {
           const anchorId = refId(only.result.result.ref);
           anchorTitle = citationTitleOf(listedElements(only.result)?.get(anchorId)?.title);
         }
-        const title = `${plural}${anchorTitle === undefined ? '' : ` of ${anchorTitle}`} · ${rowsPhrase(shown.length)}`;
+        const title = tableTitle(plural, shown.length, anchorTitle);
         let shownOf: string;
         const ofSubject = (key: string): boolean => subject !== undefined && subjectTypeOf([{ cites: [key] }], assembled)?.text === subject.text;
         const inReads = subject === undefined ? (listed ?? [...assembled.keys.keys()]).length : (listed ?? [...assembled.keys.keys()]).filter(ofSubject).length;
@@ -322,7 +322,7 @@ export function outcomeOfDraft(context: DraftContext): ToolAnswerOutcome {
         }
         const droppedRows = draft.rows.length - rows.length + draft.uncited;
         const note = noteOfTable({ columns: draft.columns, rows: shown, lines: basis.checkedText.lines, elements: assembled.keys, descriptions: input.scope.request.typeDescriptions?.(input.scope.sourceId) });
-        return { kind: 'table', provenance: provenanceOf(assembled), table: { title, columns: [...draft.columns], rows: shown, note, ...(droppedRows > 0 ? { droppedRows } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) }, citations: tableCitations, coverage: { retrieval: coverage, summary: shownOf }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
+        return { kind: 'table', provenance: provenanceOf(assembled), table: { title, columns: [...draft.columns], rows: shown, note, ...tableFactsOf(subject, unitsOfTable({ columns: draft.columns, rows: shown, lines: basis.checkedText.lines, elements: assembled.keys, descriptions: input.scope.request.typeDescriptions?.(input.scope.sourceId) }), anchorTitle), ...(droppedRows > 0 ? { droppedRows } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) }, citations: tableCitations, coverage: { retrieval: coverage, summary: shownOf }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
       }
       const cited = new Set(drafted.sentences.flatMap((sentence) => sentence.cites));
       const citations = [...cited].flatMap((key) => {

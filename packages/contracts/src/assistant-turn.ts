@@ -201,6 +201,37 @@ export const ASSISTANT_LIST_LABEL_MAX = 40;
 /** The note of a table block: up to six clauses of a label (80), " in ", a unit (20) and a full stop, then the fixed sentence of 42 characters. */
 export const ASSISTANT_TABLE_NOTE_MAX = 700;
 
+/** The fixed sentence that ends the note of every table: the server writes it, so a stored table says it again without keeping it. */
+export const ASSISTANT_TABLE_SELECT_SENTENCE = 'Each row selects its elements on the graph.';
+
+/** The words of a table's rows in a title: "1 row", "25 rows". */
+export const tableRowsPhrase = (count: number): string => `${count} ${count === 1 ? 'row' : 'rows'}`;
+
+/** The title of a table, written by the server and again by a reopened chat from what it kept: "<plural of the type> [of <anchor>] · <n> rows". One rule for both, so that a card and the same card reopened say the same. */
+export const tableTitle = (plural: string, count: number, anchor?: string): string => `${plural}${anchor === undefined ? '' : ` of ${anchor}`} · ${tableRowsPhrase(count)}`;
+
+/** The clause of a note that a property's unit gives: "<label> in <unit>." with the label (or the property's name) capitalised. */
+export const tableUnitClause = (label: string | undefined, property: string, unit: string): string => {
+  const name = label ?? property;
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)} in ${unit}.`;
+};
+
+/** The note of a table: the clauses, then the fixed sentence. */
+export const tableNote = (clauses: readonly string[]): string => [...clauses, ASSISTANT_TABLE_SELECT_SENTENCE].join(' ');
+
+/** The plural of a plain-words type label: a fixed rule of the code (a consonant and y becomes ies; s, x, z, ch and sh take es; else s). The server writes the title of a table with it and a reopened chat writes the same words with it. */
+export function pluralOf(label: string): string {
+  if (/[^aeiou]y$/iu.test(label)) return `${label.slice(0, -1)}ies`;
+  if (/(?:s|x|z|ch|sh)$/iu.test(label)) return `${label}es`;
+  return `${label}s`;
+}
+
+/** A key of the mapping (an entity type, a property): a name the operator wrote, never a value of the source. */
+const mappingKey = z.string().min(1).max(200);
+
+/** The clause of a note that a unit gives: the property of an entity type whose label and unit the mapping holds, written as "<label> in <unit>." */
+export const assistantTableUnitSchema = z.strictObject({ type: mappingKey, property: mappingKey });
+
 /** A table the model drafted, kept row by row by the checks: the title and the counts are the server's, every row cites the elements it reads. `droppedRows` is how many rows the checks removed; `moreNotShown` how many rows the model wrote beyond the row limit. */
 export const assistantTableSchema = z
   .strictObject({
@@ -211,6 +242,10 @@ export const assistantTableSchema = z
     note: text.max(ASSISTANT_TABLE_NOTE_MAX),
     droppedRows: z.number().int().positive().optional(),
     moreNotShown: z.number().int().positive().optional(),
+    /** What the title and the note were written from, as the server holds them, so that a stored answer says them again from the mapping instead of keeping text: the entity type the rows are about (none for rows about several types or about relationships), the title of the element a read listed them from (the one part of a title that is the source's own text), and the properties whose label and unit the note gives. */
+    subject: mappingKey.optional(),
+    anchor: z.string().min(1).max(ASSISTANT_CITATION_TITLE_MAX).optional(),
+    units: z.array(assistantTableUnitSchema).max(ASSISTANT_TABLE_COLUMNS_MAX).optional(),
   })
   .refine((table) => table.rows.every((row) => row.cells.length === table.columns.length), { message: 'a row has a cell for each column', path: ['rows'] });
 

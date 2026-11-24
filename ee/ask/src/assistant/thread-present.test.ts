@@ -1,4 +1,4 @@
-import type { StoredAnswer, StoredTurnText } from '@neburyx/contracts';
+import { assistantThreadResponseSchema, type StoredAnswer, type StoredTurnText } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { presentThread } from './thread-present.js';
 import type { AssistantThreadRead } from './thread-store.js';
@@ -123,5 +123,22 @@ describe('what a read sends of a stored thread', () => {
     expect(JSON.stringify(labelled)).not.toContain('Jordan');
     const literal: StoredAnswer = { blocks: [{ kind: 'sentences', items: [{ form: 'bound', segments: [{ literal: 'Newly sensitive words ' }, { element: REF, property: 'holder' }], cites: [REF] }] }] };
     expect(JSON.stringify(presentThread(read(turn({ question: 'Q?', maskOn: false, answer: literal, sensitivityVersion: 'sv1:a' })), true, 'sv1:other'))).not.toContain('Newly sensitive');
+  });
+
+  it('sends the caption of a table: the type, the numbers and the units as stored, and the anchor as an item: text only where it may be shown, withheld under the mask when unbound or unverified', () => {
+    const table = (anchor: { form: 'frozen' | 'unbound'; text: string }): StoredAnswer => ({ blocks: [{ kind: 'table', caption: { subject: 'widget', anchor }, units: [{ type: 'widget', property: 'sizeUsd' }], droppedRows: 1, moreNotShown: 3, columns: [{ form: 'frozen', text: 'Holder' }], rows: [{ cells: [{ form: 'frozen', text: 'x' }], cites: [REF] }] }] });
+    const caption = (shown: ReturnType<typeof presentThread>) => (shown.turns[0]?.answer?.blocks[0]?.kind === 'table' ? shown.turns[0].answer.blocks[0] : undefined);
+    const frozen = writtenOff({ answer: table({ form: 'frozen', text: 'Jordan Lee' }) });
+    const unbound = writtenOff({ answer: table({ form: 'unbound', text: 'Jordan Lee' }) });
+    expect(caption(presentThread(read(turn(frozen)), true, 'sv1:a'))).toMatchObject({ caption: { subject: 'widget', anchor: { state: 'text', text: 'Jordan Lee' } }, units: [{ type: 'widget', property: 'sizeUsd' }], droppedRows: 1, moreNotShown: 3 });
+    expect(caption(presentThread(read(turn(unbound)), true, 'sv1:a'))?.caption?.anchor).toEqual({ state: 'withheld' });
+    expect(caption(presentThread(read(turn(unbound)), false, 'sv1:a'))?.caption?.anchor).toEqual({ state: 'text', text: 'Jordan Lee' });
+    // the version of the mapping's sensitivity is not the one it was written under: withheld under the mask, frozen or not
+    expect(caption(presentThread(read(turn(frozen)), true, 'sv1:b'))?.caption?.anchor).toEqual({ state: 'withheld' });
+    expect(caption(presentThread(read(turn(frozen)), true, undefined))?.caption?.anchor).toEqual({ state: 'withheld' });
+    // what is sent is the read form of the contract: the web draws the same card from it
+    for (const mask of [true, false]) for (const version of ['sv1:a', 'sv1:b', undefined]) expect(assistantThreadResponseSchema.safeParse(presentThread(read(turn(unbound)), mask, version)).success).toBe(true);
+    // the type, the units and the numbers hold no source text and are sent in every case
+    expect(caption(presentThread(read(turn(unbound)), true, undefined))).toMatchObject({ caption: { subject: 'widget' }, units: [{ type: 'widget', property: 'sizeUsd' }], droppedRows: 1, moreNotShown: 3 });
   });
 });

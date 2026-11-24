@@ -1,7 +1,8 @@
+import { pluralOf } from '@neburyx/contracts';
 import { createCheckRunner, removalNoteOf } from '@neburyx/ee-ai-runtime';
 import { describe, expect, it } from 'vitest';
 import { judgeCheck } from '../case-summary/judge.js';
-import { judgeTableRows, labelWordsOf, labelsHold, parseTable, pluralOf, rowSentenceOf } from './table.js';
+import { judgeTableRows, labelWordsOf, labelsHold, parseTable, rowSentenceOf } from './table.js';
 
 const VIEW_TEXT = [
   'Entities:',

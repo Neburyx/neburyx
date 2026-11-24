@@ -552,3 +552,25 @@ describe('the list block of an answer', () => {
     expect(sentencesOfBlocks(parsed.data.blocks).map((sentence) => sentence.text)).toEqual(['A.']);
   });
 });
+
+describe('the words of a table that a stored answer writes again', () => {
+  it('writes the title, the clause of a unit and the note by one rule', async () => {
+    const { pluralOf, tableNote, tableTitle, tableUnitClause, ASSISTANT_TABLE_SELECT_SENTENCE } = await import('./assistant-turn.js');
+    expect(tableTitle('Widgets', 25)).toBe('Widgets · 25 rows');
+    expect(tableTitle('Widgets', 1, 'Ana Silva')).toBe('Widgets of Ana Silva · 1 row');
+    expect(tableUnitClause('size', 'sizeUsd', 'USD')).toBe('Size in USD.');
+    expect(tableUnitClause(undefined, 'weight', 'kg')).toBe('Weight in kg.');
+    expect(tableNote([])).toBe(ASSISTANT_TABLE_SELECT_SENTENCE);
+    expect(tableNote(['Size in USD.'])).toBe(`Size in USD. ${ASSISTANT_TABLE_SELECT_SENTENCE}`);
+    expect(['Widget', 'Company', 'Box', 'Match', 'Day'].map(pluralOf)).toEqual(['Widgets', 'Companies', 'Boxes', 'Matches', 'Days']);
+  });
+
+  it('takes the type of the rows, the anchor and the properties of the units on the live table, and refuses another member', async () => {
+    const { assistantTableSchema } = await import('./assistant-turn.js');
+    const base = { title: 'T', columns: ['A'], rows: [{ cells: ['x'], cites: ['n1'] }], note: 'n' };
+    expect(assistantTableSchema.safeParse({ ...base, subject: 'widget', anchor: 'Ana', units: [{ type: 'widget', property: 'sizeUsd' }] }).success).toBe(true);
+    expect(assistantTableSchema.safeParse({ ...base, units: [{ type: 'widget', property: 'sizeUsd', unit: 'USD' }] }).success).toBe(false);
+    expect(assistantTableSchema.safeParse({ ...base, subject: '' }).success).toBe(false);
+  });
+});
+

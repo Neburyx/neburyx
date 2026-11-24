@@ -27,9 +27,28 @@ describe('the stored form of an answer', () => {
     const answer = viewAnswer({ table: { title: 'T', columns: ['Name', 'Note'], rows: [{ cells: ['Ana', ''], cites: ['n1'] }] }, pointer: 'A fixed pointer sentence.', noDescription: 'A fixed description sentence.', lastCallNote: 'A fixed note.' });
     for (const [maskOn, form] of [[false, 'unbound'], [true, 'frozen']] as const) {
       const stored = written(answer, maskOn).answer;
-      expect(stored?.blocks[0]).toEqual({ kind: 'table', columns: [{ form, text: 'Name' }, { form, text: 'Note' }], rows: [{ cells: [{ form, text: 'Ana' }, { form, text: '' }], cites: [REF] }] });
+      expect(stored?.blocks[0]).toEqual({ kind: 'table', caption: {}, columns: [{ form, text: 'Name' }, { form, text: 'Note' }], rows: [{ cells: [{ form, text: 'Ana' }, { form, text: '' }], cites: [REF] }] });
       expect(stored?.blocks[1]).toEqual({ kind: 'sentences', items: [{ form: 'frozen', text: 'A fixed description sentence.', cites: [] }, { form: 'frozen', text: 'A fixed pointer sentence.', cites: [] }, { form: 'frozen', text: 'A fixed note.', cites: [] }] });
     }
+  });
+
+  it('keeps the caption and the note of a table as references and numbers: the type, the anchor as an item, the properties of the units, the rows dropped and not shown', () => {
+    const table = { title: 'Widgets of Jordan Lee · 1 row', subject: 'widget', anchor: 'Jordan Lee', units: [{ type: 'widget', property: 'sizeUsd' }], droppedRows: 2, moreNotShown: 5, columns: ['Name'], rows: [{ cells: ['Ana'], cites: ['n1'] }] };
+    const answer = viewAnswer({ table });
+    const masked = written(answer, true).answer?.blocks[0];
+    expect(masked).toMatchObject({ kind: 'table', caption: { subject: 'widget', anchor: { form: 'frozen', text: 'Jordan Lee' } }, units: [{ type: 'widget', property: 'sizeUsd' }], droppedRows: 2, moreNotShown: 5 });
+    // with the mask off the anchor is source text the model never wrote, so no classifier can vouch for it: it is stored whole and flagged, whatever the classifier says of other text, and never as a binding
+    const open = written(answer, false).answer?.blocks[0];
+    expect(open).toMatchObject({ caption: { anchor: { form: 'unbound', text: 'Jordan Lee' } } });
+    const sure = storedAnswerOf(answer, false, () => ({ form: 'frozen', spans: [] }) as never)?.answer.blocks[0];
+    expect(sure).toMatchObject({ caption: { anchor: { form: 'unbound', text: 'Jordan Lee' } } });
+    // the title and the note are never stored as text
+    expect(JSON.stringify(masked)).not.toContain('Widgets of');
+    // a table with no fact of this kind keeps an empty caption and no units
+    const plain = written(viewAnswer({ table: { title: 'T', columns: ['Name'], rows: [{ cells: ['Ana'], cites: ['n1'] }] } }), true).answer?.blocks[0];
+    expect(plain).toMatchObject({ caption: {} });
+    expect(plain).not.toHaveProperty('units');
+    expect(plain).not.toHaveProperty('droppedRows');
   });
 
   it('keeps the blocks of an answer in the order the model gave them, each in its own stored block, with the fixed lines last', () => {

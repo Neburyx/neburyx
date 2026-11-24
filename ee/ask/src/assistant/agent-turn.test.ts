@@ -1,12 +1,13 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
-import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal, askRunResultSchema, sentencesOfBlocks, type AskRunResult, type AssistantBlocks } from '@neburyx/contracts';
+import { pluralOf, tableTitle, ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal, askRunResultSchema, sentencesOfBlocks, type AskRunResult, type AssistantBlocks } from '@neburyx/contracts';
 import { removalNoteOf } from '@neburyx/ee-ai-runtime';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, answerOf, degreeResult, expandEarlierResult, expandResult, heavyResult, lowerBoundResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, V, type Rig } from '../testing/assistant-rig.js';
 import { answerDescription } from './agent-turn.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
+import { storedAnswerOf } from './thread-answer.js';
 
 afterAll(removeAskFolders);
 
@@ -250,6 +251,29 @@ describe('a view question on the agent', () => {
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
     const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
     expect(told).toContain('A sentence, an item or a row removed for verdict wording is left out, not reworded.');
+  });
+
+  it('writes the table of an expansion with the type of its rows and the title of the element it listed them from, as facts of the block', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'expand', args: { entityType: V.anchor, stableId: 'A-1', neighborType: V.anchor } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} A-2`], cites: ['n2'] }, { cells: [`${V.title} A-3`], cites: ['n3'] }] }] } }])
+      .respond(new AIMessage('Done.'));
+    const nodes = ['A-1', 'A-2', 'A-3'].map((id) => nodeOf(id, `${V.title} ${id}`));
+    const keys = nodes.map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId]));
+    const r = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model, maxCalls: 6, maxInputTokens: 60_000 }, viewNodes: nodes, loopSteps: 3, run: () => ({ status: 'ok', result: expandResult() }) });
+    const answer = await answerOf(r.route.handler(r.request({ ...BODY, viewElementKeys: keys })));
+    if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error(`not a table answer: ${JSON.stringify(answer).slice(0, 200)}`);
+    const block = answer.blocks.find((entry) => entry.kind === 'table');
+    expect(block).toMatchObject({ table: { subject: V.anchor } });
+    // the title of the element the read listed the rows from is the anchor, as the title says it
+    const table = block?.kind === 'table' ? block.table : undefined;
+    if (table?.anchor === undefined) throw new Error('no anchor');
+    expect(table.anchor).toBe(`${V.title} A-1`);
+    expect(table.title).toBe(tableTitle(pluralOf(V.anchor), table.rows.length, `${V.title} A-1`));
+    // the real route joined to the stored form: the anchor is kept as an unbound item with the mask off, and frozen with it on
+    expect(storedAnswerOf(answer, false)?.answer.blocks.find((entry) => entry.kind === 'table')).toMatchObject({ caption: { subject: V.anchor, anchor: { form: 'unbound', text: `${V.title} A-1` } } });
+    expect(storedAnswerOf(answer, true)?.answer.blocks.find((entry) => entry.kind === 'table')).toMatchObject({ caption: { anchor: { form: 'frozen' } } });
   });
 
   it('answers a question about a shared other end for the two elements it read of five in view, one sentence for each read citing its line, says what was not read citing c1, and removes a sentence that generalises to every element', async () => {

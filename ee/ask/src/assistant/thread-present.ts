@@ -51,7 +51,20 @@ function presentAnswer(stored: StoredTurnText, maskNow: boolean, verified: boole
       if (block.kind === 'sentences') return { kind: 'sentences', items: block.items.map((sentence: StoredItem & { readonly cites: readonly unknown[] }) => ({ item: item(sentence), cites: sentence.cites as never })) };
       if (block.kind === 'ask-result') return presentAskResult(block, maskNow && !verified);
       if (block.kind === 'list') return { kind: 'list', ...(block.label === undefined ? {} : { label: labelOf(block.label) }), items: block.items.map((entry: StoredItem & { readonly cites: readonly unknown[] }) => ({ item: item(entry), cites: entry.cites as never })) };
-      if (block.kind === 'table') return { kind: 'table', columns: block.columns.map(labelOf), rows: block.rows.map((row) => ({ cells: row.cells.map(item), cites: row.cites })) };
+      if (block.kind === 'table') {
+        const { caption, units, droppedRows, moreNotShown } = block;
+        // the anchor is a title of the source like a label: sent as stored only when nothing sensitive can be in it, withheld under the mask otherwise
+        const anchor = caption?.anchor === undefined ? undefined : labelOf(caption.anchor);
+        return {
+          kind: 'table',
+          ...(caption === undefined ? {} : { caption: { ...(caption.subject === undefined ? {} : { subject: caption.subject }), ...(anchor === undefined ? {} : { anchor }) } }),
+          ...(units === undefined ? {} : { units }),
+          ...(droppedRows === undefined ? {} : { droppedRows }),
+          ...(moreNotShown === undefined ? {} : { moreNotShown }),
+          columns: block.columns.map(labelOf),
+          rows: block.rows.map((row) => ({ cells: row.cells.map(item), cites: row.cites })),
+        };
+      }
       return { kind: 'refusal', sentence: labelOf(block.sentence), ...(block.overview === undefined ? {} : { overview: block.overview.map((sentence) => ({ item: item(sentence), cites: sentence.cites })) }) };
     }),
   };

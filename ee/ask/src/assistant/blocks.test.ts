@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { AssistantTable, TypeDescriptions } from '@neburyx/contracts';
-import { noteOfTable, parseBlocksInput, withinTotals, type KeptBlock } from './blocks.js';
+import { noteOfTable, unitsOfTable, parseBlocksInput, withinTotals, type KeptBlock } from './blocks.js';
 
 const LINES = new Map([
   ['n1', 'n1 | "payment" | title: "Payment P-1" | sizeUsd: 4200; feeUsd: 12; weight: 4200; status: "open"'],
@@ -16,6 +16,15 @@ const describe_ = (display: Record<string, { label?: string; unit?: string }>): 
 const note = (columns: string[], rows: { cells: string[]; cites: string[] }[], display: Record<string, { label?: string; unit?: string }> | undefined) =>
   noteOfTable({ columns, rows, lines: LINES, elements: ELEMENTS, descriptions: display === undefined ? undefined : describe_(display) });
 const SELECT = 'Each row selects its elements on the graph.';
+
+describe('the properties that give the clauses of a note', () => {
+  it('are the entity type and the property of each clause, in the order of the clauses, and none when the note is the fixed sentence alone', () => {
+    const display = { sizeUsd: { label: 'size', unit: 'USD' }, feeUsd: { label: 'fee', unit: 'USD' } };
+    const units = (columns: string[], cells: string[]) => unitsOfTable({ columns, rows: [{ cells, cites: ['n1'] }], lines: LINES, elements: ELEMENTS, descriptions: describe_(display) });
+    expect(units(['Size', 'Fee'], ['4200', '12'])).toEqual([{ type: 'payment', property: 'sizeUsd', clause: 'Size in USD.' }, { type: 'payment', property: 'feeUsd', clause: 'Fee in USD.' }]);
+    expect(units(['Status'], ['open'])).toEqual([]);
+  });
+});
 
 describe('the note of a table block', () => {
   it('is the fixed sentence alone when no column shows a value with a unit', () => {

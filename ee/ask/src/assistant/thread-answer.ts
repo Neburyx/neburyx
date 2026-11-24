@@ -279,7 +279,9 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
     const { table } = block;
     const labels = table.columns.map((label) => ({ form: maskOn ? ('frozen' as const) : classify?.(label, [])?.form === 'frozen' ? ('frozen' as const) : ('unbound' as const), text: label }));
     const rows = table.rows.map((row) => ({ cells: row.cells.map((cell) => itemOf(cell, row.cites.filter((key) => refs.has(key)), refs, maskOn, 80, classify)), cites: citedRefs(row.cites, refs) }));
-    return { kind: 'table', columns: labels, rows };
+    // what the title and the note say, as references and numbers: the type of the rows, the title of the element a read listed them from (source text the model never wrote, so nothing classifies it: `frozen`, as shown, only with the mask on, and `unbound` with the mask off, so that it is withheld under the mask whatever the classifier would say of other text), and the properties whose unit the note gives; the words are written again from the mapping
+    const caption = { ...(table.subject === undefined ? {} : { subject: table.subject }), ...(table.anchor === undefined ? {} : { anchor: { form: maskOn ? ('frozen' as const) : ('unbound' as const), text: table.anchor } }) };
+    return { kind: 'table', caption, ...(table.units === undefined || table.units.length === 0 ? {} : { units: table.units.map(({ type, property }) => ({ type, property })) }), ...(table.droppedRows === undefined ? {} : { droppedRows: table.droppedRows }), ...(table.moreNotShown === undefined ? {} : { moreNotShown: table.moreNotShown }), columns: labels, rows };
   });
   // how the answer was made, as the server wrote it: counts and type names, no value
   const made = { model: answer.model, coverage: { retrieval: answer.coverage.retrieval, summary: answer.coverage.summary, ...('summaryCited' in answer.coverage && answer.coverage.summaryCited !== undefined ? { summaryCited: answer.coverage.summaryCited } : {}) } };

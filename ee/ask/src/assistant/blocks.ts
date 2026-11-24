@@ -1,13 +1,9 @@
-import { ASSISTANT_BLOCKS_MAX, ASSISTANT_LIST_ITEMS_MAX, ASSISTANT_LIST_LABEL_MAX, ASSISTANT_SENTENCES_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantBlocks, type AssistantTable, type SummarySentence, type TypeDescriptions } from '@neburyx/contracts';
+import { tableNote, tableUnitClause, ASSISTANT_BLOCKS_MAX, ASSISTANT_LIST_ITEMS_MAX, ASSISTANT_LIST_LABEL_MAX, ASSISTANT_SENTENCES_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantBlocks, type AssistantTable, type SummarySentence, type TypeDescriptions } from '@neburyx/contracts';
 import { parseTable, rowsPhrase, type TableDraft } from './table.js';
-
-/** The fixed sentence that ends the note of a table block. */
-const TABLE_NOTE_SELECT = 'Each row selects its elements on the graph.';
 
 type Cited = ReadonlyMap<string, { readonly ref: unknown }>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-const capitalised = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 const unquoted = (value: string): string => (value.length >= 2 && value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value);
 const numberOf = (value: string): number | undefined => {
   const plain = value.trim().replace(/,/gu, '');
@@ -40,15 +36,20 @@ function propertiesOfLine(line: string): readonly (readonly [string, string])[] 
  * The words of a clause are the mapping's; none is fixed copy.
  */
 export function noteOfTable(input: { readonly columns: readonly string[]; readonly rows: readonly { readonly cells: readonly string[]; readonly cites: readonly string[] }[]; readonly lines: ReadonlyMap<string, string>; readonly elements: Cited; readonly descriptions: TypeDescriptions | undefined }): string {
-  const clauses: string[] = [];
-  for (const [column] of input.columns.entries()) {
-    const found = firstUnitOf(column, input);
-    if (found !== undefined && !clauses.includes(found)) clauses.push(found);
-  }
-  return [...clauses, TABLE_NOTE_SELECT].join(' ');
+  return tableNote(unitsOfTable(input).map((unit) => unit.clause));
 }
 
-function firstUnitOf(column: number, input: Parameters<typeof noteOfTable>[0]): string | undefined {
+/** The clauses of the note as the properties that give them: the entity type and the property whose label and unit the mapping holds, with the clause they make. A reopened chat writes the clause again from the mapping with the type and the property. */
+export function unitsOfTable(input: Parameters<typeof noteOfTable>[0]): { readonly type: string; readonly property: string; readonly clause: string }[] {
+  const units: { readonly type: string; readonly property: string; readonly clause: string }[] = [];
+  for (const [column] of input.columns.entries()) {
+    const found = firstUnitOf(column, input);
+    if (found !== undefined && !units.some((unit) => unit.clause === found.clause)) units.push(found);
+  }
+  return units;
+}
+
+function firstUnitOf(column: number, input: Parameters<typeof noteOfTable>[0]): { readonly type: string; readonly property: string; readonly clause: string } | undefined {
   for (const row of input.rows) {
     const cell = row.cells[column];
     if (cell === undefined || cell.trim() === '') continue;
@@ -60,7 +61,7 @@ function firstUnitOf(column: number, input: Parameters<typeof noteOfTable>[0]): 
       if (display === undefined || line === undefined) continue;
       for (const [name, value] of propertiesOfLine(line)) {
         const shown = display[name];
-        if (shown?.unit !== undefined && showsValue(cell, value)) return `${capitalised(shown.label ?? name)} in ${shown.unit}.`;
+        if (shown?.unit !== undefined && showsValue(cell, value)) return { type: type as string, property: name, clause: tableUnitClause(shown.label, name, shown.unit) };
       }
     }
   }

@@ -1,6 +1,6 @@
 import type { AssembledText } from '../case-summary/assemble.js';
 import { descriptionHoldsVerdict, type CheckedText, type CheckRunner, type HeavyCheck, type JudgeInput, type Judged, type RejectedSentence } from '@neburyx/ee-ai-runtime';
-import { ASSISTANT_TABLE_CELL_MAX, ASSISTANT_TABLE_CITES_MAX, ASSISTANT_TABLE_COLUMNS_MAX, ASSISTANT_TABLE_LABEL_MAX, type SummarySentence, type TypeDescriptions } from '@neburyx/contracts';
+import { pluralOf, tableRowsPhrase, ASSISTANT_TABLE_CELL_MAX, ASSISTANT_TABLE_CITES_MAX, ASSISTANT_TABLE_COLUMNS_MAX, ASSISTANT_TABLE_LABEL_MAX, type SummarySentence, type TypeDescriptions } from '@neburyx/contracts';
 
 /** The most rows a reply may hold: a sanity bound of the reply, not the limit of the answer (the answer shows at most 25 rows and counts the rest). */
 const TABLE_REPLY_ROWS_MAX = 100;
@@ -42,20 +42,13 @@ export function parseTable(value: unknown): TableDraft | undefined {
 /** A row read as one sentence for the checks: its cells joined, cited by the keys of the row. The column labels are judged apart (a label is no name of an element), so they are not in the text the name and number checks read. */
 export const rowSentenceOf = (row: TableRow): SummarySentence => ({ text: row.cells.filter((cell) => cell.trim() !== '').join('; '), cites: [...row.cites] });
 
-/** The plural of a plain-words type label: a fixed rule of the code (a consonant and y becomes ies; s, x, z, ch and sh take es; else s). */
-export function pluralOf(label: string): string {
-  if (/[^aeiou]y$/iu.test(label)) return `${label.slice(0, -1)}ies`;
-  if (/(?:s|x|z|ch|sh)$/iu.test(label)) return `${label}es`;
-  return `${label}s`;
-}
-
 /** The plural words of what a table is about: the plain-words label of an entity type (or its name when the mapping gives none), and `Elements` for rows about several types or about a relationship type, which has no plain-words label. */
 export function subjectPluralOf(subject: { readonly type: string; readonly text: string } | undefined, descriptions: TypeDescriptions | undefined): string {
   if (subject === undefined || !subject.text.startsWith('entity ')) return 'Elements';
   return pluralOf(descriptions?.entityTypes.find((entry) => entry.type === subject.type)?.displayName ?? subject.type);
 }
 
-export const rowsPhrase = (count: number): string => `${count} ${count === 1 ? 'row' : 'rows'}`;
+export const rowsPhrase = tableRowsPhrase;
 
 /** The words a column label may use besides the properties and the types of the text sent: a fixed list of the code (a label names what a column holds, never a count or a free column). */
 const FIXED_LABEL_WORDS: ReadonlySet<string> = new Set(['element', 'type', 'title', 'name', 'id', 'date', 'time', 'status', 'direction', 'description', 'currency', 'cite']);
@@ -152,4 +145,15 @@ export function subjectTypeOf(rows: readonly { readonly cites: readonly string[]
     return found === undefined ? [] : [[found.text, found] as const];
   }));
   return types.size === 1 ? [...types.values()][0] : undefined;
+}
+
+/**
+ * What a table's title and note were written from, for the table block: the entity type its rows are about (none when they are about several types or about relationships), the title of the element a read listed them from, and the properties whose unit the note gives. A stored answer keeps these, not the words, and says the words again from the current mapping.
+ */
+export function tableFactsOf(subject: { readonly type: string; readonly text: string } | undefined, units: readonly { readonly type: string; readonly property: string }[], anchor?: string): { subject?: string; anchor?: string; units?: { type: string; property: string }[] } {
+  return {
+    ...(subject === undefined || !subject.text.startsWith('entity ') ? {} : { subject: subject.type }),
+    ...(anchor === undefined ? {} : { anchor }),
+    ...(units.length === 0 ? {} : { units: units.map(({ type, property }) => ({ type, property })) }),
+  };
 }

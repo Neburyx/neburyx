@@ -1,5 +1,6 @@
 import type { AssistantThreadResponse } from '@neburyx/contracts';
 import { ASSISTANT_COPY, causeText, earlierText, sourcesText } from './copy.js';
+import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { storedViewOf, valueFromReads, type ValueOf } from './stored-answer.js';
 import type { RefReads } from './stored-reads.js';
 import type { ViewAnswer } from './assistant-session.js';
@@ -25,7 +26,7 @@ function RowParts({ turn }: { readonly turn: Turn }) {
 }
 
 function StoredAnswer({ answer, valueFor, intent, reads }: { readonly answer: NonNullable<Turn['answer']>; readonly valueFor: ValueOf; readonly intent: string | undefined; readonly reads: RefReads }) {
-  const view = storedViewOf(answer, valueFor);
+  const view = storedViewOf(answer, valueFor, useProfileWhenProvided());
   // an answer stored before the model and the coverage were kept has neither, and the card draws neither
   const shown = { status: 'answered', route: 'view', blocks: view.blocks, citations: [], coverage: answer.coverage ?? { retrieval: '', summary: '' }, model: answer.model ?? '', calls: 0 } as unknown as ViewAnswer;
   const sourcesControl = (control: SourcesControl) => <StoredSources entries={view.entries} refs={view.refs} open={control.open} onOpenChange={control.setOpen} focusRequest={control.focusRequest} onFocusHandled={control.onFocusHandled} />;

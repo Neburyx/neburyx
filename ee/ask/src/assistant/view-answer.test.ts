@@ -624,7 +624,7 @@ describe('a table answer from the view call', () => {
     const { answer } = await run(TWO);
     expect(answer).toMatchObject({ status: 'answered', route: 'view', calls: 2, model: 'fixture-model' });
     if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error('not a table answer');
-    expect(tableBlockOf(answer)).toEqual({ title: 'widgets · 2 rows', note: 'Each row selects its elements on the graph.', columns: ['Element', 'Type'], rows: [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', 'widget'], cites: ['n2'] }] });
+    expect(tableBlockOf(answer)).toEqual({ title: 'widgets · 2 rows', subject: 'widget', note: 'Each row selects its elements on the graph.', columns: ['Element', 'Type'], rows: [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', 'widget'], cites: ['n2'] }] });
     expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n2']);
     expect(answer.coverage.summary).toBe('2 of 2 widgets in view shown · exact');
   });

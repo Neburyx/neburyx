@@ -3,9 +3,9 @@ import { AuditUnavailableError, type AuditedModelCall, type CheckRunner, type Ju
 import { prepareSummary } from '../case-summary/prepare.js';
 import type { AssembledText } from '../case-summary/assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from '../case-summary/coverage.js';
-import { ASSISTANT_TABLE_ROWS_MAX } from '@neburyx/contracts';
-import { noteOfTable } from './blocks.js';
-import { judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE, typeOfKey } from './table.js';
+import { ASSISTANT_TABLE_ROWS_MAX, tableTitle } from '@neburyx/contracts';
+import { noteOfTable, unitsOfTable } from './blocks.js';
+import { judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE, tableFactsOf, typeOfKey } from './table.js';
 import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { MAX_SUMMARY_SENTENCES } from '../case-summary/instructions.js';
@@ -373,7 +373,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
           const answer = {
             status: 'answered' as const,
             route: 'view' as const,
-            blocks: [{ kind: 'table' as const, table: { title: `${plural} · ${rowsPhrase(shown.length)}`, columns: [...table.columns], rows: shown.map((row) => ({ cells: [...row.cells], cites: [...row.cites] })), note: noteOfTable({ columns: table.columns, rows: shown, lines: assembled.lines, elements: assembled.keys, descriptions: input.typeDescriptions }), ...(table.rows.length - rows.length + table.uncited > 0 ? { droppedRows: table.rows.length - rows.length + table.uncited } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) } }],
+            blocks: [{ kind: 'table' as const, table: { title: tableTitle(plural, shown.length), columns: [...table.columns], rows: shown.map((row) => ({ cells: [...row.cells], cites: [...row.cites] })), note: noteOfTable({ columns: table.columns, rows: shown, lines: assembled.lines, elements: assembled.keys, descriptions: input.typeDescriptions }), ...tableFactsOf(subject, unitsOfTable({ columns: table.columns, rows: shown, lines: assembled.lines, elements: assembled.keys, descriptions: input.typeDescriptions })), ...(table.rows.length - rows.length + table.uncited > 0 ? { droppedRows: table.rows.length - rows.length + table.uncited } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) } }],
             citations: elementCitations,
             coverage: { retrieval: retrievalLine(viewReading), summary: `${shown.length} of ${inView} ${plural.toLowerCase()} in view shown · exact` },
             ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }),

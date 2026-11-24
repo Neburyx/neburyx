@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ASK_FOLDER_LIMITS } from './ask-folder.js';
 import { ASK_SUMMARY_MAX_CITATIONS } from './ask.js';
 import { ASSISTANT_VIEW_KEYS_MAX, assistantTurnRequestSchema } from './assistant-turn.js';
-import { THREAD_READ_TURNS_CEILING, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, assistantThreadResponseSchema, assistantThreadTurnWriteSchema, threadEntitySchema, type AssistantThreadTurnWrite } from './assistant-thread.js';
+import { THREAD_READ_TURNS_CEILING, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, assistantThreadResponseSchema, assistantThreadTurnWriteSchema, readAnswerSchema, threadEntitySchema, type AssistantThreadTurnWrite } from './assistant-thread.js';
 
 const HASH = 'a'.repeat(64);
 const REF = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
@@ -119,5 +119,39 @@ describe('the count a thread read tells', () => {
     expect(assistantThreadResponseSchema.safeParse({ ...base, epoch: 0 }).success).toBe(true);
     expect(assistantThreadResponseSchema.safeParse({ ...base, epoch: 7 }).success).toBe(true);
     for (const epoch of [-1, 1.5, '2', null]) expect(assistantThreadResponseSchema.safeParse({ ...base, epoch }).success).toBe(false);
+  });
+
+  describe('the caption, the units and the counts of a stored table', () => {
+    const row = { cells: [{ form: 'frozen', text: 'Ana' }], cites: [REF] };
+    const block = (over: Record<string, unknown> = {}) => ({ kind: 'table', columns: [{ form: 'frozen', text: 'Name' }], rows: [row], ...over });
+    const writtenTable = (over: Record<string, unknown>) => assistantThreadTurnWriteSchema.safeParse(turn({ route: 'view', question: 'Q?', maskOn: true, answer: { blocks: [block(over)] } })).success;
+
+    it('takes the type of the rows, the anchor as an item, the properties of the units and the counts, all optional', () => {
+      expect(writtenTable({})).toBe(true);
+      expect(writtenTable({ caption: {} })).toBe(true);
+      expect(writtenTable({ caption: { subject: 'widget', anchor: { form: 'unbound', text: 'Ana Silva' } }, units: [{ type: 'widget', property: 'sizeUsd' }], droppedRows: 1, moreNotShown: 4 })).toBe(true);
+    });
+
+    it.each([
+      ['an anchor that is a bare string', { caption: { anchor: 'Ana Silva' } }],
+      ['a binding as the anchor with no segments', { caption: { anchor: { form: 'bound' } } }],
+      ['a free member in the caption', { caption: { subject: 'widget', title: 'Widgets of Ana Silva' } }],
+      ['a title kept as text', { title: 'Widgets of Ana Silva · 1 row' }],
+      ['a note kept as text', { note: 'Size in USD.' }],
+      ['a free member in a unit', { units: [{ type: 'widget', property: 'sizeUsd', label: 'Size' }] }],
+      ['an empty type key', { caption: { subject: '' } }],
+      ['a count that is not a positive whole number', { droppedRows: 0 }],
+      ['a fractional count', { moreNotShown: 1.5 }],
+    ])('refuses %s', (_name, over) => {
+      expect(writtenTable(over)).toBe(false);
+    });
+
+    it('is sent as the read form: the anchor as text or withheld, nothing as a binding', () => {
+      const answer = { blocks: [{ kind: 'table', caption: { subject: 'widget', anchor: { state: 'withheld' } }, units: [{ type: 'widget', property: 'sizeUsd' }], droppedRows: 1, moreNotShown: 2, columns: [{ state: 'text', text: 'Name' }], rows: [{ cells: [{ state: 'withheld' }], cites: [REF] }] }] };
+      expect(readAnswerSchema.safeParse(answer).success).toBe(true);
+      expect(readAnswerSchema.safeParse({ blocks: [{ ...answer.blocks[0], caption: { anchor: { state: 'text', text: 'Ana', extra: 1 } } }] }).success).toBe(false);
+      expect(readAnswerSchema.safeParse({ blocks: [{ ...answer.blocks[0], title: 'Widgets' }] }).success).toBe(false);
+      expect(readAnswerSchema.safeParse({ blocks: [{ ...answer.blocks[0], caption: { anchor: { state: 'segments', segments: [{ element: REF, property: 'name' }] } } }] }).success).toBe(false);
+    });
   });
 });
