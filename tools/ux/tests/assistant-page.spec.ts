@@ -57,7 +57,7 @@ test.describe('The Assistant page', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
-  test('draws the table as the frame does: cells on one line sized to their content, a header with no fill, rows of about 24 px, Copy table as a link', async ({ page }) => {
+  test('draws the table as the frame does: cells on one line sized to their content, the light header fill of the frame, rows of about 33 px, Copy table as a link, the arrow to the source only on row hover', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await routes(page, TABLE);
     await openPage(page);
@@ -72,17 +72,25 @@ test.describe('The Assistant page', () => {
       const copy = element.closest('.assistant-table-block')?.querySelector('.assistant-table-copy') as HTMLElement;
       return {
         rowHeights: rows.map((row) => Math.round(row.getBoundingClientRect().height)),
-        headFill: getComputedStyle(head).backgroundColor,
-        oneLine: cells.every((cell) => cell.getBoundingClientRect().height < 32),
+        headFill: getComputedStyle(element.querySelector('thead') as HTMLElement).backgroundColor,
+        oneLine: cells.every((cell) => cell.getBoundingClientRect().height < 40),
         copyBorder: getComputedStyle(copy).borderTopWidth,
         copyIcon: copy.querySelector('.icon') === null,
       };
     });
-    for (const height of measured.rowHeights) expect(height).toBeLessThanOrEqual(30);
-    expect(measured.headFill).toBe('rgba(0, 0, 0, 0)');
+    for (const height of measured.rowHeights) expect(height).toBeGreaterThanOrEqual(30);
+    for (const height of measured.rowHeights) expect(height).toBeLessThanOrEqual(36);
+    expect(measured.headFill).toBe('rgb(247, 248, 250)');
     expect(measured.oneLine).toBe(true);
     expect(measured.copyBorder).toBe('0px');
     expect(measured.copyIcon).toBe(true);
+    const arrow = table.locator('tbody tr').first().getByRole('button', { name: /^Show source/ });
+    const layout = () => table.evaluate((element) => [...element.querySelectorAll('tbody tr')].map((row) => [...row.children].map((cell) => Math.round(cell.getBoundingClientRect().width)).join(',')).join(';'));
+    const before = await layout();
+    await expect(arrow).toHaveCSS('opacity', '0');
+    await table.locator('tbody tr').first().hover();
+    await expect(arrow).toHaveCSS('opacity', '1');
+    expect(await layout()).toBe(before);
   });
 
   test('reaches Open graph, the thread controls and the composer by keyboard in reading order, and Enter in the composer sends', async ({ page }) => {

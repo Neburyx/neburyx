@@ -702,6 +702,43 @@ test.describe('the Assistant panel', () => {
     expect(cut).toEqual([false, false, false]);
   });
 
+  test('keeps a short identifier of the first column whole in the 380 pixel panel, scrolling inside the table when the columns do not fit, with the Source column in view', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page);
+    const rows = ['ITM-99381', 'ITM-99377', 'ITM-99362'].map((id, index) => ({ cells: [id, `Account 70:10039115${index}`, `${1664 + index}.72`, `2026-10-2${index + 5}`], cites: ['n1'] }));
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      blocks: [{ kind: 'table', table: { title: 'Items · 3 rows', columns: ['Item', 'From', 'Amount', 'Date'], rows, note: 'Each row selects its elements on the graph.' } }],
+      citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' } }],
+      coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '3 of 3 items in view shown · exact' },
+      model: 'claude-sonnet-5-5',
+      calls: 2,
+    };
+    await answerWith(page, answer);
+    await open(page);
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    const table = panel(page).getByRole('table', { name: 'Items · 3 rows' });
+    await expect(table).toBeVisible();
+    const measured = await table.evaluate((element) => {
+      const scroller = element.closest('.assistant-table-scroll') as HTMLElement;
+      const source = element.querySelector('th:last-child') as HTMLElement;
+      const scrollerBox = scroller.getBoundingClientRect();
+      return {
+        identifiers: [...element.querySelectorAll('tbody tr td:first-child')].map((cell) => { const clip = cell.querySelector('.assistant-table-title-clip') as HTMLElement; return { text: clip.textContent, cut: clip.scrollWidth > clip.clientWidth }; }),
+        sourceInView: source.getBoundingClientRect().right <= scrollerBox.right + 1,
+        pageScrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      };
+    });
+    await expect(panel(page).locator('.assistant-table-scroll')).toHaveClass(/assistant-table-squeezed/);
+    const floor = await table.evaluate((element) => { const title = element.querySelector('thead th.assistant-table-title-cell') as HTMLElement; return { width: title.getBoundingClientRect().width, least: parseFloat(getComputedStyle(title).minWidth) }; });
+    expect(floor.width).toBeGreaterThanOrEqual(floor.least - 1);
+    for (const identifier of measured.identifiers) expect(identifier.cut, identifier.text ?? '').toBe(false);
+    expect(measured.sourceInView).toBe(true);
+    expect(measured.pageScrolls).toBe(false);
+  });
+
   test('keeps the date and the time of every time stamp whole in a mixed answer at the default panel width: a sentence, a table of four columns and a list', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openWorkspace(page);

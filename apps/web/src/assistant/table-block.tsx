@@ -72,6 +72,8 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
       // the title column keeps its content width until the table overflows with every cell at its cap: only then does it give way (with its ellipsis); measured without the squeeze, so that a wider panel lets it go
       const wasTight = element.classList.contains("assistant-table-tight");
       element.classList.remove("assistant-table-tight", "assistant-table-squeezed");
+      const titleHead = element.querySelector<HTMLElement>("th.assistant-table-title-cell");
+      if (titleHead !== null) element.style.setProperty("--assistant-table-title-natural", `${titleHead.getBoundingClientRect().width}px`);
       const naturalOverflow = element.scrollWidth > element.clientWidth;
       if (naturalOverflow) element.classList.add("assistant-table-squeezed");
       // a table is tight when it overflows with its time stamps kept whole, even squeezed: measured without the breaks, so that a wider panel lets them go

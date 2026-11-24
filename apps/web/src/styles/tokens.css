@@ -61,8 +61,11 @@
   --tool-strip-clear: calc(var(--space-16) * 4 + var(--space-8));
   --sources-icon-size: 10px;
   --assistant-input-height: 40px;
+  --assistant-table-label: #646d80;
+  --assistant-table-rule: #e3e6ec;
   --assistant-table-cell-max: 28ch;
   --assistant-table-title-min: 8ch;
+  --assistant-table-title-floor: 13ch;
   --assistant-page-head-height: 64px;
   --assistant-page-column: 720px;
   --assistant-page-button-height: 32px;

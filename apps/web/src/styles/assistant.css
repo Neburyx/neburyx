@@ -856,7 +856,7 @@
     linear-gradient(to left, var(--color-surface), var(--color-surface)) right center / var(--space-16) 100% no-repeat local,
     linear-gradient(to right, var(--color-border), transparent) left center / var(--space-12) 100% no-repeat scroll,
     linear-gradient(to left, var(--color-border), transparent) right center / var(--space-12) 100% no-repeat scroll;
-  border: var(--border-width) solid var(--color-border);
+  border: var(--border-width) solid var(--assistant-table-rule);
   border-radius: var(--radius);
 }
 
@@ -868,7 +868,7 @@
 
 .assistant-table-title {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--assistant-table-label);
   font-size: var(--font-size-small);
   font-weight: 400;
   line-height: var(--line-height-pill);
@@ -878,9 +878,29 @@
   line-height: var(--line-height-pill);
 }
 
+.assistant-table thead {
+  background: var(--color-surface-muted);
+}
+
 .assistant-table th {
   font-weight: 400;
-  color: var(--color-text-muted);
+  color: var(--assistant-table-label);
+}
+
+/* on the page the table has the frame's size: 13 px values and 12 px headers in cells of 12 by 8 px, rows of about 33 px */
+.assistant-surface-page .assistant-table {
+  font-size: var(--font-size-body);
+}
+
+.assistant-surface-page .assistant-table th {
+  font-size: var(--font-size-small);
+}
+
+.assistant-surface-page .assistant-table th,
+.assistant-surface-page .assistant-table td,
+.assistant-surface-page .assistant-table th:first-child,
+.assistant-surface-page .assistant-table td:first-child {
+  padding: var(--space-8) var(--space-12);
 }
 
 /* a cell is one line sized to its content; one that is longer than the cap is cut with an ellipsis and carries its full text as a tooltip */
@@ -896,8 +916,7 @@
 .assistant-table td {
   text-align: left;
   padding: var(--space-4);
-  border-bottom: var(--border-width) solid var(--color-border);
-  overflow-wrap: break-word;
+  border-bottom: var(--border-width) solid var(--assistant-table-rule);
 }
 
 .assistant-table .assistant-table-number,
@@ -925,6 +944,8 @@
 .assistant-table-squeezed .assistant-table th.assistant-table-title-cell {
   width: 100%;
   max-width: 0;
+  /* the title never gives way below a readable identifier: what it measures when whole, up to the floor */
+  min-width: min(var(--assistant-table-title-natural, var(--assistant-table-title-floor)), var(--assistant-table-title-floor));
 }
 
 .assistant-table th.assistant-table-title-cell,
@@ -950,9 +971,10 @@
   display: none;
   position: absolute;
   top: 0;
+  bottom: 0;
   left: 0;
   z-index: 1;
-  padding: var(--space-4);
+  padding: inherit;
   max-width: var(--assistant-table-room, 20ch);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -999,6 +1021,18 @@
   pointer-events: none;
 }
 
+.assistant-table-scrolls th:last-child::before {
+  background: linear-gradient(to right, transparent, var(--color-surface-muted));
+}
+
+.assistant-table th:last-child {
+  background: var(--color-surface-muted);
+}
+
+.assistant-table td.assistant-table-cite {
+  padding-right: var(--space-12);
+}
+
 .assistant-table-cite .assistant-marker {
   background: transparent;
   padding: 0;
@@ -1008,10 +1042,6 @@
 .assistant-table-cite .summary-chips {
   display: inline-flex;
   flex-wrap: nowrap;
-  vertical-align: middle;
-}
-
-.assistant-table-cite .assistant-table-source-link {
   vertical-align: middle;
 }
 
@@ -1126,15 +1156,26 @@
   overflow: visible;
 }
 
-/* the arrow to a row's source is drawn as the select button is: off the layout until it has the focus, so the Source cell shows only the marker as the frame does */
-.assistant-table-cite .assistant-table-source-link:not(:focus-visible) {
+/* the arrow to a row's source shows when the row is pointed at or the arrow has the focus; it sits in room the cell keeps for it, so nothing moves */
+.assistant-table-cite .assistant-table-source-link {
   position: absolute;
-  width: var(--border-width);
-  height: var(--border-width);
-  margin: calc(-1 * var(--border-width));
+  top: 50%;
+  right: var(--space-2);
   padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  transform: translateY(-50%);
+  opacity: 0;
+}
+
+.assistant-table-row:hover .assistant-table-source-link,
+.assistant-table-cite .assistant-table-source-link:focus-visible {
+  opacity: 1;
+}
+
+/* where nothing can point at a row the arrow is always shown: an unseen control must not take a tap */
+@media (hover: none) {
+  .assistant-table-cite .assistant-table-source-link {
+    opacity: 1;
+  }
 }
 
 .assistant-table-cite .assistant-table-source-link .icon {
