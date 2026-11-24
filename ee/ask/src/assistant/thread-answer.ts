@@ -1,5 +1,6 @@
 import type { AssistantThreadTurnWrite, AssistantTurnAnswer, StoredAnswer } from '@neburyx/contracts';
-import { SENSITIVE_TITLE_KEY, THREAD_SEGMENTS_MAX, storedAskResultOf } from '@neburyx/contracts';
+import { SENSITIVE_TITLE_KEY, THREAD_SEGMENTS_MAX, storedAskResultOf, type AskRunResult, type ElementRef } from '@neburyx/contracts';
+import { buildSummary } from '../summary/index.js';
 import { classifyItem, type Classified, type ClassifyContext } from './sensitive-items.js';
 
 type Cite = AssistantThreadTurnWrite['citationRefs'][number];
@@ -14,8 +15,8 @@ const refsOf = (citations: readonly Citation[]): Map<string, Cite> => new Map(ci
 
 /** The text an item was made from, by the item the conversion made: what a binding is checked against, since a bound item keeps none of its values. */
 const ORIGINAL = new WeakMap<object, string>();
-/** For an item of an Ask summary bound to the titles of the elements it cites: the title each element had in the result, by the element's reference, that its binding is checked against. */
-const ASK_TITLES = new WeakMap<object, ReadonlyMap<string, string>>();
+/** For an item of an Ask summary bound to the titles of the elements it cites: the segments and the text the summary was built again with, that the write check compares the stored item with. */
+const ASK_EXPECTED = new WeakMap<object, string>();
 
 /** How an item of an answer written with the mask off is classified, by its text and the keys of the elements it cites; absent, every such item is `unbound`. */
 export type ClassifyItem = (text: string, cited: readonly string[]) => Classified;
@@ -60,62 +61,149 @@ export interface StoredAnswerResult {
 const withMade = (result: StoredAnswerResult, made: Pick<StoredAnswer, 'model' | 'coverage'>): StoredAnswerResult => ({ ...result, answer: { ...made, ...result.answer } });
 
 /** The stored form of Ask's own answer inside a turn: its refusal as a refusal block, and its cited summary as a block of sentences, written with the mask on as frozen and otherwise as written (unbound, since nothing was sent to a model to classify them against). */
-type AskCitation = { readonly key: string; readonly title: string }
+/** The marker, the padding and the first identifier of the private-use characters that stand for a title while a summary is built again: one identifier for each element, so that the text of a sentence says which element each title is, whatever the titles are. */
+const MARK = 0xe000;
+const PAD = 0xe001;
+const ID0 = 0xe100;
+const ID_MAX = 0xefff;
+const SENTINEL = /\ue000[\ue100-\uefff]\ue001*|[\ue100-\uefff]/gu;
 
-const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+interface Probe {
+  /** The result with the display title of every element replaced by a sentinel of the same length. */
+  readonly result: AskRunResult;
+  readonly owners: ReadonlyMap<number, ElementRef>;
+  /** What the summary writes for the element: its title, or its identifier when the title is empty. */
+  readonly written: ReadonlyMap<number, string>;
+  /** Whether what is written is a title that the gate masks. */
+  readonly bindable: ReadonlySet<number>;
+}
+
+const isElementRef = (value: unknown): value is { sourceId: string; entityType: string; stableId: string } =>
+  typeof value === 'object' && value !== null && typeof (value as Record<string, unknown>)['sourceId'] === 'string' && typeof (value as Record<string, unknown>)['entityType'] === 'string' && typeof (value as Record<string, unknown>)['stableId'] === 'string';
+
+/** A sentinel as long as the text it stands for, in code points, so that every choice of the summary that rests on a length is made as it was. */
+function sentinelOf(index: number, length: number): string {
+  const id = String.fromCodePoint(ID0 + index);
+  if (length <= 1) return id;
+  return `${String.fromCodePoint(MARK)}${id}${String.fromCodePoint(PAD).repeat(length - 2)}`;
+}
+
+/** The result with the title of each element it holds replaced by a sentinel, or nothing when that cannot be done without a doubt (too many elements, or a private-use character in a title). */
+function probeOf(result: AskRunResult): Probe | undefined {
+  const owners = new Map<number, ElementRef>();
+  const written = new Map<number, string>();
+  const bindable = new Set<number>();
+  let doubtful = false;
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(walk);
+    if (typeof value !== 'object' || value === null) return value;
+    const entries = Object.entries(value as Record<string, unknown>);
+    const ref = (value as Record<string, unknown>)['ref'];
+    const display = (value as Record<string, unknown>)['display'];
+    const isNode = isElementRef(ref) && typeof display === 'object' && display !== null && typeof (display as Record<string, unknown>)['title'] === 'string';
+    const mapped = Object.fromEntries(entries.map(([key, entry]) => [key, key === 'display' && isNode ? entry : walk(entry)]));
+    if (!isNode) return mapped;
+    const title = (display as { title: string }).title;
+    const shown = title.trim() === '' ? ref.stableId : title;
+    const index = owners.size;
+    if (ID0 + index > ID_MAX || /[\ue000-\uefff]/u.test(shown)) doubtful = true;
+    owners.set(index, ref);
+    written.set(index, shown);
+    if (title.trim() !== '') bindable.add(index);
+    return { ...mapped, display: { ...(display as object), title: sentinelOf(index, [...shown].length) } };
+  };
+  const probe = walk(result) as AskRunResult;
+  return doubtful ? undefined : { result: probe, owners, written, bindable };
+}
+
+/** A sentence of the build with sentinels, with each sentinel replaced by what the summary writes for its element. */
+function withTitles(text: string, probe: Probe): string {
+  return text.replace(SENTINEL, (found) => {
+    const id = [...found].find((character) => (character.codePointAt(0) ?? 0) >= ID0) as string;
+    return probe.written.get((id.codePointAt(0) ?? 0) - ID0) ?? found;
+  });
+}
+
+type Segment = { literal: string } | { element: Cite; property: string };
 
 /**
- * An item of the cited summary of an Ask answer, written with the mask off. The sentence is built from the result alone: titles of the elements it cites, names of types and counts. Each title of a cited element is bound to that element (its title, read again under the current
- * mask on return); a sentence that holds the title of an element it does not cite, or of a relationship (whose title holds the titles of its ends), is `unbound`; a sentence with no title in it is `frozen`.
+ * One sentence of the cited summary of an Ask answer, written with the mask off, in its stored form. The summary is built again from the result with a sentinel for every title, so that the sentence says where each title stands and which element it is;
+ * a sentence that does not come out the same when the titles are put back (a shortened title, an anchor the build did not know, a summary that does not follow from the result) is `unbound`. A title of a cited element is a binding to its title; a title of an
+ * element the sentence does not cite is no binding and makes the sentence `unbound`; a sentence with no title is `frozen`. The bindings are kept beside the item so that the write check compares them, not only the text they make.
  */
-function askItemOf(text: string, cites: readonly string[], citations: ReadonlyMap<string, AskCitation>, refs: ReadonlyMap<string, Cite>): Item {
+function askItemOf(index: number, text: string, citedRefs: readonly Cite[], again: { readonly summary: AskSummaryShape; readonly probe: Probe } | undefined): Item {
   const unbound: Item = { form: 'unbound', text };
-  const titles = [...citations.values()].map((citation) => citation.title).filter((title) => title !== '').sort((first, second) => second.length - first.length);
-  if (titles.length === 0) return { form: 'frozen', text };
-  const alternatives = titles.map(escaped).join('|');
-  const found = [...text.normalize('NFC').matchAll(new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives})(?![\\p{L}\\p{N}_])`, 'gu'))];
-  if (found.length === 0) return { form: 'frozen', text };
-  const bindable = new Map<string, { ref: Cite; title: string }>();
-  for (const key of cites) {
-    const citation = citations.get(key);
-    const ref = refs.get(key);
-    if (citation !== undefined && ref !== undefined && 'entityType' in ref && citation.title !== '') bindable.set(citation.title, { ref, title: citation.title });
-  }
-  const segments: ({ literal: string } | { element: Cite; property: string })[] = [];
-  const known = new Map<string, string>();
-  const written = text.normalize('NFC');
+  const probed = again?.summary.sentences[index];
+  if (again === undefined || probed === undefined || /[\ue000-\uefff]/u.test(text)) return unbound;
+  const keyed = new Map(again.summary.citations.map((citation) => [citation.key, JSON.stringify(citation.element)] as const));
+  const asked = new Set(citedRefs.map((ref) => JSON.stringify(ref)));
+  const probedRefs = new Set(probed.cites.map((key) => keyed.get(key)));
+  if (asked.size !== probedRefs.size || [...asked].some((ref) => !probedRefs.has(ref))) return unbound;
+  const segments: Segment[] = [];
+  let rebuilt = '';
   let at = 0;
-  for (const match of found) {
-    const entry = bindable.get(match[0]);
-    // the same text may be the title of two elements: it is bound only where one cited element has it
-    const sharing = [...citations.values()].filter((citation) => citation.title === match[0]).length;
-    if (entry === undefined || sharing !== 1) return unbound;
-    if (match.index > at) segments.push({ literal: written.slice(at, match.index) });
-    segments.push({ element: entry.ref, property: SENSITIVE_TITLE_KEY });
-    known.set(JSON.stringify(entry.ref), entry.title);
+  const literal = (piece: string): void => {
+    if (piece === '') return;
+    const last = segments[segments.length - 1];
+    if (last !== undefined && 'literal' in last) last.literal += piece;
+    else segments.push({ literal: piece });
+    rebuilt += piece;
+  };
+  let titled = false;
+  for (const match of probed.text.matchAll(SENTINEL)) {
+    literal(probed.text.slice(at, match.index));
+    const id = [...match[0]].find((character) => (character.codePointAt(0) ?? 0) >= ID0) as string;
+    const owner = (id.codePointAt(0) ?? 0) - ID0;
+    const shown = again.probe.written.get(owner);
+    const element = again.probe.owners.get(owner);
+    if (shown === undefined || element === undefined) return unbound;
+    titled = true;
+    if (!again.probe.bindable.has(owner)) literal(shown);
+    else if (asked.has(JSON.stringify(element))) {
+      segments.push({ element, property: SENSITIVE_TITLE_KEY });
+      rebuilt += shown;
+    } else return unbound;
     at = match.index + match[0].length;
   }
-  if (at < written.length) segments.push({ literal: written.slice(at) });
+  literal(probed.text.slice(at));
+  if (rebuilt !== text) return unbound;
+  if (!titled || segments.every((segment) => 'literal' in segment)) return { form: 'frozen', text };
   if (segments.length > THREAD_SEGMENTS_MAX || text.length > 2000) return unbound;
   const item: Item = { form: 'bound', segments };
   ORIGINAL.set(item, text);
-  ASK_TITLES.set(item, known);
+  ASK_EXPECTED.set(item, JSON.stringify({ segments, text }));
   return item;
 }
+
+type AskSummaryShape = { readonly sentences: readonly { readonly text: string; readonly cites: readonly string[] }[]; readonly citations: readonly { readonly key: string; readonly element: Cite }[] };
 
 /** The stored form of Ask's own answer inside a turn: its refusal as a refusal block, and its cited summary as a block of sentences (written with the mask on as frozen; with it off bound to the titles it cites), and the result card. */
 function askAnswerStored(ask: Extract<AssistantTurnAnswer, { answer: unknown }>['answer'], maskOn: boolean, result: (blocks: Block[], refs?: ReadonlyMap<string, Cite>) => StoredAnswerResult): StoredAnswerResult | undefined {
   if ('refused' in ask) return result([{ kind: 'refusal', sentence: { form: 'frozen', text: ask.refused.sentence } }]);
   const { summary } = ask.answered;
   const refs = new Map((summary?.citations ?? []).map((citation) => [citation.key, citation.element] as const));
-  const citations = new Map((summary?.citations ?? []).map((citation) => [citation.key, citation] as const));
-  const items = (summary?.sentences ?? []).map((sentence) => {
+  let again: { readonly summary: AskSummaryShape; readonly probe: Probe } | undefined;
+  if (!maskOn && summary !== undefined) {
+    const probe = probeOf(ask.answered.result);
+    if (probe !== undefined) {
+      // the build may have been given the anchor of the run, which the answer does not name: the one that gives the sentences of the answer is the anchor
+      const anchors: (ElementRef | undefined)[] = [undefined, ...new Map([...probe.owners.values()].map((ref) => [JSON.stringify(ref), ref] as const)).values()];
+      const builds = anchors.flatMap((anchor) => {
+        const built = buildSummary(probe.result, anchor === undefined ? {} : { anchor });
+        return built !== undefined && built.sentences.length === summary.sentences.length ? [built] : [];
+      });
+      const same = (built: AskSummaryShape): boolean => built.sentences.every((sentence, index) => withTitles(sentence.text, probe) === summary.sentences[index]?.text);
+      const chosen = builds.find(same) ?? builds[0];
+      if (chosen !== undefined) again = { summary: chosen, probe };
+    }
+  }
+  const items = (summary?.sentences ?? []).map((sentence, index) => {
     const cited = sentence.cites.flatMap((key) => (refs.has(key) ? [refs.get(key) as Cite] : []));
-    const item = maskOn ? ({ form: 'frozen', text: sentence.text } as const) : askItemOf(sentence.text, sentence.cites, citations, refs);
+    const item = maskOn ? ({ form: 'frozen', text: sentence.text } as const) : askItemOf(index, sentence.text, cited, again);
     const withCites = { ...item, cites: cited };
     ORIGINAL.set(withCites, sentence.text);
-    const known = ASK_TITLES.get(item);
-    if (known !== undefined) ASK_TITLES.set(withCites, known);
+    const expected = ASK_EXPECTED.get(item);
+    if (expected !== undefined) ASK_EXPECTED.set(withCites, expected);
     return withCites;
   });
   const card = storedAskResultOf(ask, maskOn);
@@ -182,19 +270,15 @@ export function bindingsApproved(stored: StoredAnswer, context: ClassifyContext,
     block.kind === 'ask-result' ? [] : block.kind === 'sentences' || block.kind === 'list' ? block.items.map((item) => ({ item, cites: item.cites })) : block.kind === 'table' ? block.rows.flatMap((row) => row.cells.map((item) => ({ item, cites: row.cites }))) : (block.overview ?? []).map((item) => ({ item, cites: item.cites }));
   for (const { item, cites } of stored.blocks.flatMap(itemsOf)) {
     if (item.form !== 'bound') continue;
-    const titles = ASK_TITLES.get(item);
-    if (titles !== undefined) {
-      // an item of an Ask summary: its bindings are to the titles of cited elements of this source, and it must read as the text it was made from
-      let rebuilt = '';
+    const askExpected = ASK_EXPECTED.get(item);
+    if (askExpected !== undefined) {
+      // an item of an Ask summary: its segments and its text are those the summary was built again with, every binding is to the title of a cited element of this source
+      const original = ORIGINAL.get(item);
+      if (original === undefined || askExpected !== JSON.stringify({ segments: item.segments, text: original })) return false;
       for (const segment of item.segments ?? []) {
-        if ('literal' in segment) rebuilt += segment.literal;
-        else {
-          const title = titles.get(JSON.stringify(segment.element));
-          if (title === undefined || segment.property !== SENSITIVE_TITLE_KEY || keyOf(segment.element) === undefined || (sourceId !== undefined && (segment.element as { sourceId?: string }).sourceId !== sourceId)) return false;
-          rebuilt += title;
-        }
+        if ('literal' in segment) continue;
+        if (segment.property !== SENSITIVE_TITLE_KEY || keyOf(segment.element) === undefined || (sourceId !== undefined && (segment.element as { sourceId?: string }).sourceId !== sourceId)) return false;
       }
-      if (ORIGINAL.get(item)?.normalize('NFC') !== rebuilt) return false;
       continue;
     }
     if (context.sentValues === undefined || context.sensitiveKeys === undefined) return false;

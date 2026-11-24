@@ -1,4 +1,5 @@
-import type { AssistantTurnAnswer } from '@neburyx/contracts';
+import type { AskRunResult, AssistantTurnAnswer } from '@neburyx/contracts';
+import { buildSummary } from '../summary/index.js';
 import { assistantThreadTurnWriteSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { bindingsApproved, storedAnswerOf } from './thread-answer.js';
@@ -75,10 +76,12 @@ describe('the stored form of an answer', () => {
     expect(none?.blocks).toEqual([{ kind: 'sentences', items: [{ form: 'frozen', text: 'The mapping gives gadget no description.', cites: [] }] }]);
     const refused = storedAnswerOf({ status: 'answered', route: 'ask', answer: { refused: { cause: 'no-intent', sentence: 'That question is not one of this source.' } } } as unknown as AssistantTurnAnswer, false)?.answer;
     expect(refused?.blocks).toEqual([{ kind: 'refusal', sentence: { form: 'frozen', text: 'That question is not one of this source.' } }]);
-    const summary = { sentences: [{ text: 'Two widgets match.', cites: ['k1'] }], citations: [{ key: 'k1', element: REF, type: 'widget', title: 'Jordan Lee' }] };
-    const asked = (maskOn: boolean) => storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: { templateId: 'entity', result: { ref: REF, display: { title: 'T', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } } }, summary } } } as unknown as AssistantTurnAnswer, maskOn)?.answer;
-    expect(asked(true)?.blocks[0]).toEqual({ kind: 'sentences', items: [{ form: 'frozen', text: 'Two widgets match.', cites: [REF] }] });
-    expect(asked(false)?.blocks[0]).toEqual({ kind: 'sentences', items: [{ form: 'frozen', text: 'Two widgets match.', cites: [REF] }] });
+    const lee = { ref: REF, display: { title: 'Jordan Lee', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
+    const entity = { templateId: 'entity', result: lee } as unknown as AskRunResult;
+    const summary = buildSummary(entity);
+    const asked = (maskOn: boolean) => storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: entity, summary } } } as unknown as AssistantTurnAnswer, maskOn)?.answer;
+    expect(asked(true)?.blocks[0]).toEqual({ kind: 'sentences', items: [{ form: 'frozen', text: 'Jordan Lee is of type widget.', cites: [REF] }] });
+    expect(asked(false)?.blocks[0]).toEqual({ kind: 'sentences', items: [{ form: 'bound', segments: [{ element: REF, property: '(title)' }, { literal: ' is of type widget.' }], cites: [REF] }] });
     expect(asked(false)?.blocks[1]).toMatchObject({ kind: 'ask-result' });
     const node = { ref: REF, display: { title: 'Jordan Lee', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
     const alone = (maskOn: boolean) => storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: { widget: 'typed' }, outcome: 'complete', result: { templateId: 'entity', result: node } } } } as unknown as AssistantTurnAnswer, maskOn)?.answer;
@@ -87,39 +90,79 @@ describe('the stored form of an answer', () => {
     expect(JSON.stringify(alone(false))).not.toContain('Jordan Lee');
   });
 
-  it('binds each title of a cited element in a sentence of the cited summary of an Ask answer written with the mask off to that element, so that it is drawn masked when the mask is on, and leaves a sentence with another title in it unbound', () => {
-    const other = { ...REF, stableId: 'A-2' };
-    const edge = { sourceId: 'demo', type: 'LINKS', from: 'widget', to: 'widget', stableId: 'E-1' };
-    const summary = {
-      sentences: [
-        { text: 'Jordan Lee and Maria Gomez share an attribute with Jordan Lee.', cites: ['k1', 'k2'] },
-        { text: 'Maria Gomez is of type widget.', cites: ['k1'] },
-        { text: 'Jordan Lee is linked as Jordan Lee → LINKS → Maria Gomez.', cites: ['k1', 'k3'] },
-        { text: 'Two widgets match.', cites: ['k1'] },
-      ],
-      citations: [{ key: 'k1', element: REF, type: 'widget', title: 'Jordan Lee' }, { key: 'k2', element: other, type: 'widget', title: 'Maria Gomez' }, { key: 'k3', element: edge, type: 'LINKS', title: 'Jordan Lee → LINKS → Maria Gomez' }],
-    };
-    const answer = { status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: { templateId: 'entity', result: { ref: REF, display: { title: 'Jordan Lee', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } } }, summary } } } as unknown as AssistantTurnAnswer;
-    const stored = storedAnswerOf(answer, false);
-    const items = stored?.answer.blocks[0]?.kind === 'sentences' ? stored.answer.blocks[0].items : [];
-    // the first sentence cites both elements: each title is a binding, the literal pieces are the words between
-    expect(items[0]).toMatchObject({ form: 'bound', segments: [{ element: REF, property: '(title)' }, { literal: ' and ' }, { element: other, property: '(title)' }, { literal: ' share an attribute with ' }, { element: REF, property: '(title)' }, { literal: '.' }] });
-    // a title of an element the sentence does not cite is no binding: the sentence is withheld under the mask
-    expect(items[1]).toMatchObject({ form: 'unbound' });
-    // the title of a relationship holds the titles of its ends: unbound
-    expect(items[2]).toMatchObject({ form: 'unbound' });
-    // no title in it: frozen
-    expect(items[3]).toMatchObject({ form: 'frozen' });
-    // the write is approved as the stored form of Ask's own summary, and no bound item holds a title in its literals
+  describe('the cited summary of an Ask answer written with the mask off, built again with a sentinel for each title', () => {
+    const nodeOf = (stableId: string, title: string, type = 'widget') => ({ ref: { ...REF, stableId }, display: { title, type }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+    const shared = (nodes: ReturnType<typeof nodeOf>[], over: Record<string, unknown> = {}): AskRunResult => ({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { value: nodes.length - 1, quality: 'exact', scope: 'matches' }, matchIds: nodes.slice(1).map((node) => node.ref), nodes, edges: [], notices: [], warnings: [], ...over } }) as unknown as AskRunResult;
+    const answered = (result: AskRunResult, summary: unknown = buildSummary(result)): AssistantTurnAnswer => ({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result, summary } } }) as unknown as AssistantTurnAnswer;
+    const itemsOf = (stored: ReturnType<typeof storedAnswerOf>) => (stored?.answer.blocks[0]?.kind === 'sentences' ? stored.answer.blocks[0].items : []);
     const context: ClassifyContext = { sentValues: undefined, sent: [], typeOf: () => undefined, sensitiveKeys: undefined };
-    expect(bindingsApproved(stored?.answer as never, context, stored?.keyOf as never, 'demo')).toBe(true);
-    expect(JSON.stringify(items[0])).not.toContain('Maria');
-    const swapped = JSON.parse(JSON.stringify(stored?.answer).replace('"property":"(title)"', '"property":"holder"')) as NonNullable<typeof stored>['answer'];
-    expect(bindingsApproved(swapped, context, stored?.keyOf as never, 'demo')).toBe(false);
-    expect(bindingsApproved(stored?.answer as never, context, stored?.keyOf as never, 'another-source')).toBe(false);
-    // written with the mask on, every sentence is frozen as it was shown
-    const masked = storedAnswerOf(answer, true)?.answer.blocks[0];
-    expect(masked?.kind === 'sentences' ? masked.items.every((item) => item.form === 'frozen') : false).toBe(true);
+    const approved = (stored: ReturnType<typeof storedAnswerOf>, sourceId = 'demo') => bindingsApproved(stored?.answer as never, context, stored?.keyOf as never, sourceId);
+
+    it('binds each title to the element it is, whatever the words and the type names say: a title equal to a type name, to an ordinary word, or to a number', () => {
+      for (const titles of [['widget', 'widget'], ['is', 'shares'], ['1', '2']]) {
+        const result = shared([nodeOf('a1', titles[0] as string), nodeOf('a2', titles[1] as string)]);
+        const stored = storedAnswerOf(answered(result), false);
+        const text = buildSummary(result)?.sentences[0]?.text ?? '';
+        const [first] = itemsOf(stored);
+        expect(first, text).toMatchObject({ form: 'bound' });
+        const segments = (first as { segments: ({ literal: string } | { element: unknown })[] }).segments;
+        // the words of the sentence stay literal, and each title is a binding to its own element
+        expect(segments.filter((segment) => 'element' in segment).map((segment) => (segment as { element: { stableId: string } }).element.stableId).sort()).toEqual(['a1', 'a2']);
+        expect(segments.some((segment) => 'literal' in segment && segment.literal.includes(' an attribute with '))).toBe(true);
+        expect(approved(stored)).toBe(true);
+      }
+    });
+
+    it('binds two elements that share a title each to its own, and a title in decomposed form like one in composed form', () => {
+      const same = shared([nodeOf('a1', 'Jordan Lee'), nodeOf('a2', 'Jordan Lee')]);
+      const [bound] = itemsOf(storedAnswerOf(answered(same), false));
+      expect((bound as { segments: { element?: { stableId: string } }[] }).segments.flatMap((segment) => (segment.element === undefined ? [] : [segment.element.stableId])).sort()).toEqual(['a1', 'a2']);
+      const mixed = shared([nodeOf('a1', 'Jose\u0301'), nodeOf('a2', 'Jos\u00e9')]);
+      const stored = storedAnswerOf(answered(mixed), false);
+      expect(JSON.stringify(itemsOf(stored))).not.toMatch(/Jos/u);
+      expect(approved(stored)).toBe(true);
+    });
+
+    it('leaves a sentence unbound when it cannot be built again as it is: a shortened title, a title of an element it does not cite, and a summary that does not follow from the result', () => {
+      const long = 'N'.repeat(45);
+      const paths = { templateId: 'shortest-paths', result: { status: 'ok', paths: [{ hops: 1, steps: [{ from: { ...REF, stableId: 'p1' }, to: { ...REF, stableId: 'p2' }, relationshipType: 'LINKS', evidenceRefs: [] }] }], nodes: [nodeOf('p1', `${long}1`), nodeOf('p2', `${long}2`)], edges: [], capReached: false, partial: false, elapsedMs: 1, warnings: [] } } as unknown as AskRunResult;
+      const heading = itemsOf(storedAnswerOf(answered(paths), false))[0];
+      expect(heading?.form).toBe('unbound');
+      expect(JSON.stringify(heading)).not.toContain('"form":"frozen"');
+      // a summary that names an element the result does not hold: forged, so unbound and never bound to a title it invented
+      const result = shared([nodeOf('a1', 'Jordan Lee'), nodeOf('a2', 'Maria Gomez')]);
+      const forged = { sentences: [{ text: 'Secret shares an attribute with Jordan Lee.', cites: ['k1', 'k9'] }], citations: [{ key: 'k1', element: { ...REF, stableId: 'a1' }, type: 'widget', title: 'Jordan Lee' }, { key: 'k9', element: { ...REF, stableId: 'zz' }, type: 'widget', title: 'Secret' }] };
+      const stored = storedAnswerOf(answered(result, forged), false);
+      expect(itemsOf(stored)[0]).toMatchObject({ form: 'unbound' });
+      // a sentence that cites fewer elements than it names is unbound
+      const fewer = buildSummary(result);
+      const cutCites = fewer === undefined ? undefined : { ...fewer, sentences: fewer.sentences.map((sentence) => ({ ...sentence, cites: sentence.cites.slice(0, 1) })), citations: fewer.citations };
+      expect(itemsOf(storedAnswerOf(answered(result, cutCites), false))[0]).toMatchObject({ form: 'unbound' });
+    });
+
+    it('refuses the write as a whole when a stored binding was changed after it was made: a binding replaced by the literal title, a swapped property, another source, an element no title belongs to', () => {
+      const result = shared([nodeOf('a1', 'Jordan Lee'), nodeOf('a2', 'Maria Gomez')]);
+      const stored = storedAnswerOf(answered(result), false);
+      const item = itemsOf(stored)[0] as { form: string; segments: ({ literal: string } | { element: unknown; property: string })[] };
+      expect(item.form).toBe('bound');
+      expect(approved(stored)).toBe(true);
+      expect(approved(stored, 'another-source')).toBe(false);
+      const original = JSON.stringify(item.segments);
+      // the binding of the first title replaced in place by its literal text, the item keeping its place in the stored form
+      const index = item.segments.findIndex((segment) => 'element' in segment);
+      item.segments[index] = { literal: 'Jordan Lee' };
+      expect(approved(stored)).toBe(false);
+      item.segments = JSON.parse(original);
+      expect(approved(stored)).toBe(true);
+      const element = item.segments.find((segment) => 'element' in segment) as { property: string };
+      element.property = 'holder';
+      expect(approved(stored)).toBe(false);
+    });
+
+    it('stores every sentence frozen as it was shown when the mask was on', () => {
+      const result = shared([nodeOf('a1', 'Jordan Lee'), nodeOf('a2', 'Maria Gomez')]);
+      expect(itemsOf(storedAnswerOf(answered(result), true)).every((item) => item.form === 'frozen')).toBe(true);
+    });
   });
 
   it('keeps twelve sentences of the model and the three fixed lines, cutting nothing', () => {
