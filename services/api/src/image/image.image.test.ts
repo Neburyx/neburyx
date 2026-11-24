@@ -249,7 +249,7 @@ describe('the enterprise code in the one image', () => {
     expect(migrated.code, migrated.stderr).toBe(0);
     expect(await rows(database.ownerUrl, `SELECT to_regclass('public.kysely_migration_ee') IS NOT NULL AS found`)).toEqual([{ found: true }]);
     const api = await startWith(database, [...withMapping(file, 'enterprise'), ...ASK_ENV]);
-    expect(await (await fetch(`${api.url}/v1/ai/status`)).json()).toEqual({ ask: { available: true }, summary: { available: false }, assistant: { available: true, messageWords: 1000 } });
+    expect(await (await fetch(`${api.url}/v1/ai/status`)).json()).toEqual({ ask: { available: true }, summary: { available: false }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } });
     expect(await (await fetch(`${api.url}/v1/me`)).json()).toMatchObject({ edition: 'enterprise' });
     const logs = await docker(['logs', api.name]);
     expect(logs.stdout + logs.stderr).toContain('profile.extension_loaded');

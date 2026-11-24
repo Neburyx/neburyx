@@ -25,7 +25,7 @@ const VIEW: AssistantTurnAnswer = { status: 'not-answered', route: 'view', sente
 type StoredThread = AssistantThreadResponse;
 const NO_THREAD: StoredThread = { turns: [], earlierTurns: 0, previousThreadClearedAt: null };
 
-async function openWorkspace(page: Page, assistant: { available: false } | { available: true; messageWords: number } = { available: true, messageWords: 1000 }, thread: StoredThread = NO_THREAD): Promise<void> {
+async function openWorkspace(page: Page, assistant: { available: false } | { available: true; messageWords: number; model: string } = { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' }, thread: StoredThread = NO_THREAD): Promise<void> {
   await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: thread }));
   await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant } }));
   await page.goto('/dev/open-entity');
@@ -74,7 +74,7 @@ async function open(page: Page): Promise<void> {
 
 test.describe('the Assistant panel', () => {
   test('gives the input the keyboard hint and the standing note as its accessible description instead of visible lines, shows the turns the server kept as compact rows above the live thread, and the new-thread card for a cleared one', async ({ page }) => {
-    await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 2, steps: 1 }, { id: '0192f000-0000-7000-8000-000000000002', seq: 2, at: '2026-11-18T10:05:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 }], earlierTurns: 0, previousThreadClearedAt: null });
+    await openWorkspace(page, { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' }, { turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 2, steps: 1 }, { id: '0192f000-0000-7000-8000-000000000002', seq: 2, at: '2026-11-18T10:05:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 }], earlierTurns: 0, previousThreadClearedAt: null });
     await open(page);
     await expect(page.getByLabel('Your message')).toHaveAccessibleDescription(/Your message goes to the model as typed\. .*Esc closes\..*The thread is cleared when the investigation closes\./);
     await expect(panel(page).getByText('Showing the earlier chat of this investigation. It is cleared when the investigation is closed.')).toBeVisible();
@@ -91,7 +91,7 @@ test.describe('the Assistant panel', () => {
       return route.fulfill({ json: { nodes: [{ ref: account, display: { title: 'Account AC-1', type: 'account' }, properties: [{ key: 'holder', value: 'Jordan Lee', dataClass: 'name', masked: false }], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } }], edges: [], missing: { entities: [], edges: [] } } });
     });
     const answer = { blocks: [{ kind: 'sentences', items: [{ item: { state: 'segments', segments: [{ literal: 'The holder is ' }, { element: account, property: 'holder' }, { literal: '.' }] }, cites: [account] }, { item: { state: 'withheld' }, cites: [account] }] }] } as AssistantThreadResponse['turns'][number]['answer'];
-    await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 1, steps: 0, question: 'Who holds this account?', answer }], earlierTurns: 0, previousThreadClearedAt: null });
+    await openWorkspace(page, { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' }, { turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 1, steps: 0, question: 'Who holds this account?', answer }], earlierTurns: 0, previousThreadClearedAt: null });
     await open(page);
     await expect(panel(page).getByText('Who holds this account?')).toBeVisible();
     await expect(panel(page).getByText('The holder is Jordan Lee.')).toBeVisible();
@@ -107,7 +107,7 @@ test.describe('the Assistant panel', () => {
     await page.route((url) => url.pathname === '/v1/graph/read-refs', (route) => route.fulfill({ json: { nodes: [{ ref: account, display: { title: 'Account AC-1', type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } }], edges: [], missing: { entities: [], edges: [] } } }));
     const empty = { values: [{ name: 'account', text: 'AC-1' }], lines: [], paths: [], notices: [], noticeTotals: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } };
     const answer = { blocks: [{ kind: 'ask-result', templateId: 'file-query', outcome: 'complete', ...empty, count: { count: { value: 2, quality: 'exact', scope: 'rows' }, noun: 'row' }, listed: 2, rows: [{ form: 'frozen', text: 'J••• L••• → SENT → A•••' }, { form: 'ref', ref: account }] }] } as unknown as AssistantThreadResponse['turns'][number]['answer'];
-    await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'find_accounts', citedElements: 0, steps: 0, question: 'Find the accounts', answer }], earlierTurns: 0, previousThreadClearedAt: null });
+    await openWorkspace(page, { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' }, { turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'find_accounts', citedElements: 0, steps: 0, question: 'Find the accounts', answer }], earlierTurns: 0, previousThreadClearedAt: null });
     await open(page);
     await expect(panel(page).getByText('Find the accounts')).toBeVisible();
     await expect(panel(page).getByText('AC-1', { exact: true }).first()).toBeVisible();
@@ -118,7 +118,7 @@ test.describe('the Assistant panel', () => {
   });
 
   test('shows the new-thread card of an investigation that was closed and reopened', async ({ page }) => {
-    await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z' });
+    await openWorkspace(page, { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' }, { turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z' });
     await open(page);
     await expect(panel(page).getByText('This is a new thread. The previous thread was cleared when the investigation closed.')).toBeVisible();
     await expect(panel(page).getByText('Your graph, notes and saved views are unchanged.')).toBeVisible();
@@ -295,7 +295,7 @@ test.describe('the Assistant panel', () => {
   });
 
   test('refuses a message over the limit before anything is sent, shows a failure card with Try again and keeps the message', async ({ page }) => {
-    await openWorkspace(page, { available: true, messageWords: 3 });
+    await openWorkspace(page, { available: true, messageWords: 3, model: 'claude-sonnet-5-5' });
     let failing = true;
     const sent = await answerWith(page, REFUSE);
     await page.unroute((url) => url.pathname === '/v1/assistant/turns');

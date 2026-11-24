@@ -24,7 +24,7 @@ async function openWithThread(page: Page, clear: (page: Page, calls: string[]) =
     cleared = true;
     return route.fulfill({ json: { cleared: true } });
   });
-  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000 } } }));
+  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } } }));
   await clear(page, calls);
   await page.goto('/dev/open-entity');
   await page.getByRole('button', { name: 'banking-demo' }).click();
@@ -135,7 +135,7 @@ test.describe('Clear chat in the Assistant panel', () => {
       cleared = true;
       return route.fulfill({ json: { cleared: true } });
     });
-    await context.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000 } } }));
+    await context.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } } }));
     const other = await context.newPage();
     const openOn = async (target: typeof page): Promise<void> => {
       await target.goto('/dev/open-entity');

@@ -371,7 +371,7 @@ A heavy stop carries a token that binds the person, the source, the investigatio
 
 ## Checking it
 
-`GET /v1/ai/status` is always there. It answers `{ "ask": { "available": … }, "summary": { "available": … }, "assistant": { "available": … } }`, with `true` for a feature that can be used now: a provider is configured, the feature is on and what it needs is in place (for Ask, its folder is loaded; for the summary, its token key file is set). With no provider configured, all three are `false`. The assistant's entry also carries `messageWords`, the effective limit of a message, when it is `true`.
+`GET /v1/ai/status` is always there. It answers `{ "ask": { "available": … }, "summary": { "available": … }, "assistant": { "available": … } }`, with `true` for a feature that can be used now: a provider is configured, the feature is on and what it needs is in place (for Ask, its folder is loaded; for the summary, its token key file is set). With no provider configured, all three are `false`. The assistant's entry also carries, when it is `true`, `messageWords`, the effective limit of a message, and `model`, the name of the model the operator configured for the assistant (no key or other setting).
 
 A route of a feature that is switched off answers `ACCESS_DENIED` with the reason `ai-off` and the sentence "This AI feature is not available in this release yet: it is switched off, or no AI provider is configured.", audits the refusal, and reads nothing of the request. With no provider configured the AI routes of Ask and the summary do not exist and answer 404; the assistant's endpoint, `POST /v1/assistant/turns`, is answered by the application itself with `403` and the reason `ai-off`.
 

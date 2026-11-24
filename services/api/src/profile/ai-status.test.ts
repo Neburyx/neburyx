@@ -35,6 +35,18 @@ describe('GET /v1/ai/status', () => {
     await silent.close();
   });
 
+  it('answers the model of an available assistant, and refuses an available one without it', async () => {
+    const available = { ask: { available: false }, summary: { available: false }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } };
+    const reporting = await started(extensionSaying(() => available));
+    const answer = await reporting.inject({ url: '/v1/ai/status' });
+    expect([answer.statusCode, answer.json()]).toEqual([200, available]);
+    await reporting.close();
+    // @ts-expect-error an available assistant without its model is not of the declared shape
+    const missing = await started(extensionSaying(() => ({ ...available, assistant: { available: true, messageWords: 1000 } })));
+    expect((await missing.inject({ url: '/v1/ai/status' })).statusCode).toBe(500);
+    await missing.close();
+  });
+
   it('does not pass on an answer of the extension that is not of the declared shape', async () => {
     // @ts-expect-error the answer of an extension that is not of the declared shape
     const app = await started(extensionSaying(() => ({ preview: true })));

@@ -11,7 +11,7 @@ const limitOf = (page: Page): number => Math.floor(0.6 * windowWidth(page));
 
 async function openWorkspace(page: Page): Promise<void> {
   await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } }));
-  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000 } } }));
+  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } } }));
   await page.goto('/dev/open-entity');
   await page.getByRole('button', { name: 'banking-demo' }).click();
   const form = page.getByRole('form', { name: 'Open an entity' });

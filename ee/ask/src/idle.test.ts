@@ -176,7 +176,19 @@ describe('a route of a feature that is switched off', () => {
     expect(extension.aiAvailability?.()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: false } });
     await extension.configure?.({ preview: true }, ENV, CONTEXT);
     extension.createAuditSink?.(SINK_CONTEXT);
-    expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: false }, assistant: { available: true, messageWords: 1000 } });
+    expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: false }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } });
+  });
+
+  it('says the model of the assistant: its own setting when given, which differs from the model of Ask, and no model while unavailable', async () => {
+    const { extension } = counted();
+    await extension.configure?.({ preview: true }, { ...ENV, NEBURYX_ASK_CLASSIFICATION_MODEL: 'ask-model', NEBURYX_ASSISTANT_MODEL: 'assistant-model' }, CONTEXT);
+    extension.createAuditSink?.(SINK_CONTEXT);
+    const status = extension.aiAvailability?.();
+    expect(status?.assistant).toEqual({ available: true, messageWords: 1000, model: 'assistant-model' });
+    expect(JSON.stringify(status)).not.toContain('not-a-real-key');
+    const off = counted({ ask: false, summary: false, assistant: false });
+    await off.extension.configure?.({ preview: true }, ENV, { ...CONTEXT, features: { ask: false, summary: false, assistant: false } });
+    expect(off.extension.aiAvailability?.().assistant).toEqual({ available: false });
   });
 
   it('says the summary is available once its token key file is set', async () => {
@@ -187,7 +199,7 @@ describe('a route of a feature that is switched off', () => {
       const { extension } = counted();
       await extension.configure?.({ preview: true }, { ...ENV, NEBURYX_SUMMARY_TOKEN_KEY_FILE: path }, CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
-      expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000 } });
+      expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } });
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

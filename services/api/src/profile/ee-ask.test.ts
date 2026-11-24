@@ -69,7 +69,7 @@ describe('the real enterprise extension in a start', () => {
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     const answer = await result.app.inject({ url: '/v1/ai/status' });
-    expect([answer.statusCode, answer.json()]).toEqual([200, { ask: { available: true }, summary: { available: false }, assistant: { available: true, messageWords: 1000 } }]);
+    expect([answer.statusCode, answer.json()]).toEqual([200, { ask: { available: true }, summary: { available: false }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } }]);
     expect(registeredRoutesOf(result.app).find((route) => route.url === '/v1/ai/status')).toMatchObject({ method: 'GET', permission: 'principal' });
     expect(routesWithoutPermission(registeredRoutesOf(result.app))).toEqual([]);
     await result.app.close();

@@ -5,8 +5,8 @@ const featureAvailabilitySchema = z.strictObject({ available: z.boolean() });
 /** Which AI features can be used now: a provider is configured, the feature is on and what it needs is in place. */
 const assistantAvailabilitySchema = z.union([
   z.strictObject({ available: z.literal(false) }),
-  /** `messageWords` is the effective limit of a message, so the panel counts against the server's own figure. */
-  z.strictObject({ available: z.literal(true), messageWords: z.number().int().positive() }),
+  /** `messageWords` is the effective limit of a message, so the panel counts against the server's own figure; `model` is the name the operator configured for the Assistant. */
+  z.strictObject({ available: z.literal(true), messageWords: z.number().int().positive(), model: z.string().min(1) }),
 ]);
 
 export const aiStatusResponseSchema = z.strictObject({ ask: featureAvailabilitySchema, summary: featureAvailabilitySchema, assistant: assistantAvailabilitySchema });

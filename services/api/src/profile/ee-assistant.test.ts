@@ -76,11 +76,11 @@ function tokenKeyFile(): string {
   return file;
 }
 
-async function assistantRig(options: { maxSteps?: number; withSummary?: boolean; principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
+async function assistantRig(options: { maxSteps?: number; withSummary?: boolean; principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; env?: Record<string, string>; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
   const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore() });
   const features = options.features ?? { ask: false, summary: options.withSummary === true, assistant: true };
-  const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASSISTANT_TYPOLOGY_FILE: typologyFile(), NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 1), NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), ...(options.withSummary === true ? { NEBURYX_SUMMARY_TOKEN_KEY_FILE: tokenKeyFile(), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '100000' } : {}) }, { sourceIds: ['demo'], features });
+  const configured = await extension.configure?.({}, { ...ENV, ...options.env, NEBURYX_ASSISTANT_TYPOLOGY_FILE: typologyFile(), NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 1), NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), ...(options.withSummary === true ? { NEBURYX_SUMMARY_TOKEN_KEY_FILE: tokenKeyFile(), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '100000' } : {}) }, { sourceIds: ['demo'], features });
   expect(configured).toEqual({ ok: true });
   const events: AuditEvent[] = [];
   const armed = { open: false };
@@ -110,7 +110,15 @@ describe('POST /v1/assistant/turns in the real application, with the assistant a
     expect(rig.stub.bodies).toHaveLength(1);
     expect(rig.events.filter((event) => event.action === 'assistant.route')).toHaveLength(1);
     const status = await rig.rig.app.inject({ url: '/v1/ai/status' });
-    expect(status.json()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: true, messageWords: 1000 } });
+    expect(status.json()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } });
+    await rig.stop();
+  });
+
+  it('says the effective model of the assistant, its own setting rather than the model of Ask, and never the key', async () => {
+    const rig = await assistantRig({ env: { NEBURYX_ASK_CLASSIFICATION_MODEL: 'ask-model', NEBURYX_ASSISTANT_MODEL: 'assistant-model' } });
+    const status = await rig.rig.app.inject({ url: '/v1/ai/status' });
+    expect(status.json()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: true, messageWords: 1000, model: 'assistant-model' } });
+    expect(status.body).not.toContain(ENV.NEBURYX_ASK_API_KEY);
     await rig.stop();
   });
 

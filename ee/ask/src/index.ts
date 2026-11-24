@@ -308,7 +308,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       recordQueue = queue;
     },
     model: modelOf,
-    aiAvailability: () => ({ ask: { available: features.ask && askClassifier() !== undefined }, summary: { available: features.summary && caseSummarizer()?.availability().available === true }, assistant: assistantRouter() !== undefined && assistantSettings !== undefined ? { available: true, messageWords: assistantSettings.maxMessageWords } : { available: false } }),
+    aiAvailability: () => ({ ask: { available: features.ask && askClassifier() !== undefined }, summary: { available: features.summary && caseSummarizer()?.availability().available === true }, assistant: assistantRouter() !== undefined && assistantSettings !== undefined ? { available: true, messageWords: assistantSettings.maxMessageWords, model: assistantSettings.model } : { available: false } }),
     createAuditSink(context) {
       const audit = createAuditSink(context);
       mounted = audit;

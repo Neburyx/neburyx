@@ -43,6 +43,16 @@ describe('the status of the AI features', () => {
     expect(aiStatusResponseSchema.parse(all)).toEqual(all);
   });
 
+  it('carries the Assistant model when available and none when unavailable', () => {
+    const available = { ...all, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } };
+    expect(aiStatusResponseSchema.parse(available)).toEqual(available);
+    expect(aiStatusResponseSchema.safeParse(all).success).toBe(true);
+  });
+
+  it.each([['an available assistant without the model', { ...all, assistant: { available: true, messageWords: 1000 } }], ['an available assistant with an empty model', { ...all, assistant: { available: true, messageWords: 1000, model: '' } }], ['an unavailable assistant with a model', { ...all, assistant: { available: false, model: 'm' } }], ['an unknown field of an available assistant', { ...all, assistant: { available: true, messageWords: 1000, model: 'm', key: 'k' } }]])('refuses %s', (_label, value) => {
+    expect(aiStatusResponseSchema.safeParse(value).success).toBe(false);
+  });
+
   it.each([['an unknown feature', { ...all, other: { available: true } }], ['a missing feature', { ask: { available: true }, summary: { available: true } }], ['an unknown field of a feature', { ...all, ask: { available: true, reason: 'x' } }], ['a value that is not a boolean', { ...all, ask: { available: 'yes' } }], ['the old shape', { preview: true }]])('refuses %s', (_label, value) => {
     expect(aiStatusResponseSchema.safeParse(value).success).toBe(false);
   });
