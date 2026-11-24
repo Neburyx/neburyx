@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { AssistantTable } from "@neburyx/contracts";
 import type { CitationEntry } from "../summary/summary-model.js";
 import { cellOf, columnKinds, headerOf } from "./table-format.js";
@@ -6,6 +7,12 @@ import { ASSISTANT_COPY, droppedRowsText, foldedRowsText, moreNotShownText, sele
 
 const TABLE_FOLD_ABOVE = 10;
 const TABLE_FOLD_HEAD = 3;
+/** The room a tip needs under a cell, in pixels, before it is drawn above the cell. */
+const TIP_ROOM = 80;
+/** The gap between a cell and its tip, in pixels. */
+const TIP_GAP = 4;
+/** How long a tip stays after the pointer leaves its cell, so that the pointer can move onto it. */
+const TIP_LINGER_MS = 150;
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -27,15 +34,34 @@ function tableText(columns: readonly string[], rows: readonly { readonly cells: 
   return [[...columns, sourceLabel].join("\t"), ...rows.map((row) => [...row.cells, row.source].join("\t"))].join("\n");
 }
 
-/** A time stamp shown as date and time is two parts that never break inside, with the space between them the only place the stamp may break. */
-function stampOf(text: string, kind: string | undefined): ReactNode {
-  const match = kind === "stamp" ? /^(\d{4}-\d{2}-\d{2}) (\S.*)$/.exec(text) : null;
-  if (match === null) return text;
-  return (
-    <>
-      <span className="assistant-stamp-part">{match[1]}</span> <span className="assistant-stamp-part">{match[2]}</span>
-    </>
-  );
+/** The full text of a cell that is cut, drawn as a tip under it: where it is, in the window. */
+interface CellTip {
+  readonly text: string;
+  readonly left: number;
+  readonly top: number;
+  readonly above: boolean;
+  /** Whether the keyboard focus opened it: only then does Esc belong to it. */
+  readonly byFocus: boolean;
+}
+
+/** The tip of the cut cell inside a table cell, if the cell cuts its text. */
+function tipOf(cell: Element | null, byFocus = false): CellTip | undefined {
+  const clip = cell?.querySelector<HTMLElement>(".assistant-table-clip");
+  if (cell === null || clip === null || clip === undefined || clip.scrollWidth <= clip.clientWidth) return undefined;
+  const box = cell.getBoundingClientRect();
+  const above = box.bottom + TIP_ROOM > window.innerHeight;
+  return { text: clip.textContent ?? "", left: box.left, top: above ? box.top - TIP_GAP : box.bottom + TIP_GAP, above, byFocus };
+}
+
+/** The tip of a row that has the keyboard focus: the full text of its cut cells (with the column of each when there are several), under the first of them. */
+function rowTipOf(row: Element, columns: readonly string[]): CellTip | undefined {
+  const cut = [...row.querySelectorAll("td")].flatMap((cell, column) => {
+    const tip = tipOf(cell, true);
+    return tip === undefined ? [] : [{ tip, label: columns[column] ?? "" }];
+  });
+  const first = cut[0];
+  if (first === undefined) return undefined;
+  return { ...first.tip, text: cut.length === 1 ? first.tip.text : cut.map((entry) => `${entry.label}: ${entry.tip.text}`).join("\n") };
 }
 
 /** One table block of an answer: its caption row with Copy table, the header and rows with a Source cell, its notices and its note. Folds and copies on its own. */
@@ -51,56 +77,54 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
   };
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollsOn, setScrollsOn] = useState(false);
-  const [tight, setTight] = useState(false);
   const [squeezed, setSqueezed] = useState(false);
+  const [tip, setTip] = useState<CellTip | undefined>(undefined);
+  const lingering = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const showTip = (next: CellTip | undefined): void => {
+    clearTimeout(lingering.current);
+    setTip(next);
+  };
+  const hideTipSoon = (): void => {
+    clearTimeout(lingering.current);
+    lingering.current = setTimeout(() => setTip(undefined), TIP_LINGER_MS);
+  };
+  useEffect(() => () => clearTimeout(lingering.current), []);
   useEffect(() => {
     const element = scroller.current;
     if (element === null) return undefined;
-    // the full title of a row is drawn over its cell up to the Source column: how far that is from the cell
-    const placeRoom = (): void => {
-      const title = element.querySelector<HTMLElement>("th.assistant-table-title-cell");
-      const source = element.querySelector<HTMLElement>("th:last-child");
-      if (title !== null && source !== null) element.style.setProperty("--assistant-table-room", `${Math.max(0, element.clientWidth - source.offsetWidth - (title.offsetLeft - element.scrollLeft))}px`);
-    };
-    // the full title is drawn over a cell only where the cell cuts it
-    const markCut = (): void => {
-      for (const clip of element.querySelectorAll<HTMLElement>(".assistant-table-title-clip")) {
-        const cell = clip.parentElement;
-        if (cell !== null) cell.toggleAttribute("data-cut", clip.scrollWidth > clip.clientWidth);
-      }
-    };
-    const measure = (probe = true): void => {
+    const measure = (): void => {
       setScrollsOn(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
-      // scrolling changes none of the widths: only a change of size or of rows probes the layout again
-      if (!probe) {
-        placeRoom();
-        return;
-      }
-      // the title column keeps its content width until the table overflows with every cell at its cap: only then does it give way (with its ellipsis); measured without the squeeze, so that a wider panel lets it go
-      const wasTight = element.classList.contains("assistant-table-tight");
-      element.classList.remove("assistant-table-tight", "assistant-table-squeezed");
-      const titleHead = element.querySelector<HTMLElement>("th.assistant-table-title-cell");
-      if (titleHead !== null) {
-        // the floor of the title column is a width of its text: its own width without the padding, which the column keeps besides
-        const style = getComputedStyle(titleHead);
+      // the title column keeps its content width until the table overflows with every cell at its cap: only then does it give way (with its ellipsis) down to a floor; measured without the squeeze, so that a wider panel lets it go
+      element.classList.remove("assistant-table-squeezed");
+      const head = element.querySelector<HTMLElement>("th.assistant-table-title-cell");
+      if (head !== null) {
+        // the floor of the title column is a width of its text: that of its widest value or label, without the padding the column keeps besides
+        const style = getComputedStyle(head);
         const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        let widest = head.scrollWidth - padding;
+        for (const clip of element.querySelectorAll<HTMLElement>("td.assistant-table-title-cell .assistant-table-clip")) widest = Math.max(widest, clip.scrollWidth);
         element.style.setProperty("--assistant-table-title-pad", `${padding}px`);
-        element.style.setProperty("--assistant-table-title-natural", `${Math.max(0, titleHead.getBoundingClientRect().width - padding)}px`);
+        element.style.setProperty("--assistant-table-title-natural", `${Math.max(0, widest)}px`);
       }
       const naturalOverflow = element.scrollWidth > element.clientWidth;
       if (naturalOverflow) element.classList.add("assistant-table-squeezed");
-      // a table is tight when it overflows with its time stamps kept whole, even squeezed: measured without the breaks, so that a wider panel lets them go
-      const overflows = element.scrollWidth > element.clientWidth;
-      if (wasTight) element.classList.add("assistant-table-tight");
       setSqueezed(naturalOverflow);
-      setTight(overflows);
-      placeRoom();
-      markCut();
     };
     measure();
-    const onScroll = (): void => measure(false);
+    const onScroll = (): void => {
+      setScrollsOn(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
+      setTip(undefined);
+    };
     element.addEventListener("scroll", onScroll);
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => measure());
+    // a tip is placed for the layout it was drawn in: a change of width takes it away
+    let width = element.clientWidth;
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => {
+      if (element.clientWidth !== width) {
+        width = element.clientWidth;
+        setTip(undefined);
+      }
+      measure();
+    });
     observer?.observe(element);
     // the widths measured are those of the fallback face until the fonts of the page are loaded
     let gone = false;
@@ -110,7 +134,26 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
       element.removeEventListener("scroll", onScroll);
       observer?.disconnect();
     };
-  }, [table, unfolded, tight, squeezed]);
+  }, [table, unfolded, squeezed]);
+  useEffect(() => {
+    if (tip === undefined) return undefined;
+    const hide = (): void => setTip(undefined);
+    // Esc takes the tip away and goes no further, as on the copy buttons
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      // a tip the pointer opened does not take the key from what the person is doing; one the keyboard opened does
+      if (tip.byFocus) event.stopPropagation();
+      hide();
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", hide);
+    window.addEventListener("scroll", hide, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("resize", hide);
+      window.removeEventListener("scroll", hide, true);
+    };
+  }, [tip]);
   const longTable = table.rows.length > TABLE_FOLD_ABOVE;
   const folds = longTable && !unfolded;
   const rows = table.rows.map((row, index) => ({ row, index }));
@@ -139,18 +182,20 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
       <tr
         key={entry.index}
         className="assistant-table-row"
+        onFocus={(event) => showTip(event.target instanceof Element && event.target.matches(":focus-visible") ? rowTipOf(event.currentTarget, table.columns) : undefined)}
+        onBlur={(event) => {
+          if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) showTip(undefined);
+        }}
+        onMouseOver={(event) => showTip(event.target instanceof Element ? tipOf(event.target.closest("td")) : undefined)}
+        onMouseLeave={hideTipSoon}
         onClick={(event) => {
           if (!(event.target instanceof Element) || event.target.closest("button") === null) onSelectRow(entry.row.cites);
         }}
       >
         {entry.row.cells.map((cell, column) => (
-          column === titleColumn ? (
-            <td key={column} className={classOf(column)} title={cell} data-full={cell}>
-              <span className="assistant-table-title-clip">{cell}</span>
-            </td>
-          ) : (
-            <td key={column} className={classOf(column)} title={kinds[column] === "text" ? cell : undefined}>{stampOf(cellOf(cell, kinds[column] ?? "text", table.rows, column), kinds[column])}</td>
-          )
+          <td key={column} className={classOf(column)}>
+            {kinds[column] === "text" ? <span className="assistant-table-clip">{cell}</span> : cellOf(cell, kinds[column] ?? "text", table.rows, column)}
+          </td>
         ))}
         <td className="assistant-table-cite">
           <span className="summary-chips">{markersOf(entry.row.cites)}</span>
@@ -177,7 +222,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         <span className="visually-hidden" role="status">{copy === "copied" ? ASSISTANT_COPY.tableCopied : copy === "failed" ? ASSISTANT_COPY.tableCopyFailed : ""}</span>
       </div>
       {copy === "failed" ? <p className="assistant-table-notice" role="note">{ASSISTANT_COPY.tableCopyFailed}</p> : null}
-      <div ref={scroller} className={`assistant-table-scroll${scrollsOn ? " assistant-table-scrolls" : ""}${tight ? " assistant-table-tight" : ""}${squeezed ? " assistant-table-squeezed" : ""}`}>
+      <div ref={scroller} className={`assistant-table-scroll${scrollsOn ? " assistant-table-scrolls" : ""}${squeezed ? " assistant-table-squeezed" : ""}`}>
         <table className="assistant-table">
           <caption className="visually-hidden">{table.title}</caption>
           <thead>
@@ -191,6 +236,14 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
           <tbody>{body}</tbody>
         </table>
       </div>
+      {tip === undefined || typeof document === "undefined"
+        ? null
+        : createPortal(
+            <div className={`assistant-table-tip${tip.above ? " assistant-table-tip-above" : ""}`} style={{ left: tip.left, top: tip.top }} aria-hidden="true" onMouseEnter={() => clearTimeout(lingering.current)} onMouseLeave={hideTipSoon}>
+              {tip.text}
+            </div>,
+            document.body,
+          )}
       {table.moreNotShown === undefined ? null : (
         <div className="assistant-table-notice" role="note">
           <strong>{ASSISTANT_COPY.moreNotShownTitle}</strong>

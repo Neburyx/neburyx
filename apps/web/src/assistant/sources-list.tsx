@@ -25,10 +25,13 @@ export function SourcesList({
   const focusAfterShowAll = useRef<string | undefined>(undefined);
   const rows = groupSources(entries);
   const lines = useRef(new Map<number, HTMLButtonElement>());
+  /** The number the list was asked to show: its row (or the line of its group) is marked, besides having the focus, so that a pointer user sees where it is too. */
+  const [marked, setMarked] = useState<number | undefined>(undefined);
   const target = focusRequest?.number;
   useEffect(() => {
     if (target === undefined) return;
     lines.current.get(target)?.focus();
+    setMarked(target);
     onFocusHandled();
   }, [target, focusRequest?.tick, onFocusHandled]);
   const hasGroup = rows.some((row) => row.kind === "group");
@@ -42,6 +45,8 @@ export function SourcesList({
       <button
         type="button"
         className="assistant-source-row"
+        data-marked={marked === entry.number ? "" : undefined}
+        onBlur={() => setMarked(undefined)}
         ref={(button) => {
           if (button !== null && !nested) lines.current.set(entry.number, button);
           if (button === null || focusAfterShowAll.current !== entry.key) return;
@@ -69,6 +74,8 @@ export function SourcesList({
         <button
           type="button"
           className="assistant-source-row assistant-group-line"
+          data-marked={marked !== undefined && row.members.some((member) => member.number === marked) ? "" : undefined}
+          onBlur={() => setMarked(undefined)}
           ref={(button) => {
             if (button !== null) for (const member of row.members) lines.current.set(member.number, button);
           }}

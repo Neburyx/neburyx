@@ -231,11 +231,11 @@ test.describe('the wide Assistant panel', () => {
     await openWorkspace(page);
     await wideButton(page).click();
     await answerWithStamps(page);
-    const oneLine = await panel(page).getByRole('table').evaluate((element) => [...element.querySelectorAll('tbody tr')].map((row) => new Set([...(row.children[3] as HTMLElement).querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().top))).size === 1));
+    const oneLine = await panel(page).getByRole('table').evaluate((element) => [...element.querySelectorAll('tbody tr')].map((row) => (row.children[3] as HTMLElement).getBoundingClientRect().height < 32));
     expect(oneLine).toEqual([true, true, true]);
   });
 
-  test('lets the time stamps break at the default width, keeps them on one line when the panel goes wide, and whole and clear of Source when it goes back', async ({ page }) => {
+  test('keeps the time stamps on one line at the default width and in the wide panel, and whole and clear of Source at the end of the scroll when it goes back', async ({ page }) => {
     await openWorkspace(page);
     await answerWithStamps(page);
     const table = panel(page).getByRole('table');
@@ -243,14 +243,14 @@ test.describe('the wide Assistant panel', () => {
       const source = element.querySelector('th:last-child') as HTMLElement;
       return [...element.querySelectorAll('tbody tr')].map((row) => {
         const cell = row.children[3] as HTMLElement;
-        return { oneLine: new Set([...cell.querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().top))).size === 1, clear: cell.getBoundingClientRect().right <= source.getBoundingClientRect().left + 1, inside: cell.getBoundingClientRect().left >= (element.closest('.assistant-table-scroll') as HTMLElement).getBoundingClientRect().left - 1, clipped: cell.scrollWidth > cell.clientWidth };
+        return { oneLine: cell.getBoundingClientRect().height < 32, clear: cell.getBoundingClientRect().right <= source.getBoundingClientRect().left + 1, inside: cell.getBoundingClientRect().left >= (element.closest('.assistant-table-scroll') as HTMLElement).getBoundingClientRect().left - 1, clipped: cell.scrollWidth > cell.clientWidth };
       });
     });
     const scroller = panel(page).locator('.assistant-table-scroll');
     const toEnd = async () => { await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth; }); await expect(scroller).not.toHaveClass(/assistant-table-scrolls/); };
     // the title column keeps a readable identifier, so at the default width the table may scroll inside itself: its end is what is measured
     await toEnd();
-    for (const stamp of await stamps()) expect(stamp).toMatchObject({ clear: true, inside: true, clipped: false });
+    for (const stamp of await stamps()) expect(stamp).toMatchObject({ oneLine: true, clear: true, inside: true, clipped: false });
     await wideButton(page).click();
     await expect.poll(async () => (await stamps()).every((stamp) => stamp.oneLine)).toBe(true);
     await wideButton(page).click();

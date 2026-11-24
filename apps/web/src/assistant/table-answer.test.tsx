@@ -172,6 +172,31 @@ describe('the Assistant panel: a table answer', () => {
     expect(document.activeElement).toBe(row);
   });
 
+  it('opens the Sources list at the element of a later row, with focus and a mark on its entry, and marks no other', async () => {
+    const refs = [1, 2, 3, 4, 5].map((index) => ref('a', 'type-a', `ent-${index}`));
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      blocks: [{ kind: 'table', table: { title: 'figures · 12 rows', columns: ['Element', 'Code'], rows: Array.from({ length: 12 }, (_, index) => ({ cells: [`item-${index + 1}`, `code-${index + 1}`], cites: [`n${Math.min(index + 1, 5)}`] })), note: 'Each row selects its elements on the graph.' } }],
+      citations: refs.map((entity, index) => ({ key: `n${index + 1}`, kind: 'entity' as const, ref: entity })),
+      coverage: { retrieval: '5 shown · exact', summary: '12 of 12 figures in view shown · exact' },
+      model: 'stub-model',
+      calls: 2,
+    };
+    const h = harness(async () => ok(answer));
+    h.state.show({ id: 'inv-2', sourceId: 'a', record: RECORD, resultKeys: [key('a')], nodeRefs: refs, edgeRefs: [] }, [{ key: key('a'), result: { sourceId: 'a', nodes: refs.map((entity) => node('a', entity.stableId)), edges: [] } }]);
+    render(h.tree());
+    await typeAndSend('show them as a table');
+    await screen.findByText('AI-drafted');
+    await userEvent.click(within(screen.getByRole('table')).getAllByRole('button', { name: 'Show source [3]' })[0] as HTMLElement);
+    const row = await screen.findByRole('button', { name: /^Sources: 3,/ });
+    expect(document.activeElement).toBe(row);
+    expect(row.hasAttribute('data-marked')).toBe(true);
+    expect(document.querySelectorAll('.assistant-source-row[data-marked]')).toHaveLength(1);
+    await userEvent.tab();
+    expect(document.querySelectorAll('.assistant-source-row[data-marked]')).toHaveLength(0);
+  });
+
   it('selects the elements of a row from a click on the row and from its select button, and not from a click on a marker twice', async () => {
     const h = await draw(tableAnswer());
     const table = screen.getByRole('table');
@@ -325,9 +350,8 @@ describe('the Assistant panel: a table answer', () => {
     expect(within(table).getByText('203.6')).toBeTruthy();
     expect(within(table).getAllByRole('cell').some((cell) => cell.textContent === '2022-09-09 22:33:00')).toBe(true);
     const title = within(table).getByText('Element with a rather long title 1').closest('td');
-    expect(title?.getAttribute('title')).toBe('Element with a rather long title 1');
-    expect(title?.getAttribute('data-full')).toBe('Element with a rather long title 1');
     expect(title?.className).toBe('assistant-table-title-cell');
+    expect(title?.querySelector('.assistant-table-clip')?.textContent).toBe('Element with a rather long title 1');
   });
 
   it('copies the cells as read when the table draws them grouped and formatted', async () => {

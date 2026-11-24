@@ -432,6 +432,11 @@
   font-weight: 400;
 }
 
+/* the row the list was asked to show, from the arrow of a table row or a marker */
+.assistant-source-row[data-marked] {
+  background: var(--color-accent-surface);
+}
+
 .assistant-source-row .summary-chip.assistant-marker {
   padding: var(--space-2) var(--space-6);
   background: var(--color-accent-surface);
@@ -905,7 +910,7 @@
 
 /* a cell is one line sized to its content; one that is longer than the cap is cut with an ellipsis and carries its full text as a tooltip */
 .assistant-table th:not(:last-child),
-.assistant-table td:not(.assistant-table-cite, .assistant-table-title-cell) {
+.assistant-table td:not(.assistant-table-cite) {
   max-width: var(--assistant-table-cell-max);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -919,21 +924,6 @@
   border-bottom: var(--border-width) solid var(--assistant-table-rule);
 }
 
-.assistant-table .assistant-table-number,
-.assistant-table .assistant-table-stamp {
-  white-space: nowrap;
-  overflow-wrap: normal;
-}
-
-/* a table that is too wide even with every cell at its cap lets a time stamp break between its date and its time, before it scrolls */
-.assistant-table-tight .assistant-table .assistant-table-stamp {
-  white-space: normal;
-}
-
-.assistant-stamp-part {
-  white-space: nowrap;
-}
-
 .assistant-table td.assistant-table-title-cell,
 .assistant-table th.assistant-table-title-cell {
   min-width: var(--assistant-table-title-min);
@@ -944,50 +934,36 @@
 .assistant-table-squeezed .assistant-table th.assistant-table-title-cell {
   width: 100%;
   max-width: 0;
-  /* the title never gives way below a readable identifier: what it measures when whole, up to the floor */
+  /* the title never gives way below a readable identifier: what its widest value measures, up to the floor of 20 characters */
   min-width: calc(min(var(--assistant-table-title-natural, var(--assistant-table-title-floor)), var(--assistant-table-title-floor)) + var(--assistant-table-title-pad, 0px));
 }
 
-.assistant-table th.assistant-table-title-cell,
-.assistant-table-title-clip {
+.assistant-table-clip {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.assistant-table th.assistant-table-title-cell {
-  display: table-cell;
+/* the full text of a cut cell, under it while it is pointed at or its row has the keyboard focus: white, bordered and raised as the other tips, outside the frame of the table, so it covers no other value half-way */
+.assistant-table-tip {
+  position: fixed;
+  z-index: var(--layer-tip);
+  max-width: var(--assistant-table-tip-max);
+  padding: var(--space-6) var(--space-10);
+  border: var(--border-width) solid var(--color-tooltip-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-tooltip);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 
-.assistant-table td.assistant-table-title-cell {
-  position: relative;
-  max-width: var(--assistant-table-cell-max);
-}
-
-/* the full title is drawn over its cell while the row is pointed at or has focus: nothing in the table changes size */
-.assistant-table td.assistant-table-title-cell::after {
-  content: attr(data-full) / "";
-  display: none;
-  position: absolute;
-  top: 50%;
-  left: 0;
-  z-index: 1;
-  padding-block: 0;
-  padding-left: inherit;
-  padding-right: inherit;
-  transform: translateY(-50%);
-  max-width: var(--assistant-table-room, 20ch);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: var(--color-surface-muted);
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.assistant-table-row:hover td.assistant-table-title-cell[data-cut]::after,
-.assistant-table-row:focus-within td.assistant-table-title-cell[data-cut]::after {
-  display: block;
+.assistant-table-tip-above {
+  transform: translateY(-100%);
 }
 
 .assistant-table th:last-child,

@@ -575,7 +575,7 @@ test.describe('the Assistant panel', () => {
     });
   }
 
-  test('keeps every value of a table whole in the 380 pixel panel: the title column gives way with its ellipsis, and an instant is read in full beside the Source column', async ({ page }) => {
+  test('keeps every value of a table whole in the 380 pixel panel: a time stamp stays on one line and is read in full beside the Source column at the end of the scroll, and the title column gives way with its ellipsis down to its floor', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openWorkspace(page);
     const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
@@ -596,6 +596,9 @@ test.describe('the Assistant panel', () => {
     const table = panel(page).getByRole('table', { name: 'Transactions · 3 rows' });
     await expect(table).toBeVisible();
     expect(Math.round((await panel(page).boundingBox())?.width ?? 0)).toBeLessThanOrEqual(380);
+    // the title column keeps a readable identifier, so the table scrolls inside its frame: its end is what is measured
+    await panel(page).locator('.assistant-table-scroll').evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+    await expect(panel(page).locator('.assistant-table-scroll')).not.toHaveClass(/assistant-table-scrolls/);
     const measured = await table.evaluate((element) => {
       const scroller = element.closest('.assistant-table-scroll') as HTMLElement;
       const scrollerBox = scroller.getBoundingClientRect();
@@ -608,14 +611,15 @@ test.describe('the Assistant panel', () => {
           const box = cell.getBoundingClientRect();
           return { text: cell.textContent, clipped: cell.scrollWidth > cell.clientWidth, insideLeft: box.left >= scrollerBox.left - 1, clearOfSource: box.right <= source.getBoundingClientRect().left + 1 };
         }),
-        oneLine: rowsOf.map((row) => new Set([...(row.children[2] as HTMLElement).querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().top))).size === 1),
-        titles: rowsOf.map((row) => { const cell = row.children[0] as HTMLElement; const clip = cell.querySelector('.assistant-table-title-clip') as HTMLElement; return { text: clip.textContent, cut: clip.scrollWidth > clip.clientWidth, tooltip: cell.getAttribute('title') }; }),
+        oneLine: rowsOf.map((row) => (row.children[2] as HTMLElement).getBoundingClientRect().height < 32),
+        header: (element.querySelectorAll('thead th')[2] as HTMLElement).getBoundingClientRect().height < 32,
+        titles: rowsOf.map((row) => { const clip = (row.children[0] as HTMLElement).querySelector('.assistant-table-clip') as HTMLElement; return { text: clip.textContent, cut: clip.scrollWidth > clip.clientWidth }; }),
       };
     });
-    expect(measured.scrolls).toBe(false);
+    expect(measured.scrolls).toBe(true);
     expect(measured.oneLine).toEqual([true, true, true]);
+    expect(measured.header).toBe(true);
     for (const [index, instant] of measured.instants.entries()) expect(instant).toEqual({ text: `2022-09-09 22:3${index}:00`, clipped: false, insideLeft: true, clearOfSource: true });
-    for (const title of measured.titles) expect(title.tooltip).toBe(title.text);
     expect(measured.titles.some((title) => title.cut)).toBe(true);
   });
 
@@ -646,17 +650,29 @@ test.describe('the Assistant panel', () => {
       return { scrollWidth: scrollerElement.scrollWidth, widths: [...element.querySelectorAll('thead th')].map((cell) => Math.round(cell.getBoundingClientRect().width)), tops: [...element.querySelectorAll('tbody tr')].map((row) => Math.round(row.getBoundingClientRect().top)) };
     });
     const before = await layout();
-    await table.locator('tbody tr').first().hover();
+    await table.locator('tbody tr td.assistant-table-title-cell').first().hover();
     expect(await layout()).toEqual(before);
-    const overlay = await table.evaluate((element) => {
+    const tip = page.locator('.assistant-table-tip');
+    await expect(tip).toBeVisible();
+    const placed = await table.evaluate((element) => {
       const cell = element.querySelector('tbody tr td.assistant-table-title-cell') as HTMLElement;
-      const after = getComputedStyle(cell, '::after');
-      const source = element.querySelector('th:last-child') as HTMLElement;
-      return { shown: after.display !== 'none', right: cell.getBoundingClientRect().left + parseFloat(after.width), sourceLeft: source.getBoundingClientRect().left };
+      const box = cell.getBoundingClientRect();
+      const tipBox = (document.querySelector('.assistant-table-tip') as HTMLElement).getBoundingClientRect();
+      const style = getComputedStyle(document.querySelector('.assistant-table-tip') as HTMLElement);
+      return { text: (document.querySelector('.assistant-table-tip') as HTMLElement).textContent, full: (cell.querySelector('.assistant-table-clip') as HTMLElement).textContent, below: tipBox.top >= box.bottom - 1, left: Math.abs(tipBox.left - box.left) <= 1, border: style.borderTopWidth, shadow: style.boxShadow !== 'none', position: style.position };
     });
-    expect(overlay.shown).toBe(true);
-    expect(await table.locator('tbody tr td.assistant-table-title-cell').first().getAttribute('data-cut')).not.toBeNull();
-    expect(overlay.right).toBeLessThanOrEqual(overlay.sourceLeft + 1);
+    expect(placed).toEqual({ text: placed.full, full: placed.full, below: true, left: true, border: '1px', shadow: true, position: 'fixed' });
+    await page.mouse.move(5, 5);
+    await expect(tip).toHaveCount(0);
+    // a tip the keyboard opened is closed by Esc, which then goes no further
+    const select = table.locator('tbody tr').first().getByRole('button', { name: 'Select row 1 on graph' });
+    await select.focus();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    await expect(tip).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tip).toHaveCount(0);
+    await expect(panel(page)).toBeVisible();
     const floor = await table.evaluate((element) => {
       const title = element.querySelector('thead th.assistant-table-title-cell') as HTMLElement;
       return { width: title.getBoundingClientRect().width, least: parseFloat(getComputedStyle(title).minWidth) };
@@ -674,7 +690,7 @@ test.describe('the Assistant panel', () => {
     for (const value of whole) expect(value).toEqual({ clipped: false, clear: true });
   });
 
-  test('fits a title, an amount, a time stamp and the Source column in the 380 pixel panel without scrolling when a row cites three elements, with one marker whose name and tooltip list all three', async ({ page }) => {
+  test('draws one marker whose name and tooltip list all three elements a row cites, beside a title, an amount and a time stamp, in the 380 pixel panel', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openWorkspace(page);
     const ref = (stableId: string) => ({ sourceId: 'banking-demo', entityType: 'account', stableId });
@@ -694,7 +710,6 @@ test.describe('the Assistant panel', () => {
     await page.keyboard.press('Enter');
     const table = panel(page).getByRole('table', { name: 'Transactions · 3 rows' });
     await expect(table).toBeVisible();
-    await expect(panel(page).locator('.assistant-table-scroll')).not.toHaveClass(/assistant-table-scrolls/);
     const markers = table.getByRole('button', { name: /^Citations: Citation 1, .*; Citation 2, .*; Citation 3, / });
     await expect(markers).toHaveCount(3);
     await expect(markers.first()).toHaveText('[1–3]');
@@ -703,16 +718,17 @@ test.describe('the Assistant panel', () => {
     expect(cut).toEqual([false, false, false]);
   });
 
-  test('keeps a short identifier of the first column whole in the 380 pixel panel, scrolling inside the table when the columns do not fit, with the Source column in view', async ({ page }) => {
+  test('keeps identifiers of 12 characters that share their first 9 whole in the 380 pixel panel with a table of five columns and 25 rows, folded: the table scrolls inside its frame, stamps and headers stay on one line, and a cut value shows its tip', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openWorkspace(page);
-    const rows = ['ITM-99381', 'ITM-99377', 'ITM-99362'].map((id, index) => ({ cells: [id, `Account 70:10039115${index}`, `${1664 + index}.72`, `2026-10-2${index + 5}`], cites: ['n1'] }));
+    const narratives = ['Transfer to supplier for invoice 2231', 'Deposit at the branch counter', 'Payment of the card statement'];
+    const rows = Array.from({ length: 25 }, (_, index) => ({ cells: [`TX-0048338${41 + index}`, narratives[index % 3] ?? '', ['Cash', 'Wire', 'Card'][index % 3] ?? '', `${(1664.72 - index * 11.3).toFixed(2)}`, `2022-09-09T22:${String(33 + (index % 20)).padStart(2, '0')}:00Z`], cites: ['n1'] }));
     const answer: AssistantTurnAnswer = {
       status: 'answered',
       route: 'view',
-      blocks: [{ kind: 'table', table: { title: 'Items · 3 rows', columns: ['Item', 'From', 'Amount', 'Date'], rows, note: 'Each row selects its elements on the graph.' } }],
+      blocks: [{ kind: 'table', table: { title: 'Transactions · 25 rows', columns: ['Transaction', 'Narrative', 'Channel', 'Amount USD', 'Timestamp'], rows, note: 'Each row selects its elements on the graph.' } }],
       citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' } }],
-      coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '3 of 3 items in view shown · exact' },
+      coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '25 of 25 transactions in view shown · exact' },
       model: 'claude-sonnet-5-5',
       calls: 2,
     };
@@ -720,26 +736,40 @@ test.describe('the Assistant panel', () => {
     await open(page);
     await page.getByLabel('Your message').fill('show them as a table');
     await page.keyboard.press('Enter');
-    const table = panel(page).getByRole('table', { name: 'Items · 3 rows' });
+    const table = panel(page).getByRole('table', { name: 'Transactions · 25 rows' });
     await expect(table).toBeVisible();
+    const scroller = panel(page).locator('.assistant-table-scroll');
+    await expect(scroller).toHaveClass(/assistant-table-scrolls/);
     const measured = await table.evaluate((element) => {
-      const scroller = element.closest('.assistant-table-scroll') as HTMLElement;
-      const source = element.querySelector('th:last-child') as HTMLElement;
-      const scrollerBox = scroller.getBoundingClientRect();
+      const body = [...element.querySelectorAll('tbody tr:not(.assistant-table-fold)')] as HTMLElement[];
+      const head = [...element.querySelectorAll('thead th')] as HTMLElement[];
       return {
-        identifiers: [...element.querySelectorAll('tbody tr td:first-child')].map((cell) => { const clip = cell.querySelector('.assistant-table-title-clip') as HTMLElement; return { text: clip.textContent, cut: clip.scrollWidth > clip.clientWidth }; }),
-        sourceInView: source.getBoundingClientRect().right <= scrollerBox.right + 1,
+        rows: body.length,
+        identifiers: body.map((row) => { const clip = row.querySelector('td .assistant-table-clip') as HTMLElement; return { text: clip.textContent, cut: clip.scrollWidth > clip.clientWidth }; }),
+        stampsOneLine: body.map((row) => (row.children[4] as HTMLElement).getBoundingClientRect().height < 32),
+        headersOneLine: head.map((cell) => cell.getBoundingClientRect().height < 32),
         pageScrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       };
     });
-    await expect(panel(page).locator('.assistant-table-scroll')).toHaveClass(/assistant-table-squeezed/);
-    const floor = await table.evaluate((element) => { const title = element.querySelector('thead th.assistant-table-title-cell') as HTMLElement; return { width: title.getBoundingClientRect().width, least: parseFloat(getComputedStyle(title).minWidth) }; });
-    expect(floor.width).toBeGreaterThanOrEqual(floor.least - 1);
+    expect(measured.rows).toBe(4);
     for (const identifier of measured.identifiers) expect(identifier.cut, identifier.text ?? '').toBe(false);
-    await table.locator('tbody tr').first().hover();
-    expect(await table.evaluate((element) => getComputedStyle(element.querySelector('tbody td.assistant-table-title-cell') as HTMLElement, '::after').display), 'no overlay over a title that is not cut').toBe('none');
-    expect(measured.sourceInView).toBe(true);
+    expect(measured.stampsOneLine.every(Boolean)).toBe(true);
+    expect(measured.headersOneLine.every(Boolean)).toBe(true);
     expect(measured.pageScrolls).toBe(false);
+    const first = table.locator('tbody tr').first();
+    await first.locator('td').first().hover();
+    await expect(page.locator('.assistant-table-tip'), 'no tip over a value that is not cut').toHaveCount(0);
+    await first.locator('td').nth(1).hover();
+    await expect(page.locator('.assistant-table-tip')).toHaveText(narratives[0] ?? '');
+    await page.locator('.assistant-table-tip').hover();
+    await page.waitForTimeout(400);
+    await expect(page.locator('.assistant-table-tip'), 'the pointer can move onto the tip').toHaveCount(1);
+    await page.mouse.move(5, 5);
+    await expect(page.locator('.assistant-table-tip')).toHaveCount(0);
+    await first.getByRole('button', { name: 'Select row 1 on graph' }).focus();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.locator('.assistant-table-tip')).toHaveText(narratives[0] ?? '');
   });
 
   test('keeps the date and the time of every time stamp whole in a mixed answer at the default panel width: a sentence, a table of four columns and a list', async ({ page }) => {
@@ -774,11 +804,10 @@ test.describe('the Assistant panel', () => {
       return [...element.querySelectorAll('tbody tr')].map((row) => {
         const cell = row.children[3] as HTMLElement;
         const box = cell.getBoundingClientRect();
-        const parts = [...cell.querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().height));
-        return { clipped: cell.scrollWidth > cell.clientWidth, clear: box.right <= source.getBoundingClientRect().left + 1, inside: box.left >= (element.closest('.assistant-table-scroll') as HTMLElement).getBoundingClientRect().left - 1, text: cell.textContent, partsOneLine: parts.every((height) => height < 24) };
+        return { clipped: cell.scrollWidth > cell.clientWidth, clear: box.right <= source.getBoundingClientRect().left + 1, inside: box.left >= (element.closest('.assistant-table-scroll') as HTMLElement).getBoundingClientRect().left - 1, text: cell.textContent, oneLine: cell.getBoundingClientRect().height < 32 };
       });
     });
-    for (const [index, stamp] of measured.entries()) expect(stamp).toEqual({ clipped: false, clear: true, inside: true, text: `2022-09-09 23:5${index}:00`, partsOneLine: true });
+    for (const [index, stamp] of measured.entries()) expect(stamp).toEqual({ clipped: false, clear: true, inside: true, text: `2022-09-09 23:5${index}:00`, oneLine: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 

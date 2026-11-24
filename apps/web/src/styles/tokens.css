@@ -65,7 +65,8 @@
   --assistant-table-rule: #e3e6ec;
   --assistant-table-cell-max: 28ch;
   --assistant-table-title-min: 8ch;
-  --assistant-table-title-floor: 13ch;
+  --assistant-table-title-floor: 20ch;
+  --assistant-table-tip-max: 360px;
   --assistant-page-head-height: 64px;
   --assistant-page-column: 720px;
   --assistant-page-button-height: 32px;
@@ -84,6 +85,7 @@
   --panel-toggle-size: 24px;
   --panel-toggle-icon-size: 14px;
   --layer-menu: 10;
+  --layer-tip: 50;
   --tool-button-size: 32px;
   --tool-icon-size: 16px;
   --tool-check-size: 14px;
