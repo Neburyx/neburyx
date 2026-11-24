@@ -412,6 +412,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const askPatternFinders: { current?: NonNullable<ExtensionMount['askPatternFindFor']> } = {};
   const elementReaders: { current?: NonNullable<ExtensionMount['readElementsFor']>; source?: NonNullable<ExtensionMount['readSourceElementsFor']> } = {};
   const investigationChecks: { current?: NonNullable<ExtensionMount['investigationReadableFor']> } = {};
+  const chatInvestigationLists: { current?: NonNullable<ExtensionMount['chatInvestigationsFor']> } = {};
   const investigationSources: { current?: NonNullable<ExtensionMount['investigationSourceFor']> } = {};
   const aiNotesCapabilities: { current?: NonNullable<ExtensionMount['aiNotesFor']> } = {};
   if (options.extension !== undefined) {
@@ -437,6 +438,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       readElementsFor: (context) => elementReaders.current?.(context),
       readSourceElementsFor: (context) => elementReaders.source?.(context),
       investigationReadableFor: (context) => investigationChecks.current?.(context),
+      chatInvestigationsFor: (context) => chatInvestigationLists.current?.(context),
       aiNotesFor: (context) => aiNotesCapabilities.current?.(context),
       investigationSourceFor: (context) => investigationSources.current?.(context),
       signalOf,
@@ -745,6 +747,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     elementReaders.current = (context) => createElementsReader({ shownReader: summaryShownReader, investigations, access, ...context });
     elementReaders.source = (context) => createSourceElementsReader({ shownReader: summaryShownReader, access, mapping, ...context });
     investigationChecks.current = (context) => createInvestigationCheck({ investigations, ...context });
+    chatInvestigationLists.current = ({ principal }) => (ids) => investigations.named({ principal, ids });
     investigationSources.current = ({ principal }) => async (investigationId) => (await investigations.read({ id: investigationId, principal })).investigation.sourceId;
     aiNotesCapabilities.current = ({ principal }) => ({
       append: (call) => investigations.appendAiNotes({ id: call.investigationId, principal, expectedVersion: call.expectedVersion, entry: call.entry, maxRefs: call.maxRefs }),

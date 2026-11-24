@@ -32,6 +32,7 @@ export interface ExtensionMount {
   /** Reads the elements of a source again for one request with no investigation (Ask's route), bound to its caller, its trace ID and its abort signal; absent, a route that reads them refuses. */
   readonly readSourceElementsFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['readSourceElements'];
   /** Whether the caller still has the investigation of a view and its source, for one request; absent, a route that asks it refuses. */
+  readonly chatInvestigationsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['chatInvestigations'];
   readonly investigationReadableFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['investigationReadable'];
   /** The source of the caller's investigation, from its record, for one request; rejects as `NOT_FOUND` for an investigation that is not the caller's; absent, a route that declares an `investigation` refuses. */
   readonly investigationSourceFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ((investigationId: string) => Promise<string>) | undefined;
@@ -111,6 +112,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
             const unmarkedSourceElements = mount.signalOf === undefined ? undefined : mount.readSourceElementsFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
             const readSourceElements = unmarkedSourceElements === undefined ? undefined : markReadElements(unmarkedSourceElements);
             const investigationReadable = mount.investigationReadableFor?.({ principal, traceId: request.id });
+            const chatInvestigations = mount.chatInvestigationsFor?.({ principal, traceId: request.id });
             const aiNotes = mount.aiNotesFor?.({ principal, traceId: request.id });
             const askPatterns = mount.askPatternsFor?.({ principal, traceId: request.id });
             const askPatternFind = mount.askPatternFindFor?.({ principal, traceId: request.id });
@@ -137,6 +139,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(readElements === undefined ? {} : { readElements }),
               ...(readSourceElements === undefined ? {} : { readSourceElements }),
               ...(investigationReadable === undefined ? {} : { investigationReadable }),
+              ...(chatInvestigations === undefined ? {} : { chatInvestigations }),
               ...(aiNotes === undefined ? {} : { aiNotes }),
               setResponseHeader: (name, value) => void replyOut.header(name, value),
               ...(body === undefined ? {} : { body }),

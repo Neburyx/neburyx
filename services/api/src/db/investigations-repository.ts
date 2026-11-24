@@ -214,9 +214,21 @@ interface NamedViewCounts {
   readonly lastEditedAt: string | null;
 }
 
+/** The open, live investigations of one owner among the ids asked about, on the sources given. */
+interface NamedQuery {
+  readonly ownerId: string;
+  readonly ids: readonly string[];
+  readonly sourceIds: readonly string[];
+}
+
+interface NamedInvestigation extends InvestigationRow {
+  readonly sourceAlias: string;
+}
+
 /** The reads of one list call, all at the snapshot the first of them took. */
 export interface LibraryReader {
   listInvestigationSourceIds(ownerId: string): Promise<string[]>;
+  readNamedInvestigations(query: NamedQuery): Promise<NamedInvestigation[]>;
   listInvestigations(query: ListQuery): Promise<ListedInvestigation[]>;
   countMatching(query: MatchQuery): Promise<number>;
   countInvestigations(query: CountQuery): Promise<InvestigationCounts>;
@@ -668,6 +680,18 @@ async function listInvestigations(db: pg.Pool | pg.PoolClient, query: ListQuery)
   }));
 }
 
+async function readNamedInvestigations(db: pg.Pool | pg.PoolClient, query: NamedQuery): Promise<NamedInvestigation[]> {
+  if (query.ids.length === 0) return [];
+  const result = await db.query<InvestigationRecord & { source_alias: string }>(
+    `SELECT ${QUALIFIED_COLUMNS}, s.alias AS source_alias
+     FROM investigations i
+     JOIN sources s ON s.id = i.source_id
+     WHERE i.owner_id = $1 AND i.id = ANY($2::uuid[]) AND i.source_id = ANY($3::text[]) AND i.status = 'open' AND i.deleted_at IS NULL`,
+    [query.ownerId, [...query.ids], [...query.sourceIds]],
+  );
+  return result.rows.map((record) => ({ ...rowOf(record), sourceAlias: record.source_alias }));
+}
+
 async function countMatching(db: pg.Pool | pg.PoolClient, query: MatchQuery): Promise<number> {
   const result = await db.query<{ total: number }>(`SELECT count(*)::int AS total FROM investigations i WHERE ${FILTER_WHERE}`, filterParameters(query));
   return result.rows[0]?.total ?? 0;
@@ -778,6 +802,7 @@ export async function readLibrary<T>(pool: pg.Pool, read: (reader: LibraryReader
     const answer = await read({
       listInvestigationSourceIds: (ownerId) => listInvestigationSourceIds(client, ownerId),
       listInvestigations: (query) => listInvestigations(client, query),
+      readNamedInvestigations: (query) => readNamedInvestigations(client, query),
       countMatching: (query) => countMatching(client, query),
       countInvestigations: (query) => countInvestigations(client, query),
       countNamedViews: (query) => countNamedViews(client, query),

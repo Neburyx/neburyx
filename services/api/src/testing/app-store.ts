@@ -450,6 +450,12 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
             .filter((row) => after === undefined || row.lastEditedKey < after.editedKey || (row.lastEditedKey === after.editedKey && row.id < after.id));
           return Promise.resolve(listed.slice(0, query.limit));
         },
+        readNamedInvestigations: (query) =>
+          Promise.resolve(
+            snapshot
+              .filter((row) => row.ownerId === query.ownerId && query.ids.includes(row.id) && query.sourceIds.includes(row.sourceId) && row.status === 'open')
+              .map((row) => ({ ...row, sourceAlias: rows.find((source) => source.id === row.sourceId)?.alias ?? row.sourceId })),
+          ),
         countMatching: (query) => Promise.resolve(matching(query).length),
         countInvestigations: (query) => {
           if (options.failCounts === true) return Promise.reject(new Error('the counts could not be read'));

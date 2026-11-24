@@ -86,7 +86,7 @@ describe('a run that the gate or the services refuse', () => {
     ['an error that is not the application’s', new Error('relation does not exist')],
     ['a request the client gave up', new RequestCancelled()],
     ['an internal error', new AppError('INTERNAL_ERROR')],
-    ['an error of the service that has no refusal', new AppError('CURSOR_INVALIDATED')],
+    ['an error of the service that has no refusal', new AppError('EVIDENCE_NOT_AVAILABLE')],
   ])('throws %s instead of turning it into a refusal', async (_name, error) => {
     const { runnerFor } = rig({ entities: vi.fn(async () => Promise.reject(error)) });
     await expect(runnerFor().run({ templateId: 'entity', params: { ref: REF } })).rejects.toBe(error);

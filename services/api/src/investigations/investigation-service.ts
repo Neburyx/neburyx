@@ -1,4 +1,4 @@
-import { type AuditTransaction, AI_NOTES_MAX_ENTRIES, AI_NOTES_MAX_SENTENCES, DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type AiNotesAppended, type AiNotesEntryInput, type AiNotesRead, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type DeleteInvestigationResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
+import { type AuditTransaction, type ChatInvestigation, CHAT_INVESTIGATION_IDS_MAX, AI_NOTES_MAX_ENTRIES, AI_NOTES_MAX_SENTENCES, DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type AiNotesAppended, type AiNotesEntryInput, type AiNotesRead, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type DeleteInvestigationResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
@@ -40,6 +40,8 @@ export interface InvestigationService {
   read(call: { readonly id: string; readonly principal: Principal }): Promise<InvestigationResponse>;
   /** A page of the caller's investigations of one status, newest edit first. A `limit` of 0 is `INVALID_REQUEST`; above the maximum it is `QUERY_BUDGET_EXCEEDED`; a cursor that was not made for this caller and these filters is `CURSOR_INVALIDATED`. */
   list(call: InvestigationListCall): Promise<InvestigationListResponse>;
+  /** Names the investigations among `ids` (at most `CHAT_INVESTIGATION_IDS_MAX`) that this caller's list shows, each as the list shows it; any other id is left out. More ids than the maximum throws, since only a route's own bug can ask for them. */
+  named(call: { readonly principal: Principal; readonly ids: readonly string[] }): Promise<ChatInvestigation[]>;
   /** Replaces the caller's draft when `expectedVersion` is the draft's version; `CONFLICTED_VIEW_VERSION` when it is not. */
   saveDraft(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly draft: DraftWriteRequest }): Promise<DraftWriteResponse>;
   /** Adds an entry to the AI notes of the caller's draft; a token id already stored changes nothing, `CONFLICTED_VIEW_VERSION` for a stale version, `INVALID_REQUEST` with `ai-notes-full` or `ai-notes-entry-too-large` for a list or an entry over its bounds, and the refusals of a draft write for a closed, archived or source-changed investigation. */
@@ -287,6 +289,17 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
             savedViews: { count: { value: views.views, quality: 'exact' as const, scope: 'named-views' as const }, lastEditedAt: views.lastEditedAt },
           },
         };
+      });
+    },
+    async named({ principal, ids }) {
+      if (ids.length > CHAT_INVESTIGATION_IDS_MAX) throw new Error('a call names more investigations than a chunk holds');
+      const asked = [...new Set(ids.filter((id) => UUID.test(id)))];
+      if (asked.length === 0) return [];
+      const sourceIds = await deps.access.readable({ principal, sourceIds: await deps.store.readLibrary((reader) => reader.listInvestigationSourceIds(principal.id)) });
+      const rows = await deps.store.readLibrary((reader) => reader.readNamedInvestigations({ ownerId: principal.id, ids: asked, sourceIds }));
+      return rows.map((row) => {
+        const { id, title, caseRef, sourceId, sourceState } = shown(deps.mapping, deps.references, row);
+        return { id, title, caseRef, sourceId, sourceAlias: row.sourceAlias, sourceState };
       });
     },
     async saveDraft({ id, principal, expectedVersion, draft }) {
