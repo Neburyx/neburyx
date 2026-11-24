@@ -84,6 +84,13 @@ const listStartingEntitySchema = z.strictObject({ entityType: text, stableId: te
 
 export const investigationListItemSchema = investigationSchema.omit({ startingEntity: true }).extend({ startingEntity: listStartingEntitySchema.nullable(), sourceAlias: text, save: investigationSaveSchema, nodeCount: z.number().int().nonnegative().nullable(), edgeCount: z.number().int().nonnegative().nullable(), deletedAt: z.iso.datetime().optional(), purgeAfter: z.iso.datetime().optional() });
 
+/** The most investigations one call of `chatInvestigations` names: the chunk a list of chats asks the application about. */
+export const CHAT_INVESTIGATION_IDS_MAX = 200;
+
+/** What the application tells a list of chats about an investigation it names: the title, the case reference, the source and its state, as the investigations list shows them. */
+export const chatInvestigationSchema = investigationListItemSchema.pick({ id: true, title: true, caseRef: true, sourceId: true, sourceAlias: true, sourceState: true });
+export type ChatInvestigation = z.infer<typeof chatInvestigationSchema>;
+
 const exactCountOf = <S extends string>(scope: S) => z.strictObject({ value: z.number().int().nonnegative(), quality: z.literal('exact'), scope: z.literal(scope) });
 
 /** Postgres counts over the same investigations the list shows, whatever the `limit`: `sources` counts every source among them, a source no longer in the configuration too; `savedViews` counts their named views, with the newest `updated_at` among them or `null` when there is none. */

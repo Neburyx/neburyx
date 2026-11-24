@@ -4,6 +4,7 @@ import { ASK_SUMMARY_MAX_CITATIONS, ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID 
 import { assistantTableUnitSchema, ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_LIST_ITEMS_MAX, ASSISTANT_LIST_LABEL_MAX, ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_TABLE_CELL_MAX, ASSISTANT_TABLE_COLUMNS_MAX, ASSISTANT_TABLE_LABEL_MAX, ASSISTANT_TABLE_ROWS_MAX, ASSISTANT_VIEW_KEYS_MAX } from './assistant-turn.js';
 import { readAskResultSchema, storedAskResultSchema } from './ask-result-stored.js';
 import { edgeRefSchema, elementRefSchema } from './graph.js';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_INVESTIGATION_LIST_LIMIT, MAX_LIST_TEXT_LENGTH, chatInvestigationSchema, listFilterTextSchema } from './investigations.js';
 
 const wholeCount = z.number().int().nonnegative();
 const label = z.string().min(1).max(200).regex(/^[A-Za-z0-9._:/-]+$/);
@@ -198,3 +199,37 @@ export type AssistantThreadResponse = z.infer<typeof assistantThreadResponseSche
 /** Sent with the INTERNAL_ERROR of a clearing whose commit failed or was cut off: the thread may or may not have been deleted. Without it, an error of the clearing says the transaction was rolled back and nothing was deleted. */
 export const ASSISTANT_CLEAR_OUTCOME_HEADER = 'x-assistant-clear-outcome';
 export const ASSISTANT_CLEAR_OUTCOME_UNKNOWN = 'unknown';
+
+/** The most thread rows one request of the chat list reads, whatever the page: a page that reaches it before it is full is returned short with a cursor. */
+export const CHAT_LIST_SCAN_CAP = 1000;
+
+/** The most characters of the last question a row of the chat list carries (counted in code points), the text bound of the investigations list. */
+export const CHAT_LAST_QUESTION_MAX = MAX_LIST_TEXT_LENGTH;
+
+/** `limit` is checked against its bounds by the route, since one above the maximum is a budget error and not a malformed request. */
+export const assistantThreadListQuerySchema = z.strictObject({
+  limit: z
+    .string()
+    .regex(/^[0-9]{1,18}$/)
+    .transform(Number)
+    .optional(),
+  cursor: z.string().min(1).max(2048).optional(),
+  q: listFilterTextSchema.optional(),
+});
+
+export const assistantThreadListItemSchema = chatInvestigationSchema.omit({ id: true }).extend({
+  investigationId: chatInvestigationSchema.shape.id,
+  /** When the last turn of the thread was stored (the date of the last question). */
+  lastQuestionAt: z.iso.datetime(),
+  /** How many turns the thread holds; 0 for a thread that has none yet. */
+  turns: wholeCount,
+  /** The newest stored question of the thread, cut to its first `CHAT_LAST_QUESTION_MAX` code points; null when no turn has one. */
+  lastQuestion: z
+    .string()
+    .refine((value) => [...value].length <= CHAT_LAST_QUESTION_MAX, { message: 'at most 200 code points' })
+    .nullable(),
+});
+
+export const assistantThreadListResponseSchema = z.strictObject({ items: z.array(assistantThreadListItemSchema).max(MAX_INVESTIGATION_LIST_LIMIT), nextCursor: z.string().min(1).max(2048).nullable() });
+export type AssistantThreadListResponse = z.infer<typeof assistantThreadListResponseSchema>;
+export { DEFAULT_INVESTIGATION_LIST_LIMIT as CHAT_LIST_DEFAULT_LIMIT, MAX_INVESTIGATION_LIST_LIMIT as CHAT_LIST_MAX_LIMIT };

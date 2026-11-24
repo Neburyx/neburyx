@@ -3,6 +3,7 @@ import type { AiSettings, AiStatusResponse } from './ai.js';
 import type { AskFolder } from './ask-folder.js';
 import type { ReadRefsRequest } from './read-refs.js';
 import type { AiNotesCapability } from './ai-notes.js';
+import type { ChatInvestigation } from './investigations.js';
 import type { CaseSummarizer, SummaryReading } from './summary.js';
 import type { ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskPatternListing, AskPatternOffer, AskClassifier, AskRunResult } from './ask.js';
 import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
@@ -60,6 +61,8 @@ export interface ExtensionRequest {
   readonly readSourceElements?: (scope: SourceElementsScope, refs: ElementRefs) => Promise<SummaryReading>;
   /** The AI notes of the caller's own drafts; absent, a route that stores or reads them refuses. */
   readonly aiNotes?: AiNotesCapability;
+  /** Names, for the investigation ids asked about (at most `CHAT_INVESTIGATION_IDS_MAX`), the ones the caller's investigations list would show: open, not deleted, the caller's own, on a source the caller may read, each as that list shows it. Any other id is left out and nothing says why. More ids than the maximum is a programming error and rejects. Reads no source. */
+  readonly chatInvestigations?: (ids: readonly string[]) => Promise<readonly ChatInvestigation[]>;
   /** Resolves when the investigation is the caller's and is for the source, and the source is as the investigation left it; rejects with `NOT_FOUND`, or the source-changed refusal, otherwise. */
   readonly investigationReadable?: (investigationId: string, sourceId: string) => Promise<void>;
   /** The caller's own saved patterns on a source (never the shared ones of other people), available against the mapping, newest changed first, at most as many as a catalog holds; `NOT_FOUND` for a source the caller may not read. */
@@ -254,6 +257,7 @@ const invalidRequestRefusalSchema = z.object({ name: named, code: z.literal('INV
 const accessDeniedRefusalSchema = z.object({ name: named, code: z.literal('ACCESS_DENIED'), reason: none, audited: none });
 const sourceMismatchRefusalSchema = z.object({ name: named, code: z.literal('SOURCE_MISMATCH'), reason: none });
 const sourceBusyRefusalSchema = z.object({ name: named, code: z.literal('SOURCE_BUSY'), reason: none });
+const cursorInvalidatedRefusalSchema = z.object({ name: named, code: z.literal('CURSOR_INVALIDATED'), reason: none });
 const askIntentInvalidRefusalSchema = z.object({ name: named, code: z.literal('ASK_INTENT_INVALID'), reason: none });
 const budgetRefusalSchema = z.object({ name: named, code: z.literal('QUERY_BUDGET_EXCEEDED'), reason: none, maxPage: z.number().int().positive().optional(), maxHops: z.number().int().positive().optional(), pathResultsCap: z.number().int().positive().optional() });
 const rateLimitedRefusalSchema = z.object({ name: named, code: z.literal('RATE_LIMITED'), reason: none, retryAfterMs: z.number().int().nonnegative().optional() });
@@ -274,6 +278,7 @@ const refusalSchemas = [
   accessDeniedRefusalSchema,
   sourceMismatchRefusalSchema,
   sourceBusyRefusalSchema,
+  cursorInvalidatedRefusalSchema,
   askIntentInvalidRefusalSchema,
   budgetRefusalSchema,
   rateLimitedRefusalSchema,

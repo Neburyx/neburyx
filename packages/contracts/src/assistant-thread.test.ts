@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ASK_FOLDER_LIMITS } from './ask-folder.js';
 import { ASK_SUMMARY_MAX_CITATIONS } from './ask.js';
 import { ASSISTANT_VIEW_KEYS_MAX, assistantTurnRequestSchema } from './assistant-turn.js';
-import { THREAD_READ_TURNS_CEILING, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, assistantThreadResponseSchema, assistantThreadTurnWriteSchema, readAnswerSchema, threadEntitySchema, type AssistantThreadTurnWrite } from './assistant-thread.js';
+import { CHAT_LAST_QUESTION_MAX, CHAT_LIST_DEFAULT_LIMIT, CHAT_LIST_MAX_LIMIT, CHAT_LIST_SCAN_CAP, THREAD_READ_TURNS_CEILING, assistantThreadListQuerySchema, assistantThreadListResponseSchema, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, assistantThreadResponseSchema, assistantThreadTurnWriteSchema, readAnswerSchema, threadEntitySchema, type AssistantThreadTurnWrite } from './assistant-thread.js';
 
 const HASH = 'a'.repeat(64);
 const REF = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
@@ -153,5 +153,28 @@ describe('the count a thread read tells', () => {
       expect(readAnswerSchema.safeParse({ blocks: [{ ...answer.blocks[0], title: 'Widgets' }] }).success).toBe(false);
       expect(readAnswerSchema.safeParse({ blocks: [{ ...answer.blocks[0], caption: { anchor: { state: 'segments', segments: [{ element: REF, property: 'name' }] } } }] }).success).toBe(false);
     });
+  });
+});
+
+describe('the list of chats', () => {
+  const item = { investigationId: '0192f000-0000-7000-8000-000000000001', title: 'A title', caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: '2026-11-18T10:00:00.000Z', turns: 2, lastQuestion: 'A question' };
+
+  it('accepts a page with a last question of at most 200 code points, whatever their size in UTF-16 units, or none, and a cursor or none', () => {
+    expect(assistantThreadListResponseSchema.safeParse({ items: [item, { ...item, lastQuestion: '😀'.repeat(200) }, { ...item, lastQuestion: null }], nextCursor: 'abc.def' }).success).toBe(true);
+    expect(assistantThreadListResponseSchema.safeParse({ items: [], nextCursor: null }).success).toBe(true);
+  });
+
+  it('refuses a last question of 201 code points, an extra member, a missing member, a negative count, a source state that is not one and more than 100 items', () => {
+    for (const bad of [{ ...item, lastQuestion: 'x'.repeat(201) }, { ...item, extra: 1 }, { ...item, turns: -1 }, { ...item, sourceState: 'gone' }, { ...item, lastQuestionAt: 'yesterday' }]) expect(assistantThreadListResponseSchema.safeParse({ items: [bad], nextCursor: null }).success).toBe(false);
+    const { title: _title, ...missing } = item;
+    expect(assistantThreadListResponseSchema.safeParse({ items: [missing], nextCursor: null }).success).toBe(false);
+    expect(assistantThreadListResponseSchema.safeParse({ items: Array.from({ length: 101 }, () => item), nextCursor: null }).success).toBe(false);
+    expect(assistantThreadListResponseSchema.safeParse({ items: [item], nextCursor: '' }).success).toBe(false);
+  });
+
+  it('reads the query as the investigations list does: a limit as digits, a cursor of at most 2048 characters and a search of 2 to 200 characters with no NUL', () => {
+    expect(assistantThreadListQuerySchema.parse({ limit: '25', q: 'beta', cursor: 'abc' })).toEqual({ limit: 25, q: 'beta', cursor: 'abc' });
+    for (const bad of [{ limit: '-1' }, { limit: '1.5' }, { limit: 'x' }, { cursor: '' }, { cursor: 'c'.repeat(2049) }, { q: 'a' }, { q: 'x'.repeat(201) }, { q: 'a\u0000b' }, { extra: '1' }]) expect(assistantThreadListQuerySchema.safeParse(bad).success).toBe(false);
+    expect([CHAT_LIST_DEFAULT_LIMIT, CHAT_LIST_MAX_LIMIT, CHAT_LIST_SCAN_CAP, CHAT_LAST_QUESTION_MAX]).toEqual([25, 100, 1000, 200]);
   });
 });
