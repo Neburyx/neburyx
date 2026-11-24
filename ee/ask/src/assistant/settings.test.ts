@@ -17,7 +17,7 @@ describe('the default of the input limit', () => {
 
 describe('the assistant settings by environment', () => {
   it('have the default of each setting when none is given', () => {
-    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 7, maxSteps: 4, contextTurns: 3, contextText: false, maxMessageWords: 1000, maxInputTokens: 45_000, maxOutputTokens: 4000, runRetentionDays: 30, threadRetention: 'close', threadReadTurns: 100 });
+    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 7, maxSteps: 4, contextTurns: 3, contextText: true, maxMessageWords: 1000, maxInputTokens: 45_000, maxOutputTokens: 4000, runRetentionDays: 30, threadRetention: 'close', threadReadTurns: 100 });
   });
 
   it('take a value of every setting, and treat an empty value as not given', () => {
@@ -57,9 +57,9 @@ describe('the assistant settings by environment', () => {
     expect(JSON.stringify(over)).not.toContain(String(ceiling + 1));
   });
 
-  it('turn the text of the thread on only for `true`: absent, empty and `false` are off, and any other value is refused, naming the setting and never the value', () => {
-    for (const off of [undefined, '', 'false']) expect(settingsOf({ [ASSISTANT_VARIABLES.contextText]: off }).contextText).toBe(false);
-    expect(settingsOf({ [ASSISTANT_VARIABLES.contextText]: 'true' }).contextText).toBe(true);
+  it('turn the text of the thread on by default: absent and empty are on, `false` is off, and any other value is refused, naming the setting and never the value', () => {
+    for (const on of [undefined, '', 'true']) expect(settingsOf({ [ASSISTANT_VARIABLES.contextText]: on }).contextText).toBe(true);
+    expect(settingsOf({ [ASSISTANT_VARIABLES.contextText]: 'false' }).contextText).toBe(false);
     for (const value of ['yes', '1', 'TRUE', ' true', 'on']) {
       const result = read({ [ASSISTANT_VARIABLES.contextText]: value });
       expect(result.ok).toBe(false);

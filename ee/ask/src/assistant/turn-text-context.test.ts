@@ -68,22 +68,27 @@ const closed = (events: readonly AuditEvent[]) => {
   return assistantTurnAuditDetailSchema.parse('turn' in detail ? detail.turn : undefined);
 };
 
+const OFF = { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'false' };
+
 describe('the stored text of the thread given to the loop, by the real route', () => {
-  it('is not read when the setting is absent or false: the loop is given the references\' context exactly as before and the store\'s text read is never made', async () => {
-    const [absent, off] = [await run(), await run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'false' } })];
-    for (const t of [absent, off]) {
-      expect(t.reads.count).toBe(0);
-      expect(t.given).toHaveLength(1);
-      expect(t.given[0]?.context).toMatch(/^Earlier turns of this thread, oldest first:\n1\. view/u);
-      expect(t.given[0]?.context).not.toContain(THREAD_TEXT_INTRO);
-      expect(t.given[0]?.context).not.toContain('Two items');
-    }
-    expect(absent.given[0]?.context).toBe(off.given[0]?.context);
-    expect(closed(absent.rig.events)).toMatchObject({ propertyValuesSent: false });
+  it('is not read when the setting is false: the loop is given the references\' context exactly as before and the store\'s text read is never made', async () => {
+    const off = await run({ env: OFF });
+    expect(off.reads.count).toBe(0);
+    expect(off.given).toHaveLength(1);
+    expect(off.given[0]?.context).toMatch(/^Earlier turns of this thread, oldest first:\n1\. view/u);
+    expect(off.given[0]?.context).not.toContain(THREAD_TEXT_INTRO);
+    expect(off.given[0]?.context).not.toContain('Two items');
+    expect(closed(off.rig.events)).toMatchObject({ propertyValuesSent: false });
+  });
+
+  it('is given when the setting is absent, as when it is true: the default is on', async () => {
+    const [absent, on] = [await run(), await run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } })];
+    expect(absent.given[0]?.context).toContain(THREAD_TEXT_INTRO);
+    expect(absent.given[0]?.context).toBe(on.given[0]?.context);
   });
 
   it('gives the text after the references\' context, which is byte for byte what it is with the setting off, with the question and the answer as the thread read presents them', async () => {
-    const off = await run();
+    const off = await run({ env: OFF });
     const on = await run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } });
     const context = on.given[0]?.context ?? '';
     expect(on.reads.count).toBe(1);
@@ -110,7 +115,7 @@ describe('the stored text of the thread given to the loop, by the real route', (
   });
 
   it('leaves the router\'s request and the references\' context as they are with the text on', async () => {
-    const off = await run();
+    const off = await run({ env: OFF });
     const on = await run({ env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } });
     const routed = (t: Turn) => t.rig.fixture.calls.filter((request) => request.promptId === 'assistant.route').map((request) => request.values);
     expect(routed(on)).toEqual(routed(off));
@@ -162,7 +167,7 @@ describe('the stored text of the thread given to the loop, by the real route', (
     const logs: { fields: Record<string, unknown>; message: string }[] = [];
     for (const on of [true, false]) {
       const runs = (await import('./run-store.js')).createMemoryAssistantRunStore();
-      const t = await run({ env: on ? { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } : {}, logs, runStore: runs });
+      const t = await run({ env: on ? { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } : OFF, logs, runStore: runs });
       expect(JSON.stringify(t.rig.events)).not.toContain('Two items are listed');
       expect(JSON.stringify(t.rig.events)).not.toContain('Live title');
       expect(runs.runs[0]?.start.settings).toMatchObject({ contextText: on });
@@ -187,8 +192,8 @@ describe('the stored text of the thread given to the loop, by the real route', (
 
   it('leaves the loop\'s context, the identifiers and the gate reads as they were with the setting off, and the text read adds one read of the bound elements', async () => {
     const seed = [stored({ route: 'ask', intent: 'shared', entities: [{ role: 'id', ref: A1 }], citationRefs: [A1] })];
-    const off = await run({ seed });
-    const absent = await run({ seed, env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'false' } });
+    const off = await run({ seed, env: OFF });
+    const absent = await run({ seed, env: OFF });
     const on = await run({ seed, env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } });
     const golden = `Earlier turns of this thread, oldest first:\n1. ask "shared"; ran for id = c1; cited c1\n\nElements of those turns, by key | title | type:\nc1 | "Live title" | "${V.anchor}"\nIdentifiers of those elements, to give a tool as values:\nc1 = ${V.anchor} A-1`;
     expect(off.given[0]?.context).toBe(golden);
@@ -298,7 +303,7 @@ describe('the stored text and the loop that is really run', () => {
       const runs = (await import('./run-store.js')).createMemoryAssistantRunStore();
       const threads = createMemoryAssistantThreadStore();
       for (const turn of seed) await threads.append(turn, 0);
-      const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), step: sequence(DONE), answer: answerWith, run: heavyFor('none'), threadStore: threads, runStore: runs, records: immediate, settingsEnv: on ? { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } : {}, readNodes: () => [nodeOf('A-1', 'Live title')] });
+      const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), step: sequence(DONE), answer: answerWith, run: heavyFor('none'), threadStore: threads, runStore: runs, records: immediate, settingsEnv: { NEBURYX_ASSISTANT_CONTEXT_TEXT: on ? 'true' : 'false' }, readNodes: () => [nodeOf('A-1', 'Live title')] });
       const answer = await answerOf(r.route.handler(r.request({ ...BODY, investigationId: INVESTIGATION }, { principalId: PERSON, sensitivityVersion: () => VERSION })));
       outcomes.push(answer);
       expect(JSON.stringify(answer)).not.toContain('7777');
@@ -316,7 +321,7 @@ describe('the stored text and the loop that is really run', () => {
     for (const on of [false, true]) {
       const threads = createMemoryAssistantThreadStore();
       await threads.append(big, 0);
-      const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), step: sequence(DONE), answer: GOOD, run: heavyFor('none'), threadStore: threads, records: immediate, maxInputTokens: LIMIT, settingsEnv: on ? { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } : {}, readNodes: () => [nodeOf('A-1', 'Live title')] });
+      const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), step: sequence(DONE), answer: GOOD, run: heavyFor('none'), threadStore: threads, records: immediate, maxInputTokens: LIMIT, settingsEnv: { NEBURYX_ASSISTANT_CONTEXT_TEXT: on ? 'true' : 'false' }, readNodes: () => [nodeOf('A-1', 'Live title')] });
       const answer = await answerOf(r.route.handler(r.request({ ...BODY, investigationId: INVESTIGATION }, { principalId: PERSON, sensitivityVersion: () => VERSION })));
       statuses.push(answer);
       calls.push(r.events.filter((event) => event.action === 'assistant.agent').length);

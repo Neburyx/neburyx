@@ -77,13 +77,14 @@ function wholeNumber(env: Env, name: string, range: { readonly min: number; read
   return integerChoice(env, name, range, fallback, problems);
 }
 
-/** A switch that is off unless it is `true`; any other value that is not `false` is a problem, which names the variable and never the value. */
-function switchOf(env: Env, name: string, problems: string[]): boolean {
+/** A switch with a default for an absent or empty value; a value that is neither `true` nor `false` is a problem, which names the variable and never the value. */
+function switchOf(env: Env, name: string, fallback: boolean, problems: string[]): boolean {
   const value = given(env, name);
-  if (value === undefined || value === 'false') return false;
+  if (value === undefined) return fallback;
+  if (value === 'false') return false;
   if (value === 'true') return true;
   problems.push(`${name} must be true or false`);
-  return false;
+  return fallback;
 }
 
 function positiveWholeNumber(env: Env, name: string, fallback: number, problems: string[]): number {
@@ -106,7 +107,7 @@ export function readAssistantSettings(env: Env): AssistantSettingsRead {
   const maxCalls = wholeNumber(env, ASSISTANT_VARIABLES.maxCalls, RANGES.maxCalls, DEFAULTS.maxCalls, problems);
   const maxSteps = wholeNumber(env, ASSISTANT_VARIABLES.maxSteps, RANGES.maxSteps, DEFAULTS.maxSteps, problems);
   const contextTurns = wholeNumber(env, ASSISTANT_VARIABLES.contextTurns, RANGES.contextTurns, DEFAULTS.contextTurns, problems);
-  const contextText = switchOf(env, ASSISTANT_VARIABLES.contextText, problems);
+  const contextText = switchOf(env, ASSISTANT_VARIABLES.contextText, true, problems);
   const maxMessageWords = wholeNumber(env, ASSISTANT_VARIABLES.maxMessageWords, RANGES.maxMessageWords, DEFAULTS.maxMessageWords, problems);
   const maxInputTokens = wholeNumber(env, ASSISTANT_VARIABLES.maxInputTokens, RANGES.maxInputTokens, DEFAULTS.maxInputTokens, problems);
   const maxOutputTokens = wholeNumber(env, ASSISTANT_VARIABLES.maxOutputTokens, RANGES.maxOutputTokens, DEFAULTS.maxOutputTokens, problems);
