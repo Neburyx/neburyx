@@ -48,7 +48,7 @@ export interface AssistantRig {
   /** The investigation the turns are made in. */
   readonly investigationId: string;
   /** One streamed turn (`Accept: application/x-ndjson`): the replies as for `turn`, and every line the stream wrote. */
-  stream(message: string, replies: readonly string[], over?: Record<string, unknown>): Promise<{ readonly status: number; readonly contentType: string | null; readonly lines: Record<string, unknown>[]; readonly text: string }>;
+  stream(message: string, replies: readonly string[], over?: Record<string, unknown>): Promise<{ readonly status: number; readonly contentType: string | null; readonly headers: Record<string, string>; readonly lines: Record<string, unknown>[]; readonly text: string }>;
   /** The scripted source's executor: a call made on it directly is a read around the gate. */
   readonly executor: AssistantApp['executor'];
   /** Opens another investigation of the same person on the same source. */
@@ -59,6 +59,10 @@ export interface AssistantRig {
   threadRows(): string;
   threadText(): string;
   runRows(): string;
+  /** What the run records hold of the text of each model call. */
+  callText(): string;
+  /** The call that clears the person's own thread. */
+  clearChat: AssistantApp['clearChat'];
   exportText(entities: readonly { readonly sourceId: string; readonly entityType: string; readonly stableId: string }[]): Promise<string>;
   /** Waits until the thread holds this many turns. */
   threadWritten(count: number): Promise<void>;
@@ -86,6 +90,8 @@ export async function startAssistantRig(options: AssistantRigOptions): Promise<A
     threadRows: app.threadRows,
     threadText: app.threadText,
     runRows: app.runRows,
+    callText: app.callText,
+    clearChat: app.clearChat,
     exportText: app.exportText,
     turn: (message, replies, over) => {
       stub.replies.push(...replies);
@@ -96,7 +102,7 @@ export async function startAssistantRig(options: AssistantRigOptions): Promise<A
       const response = await app.sendTurn(message, new AbortController().signal, over, { accept: 'application/x-ndjson' });
       if (response === undefined) throw new Error('the stream did not open');
       const text = await response.text();
-      return { status: response.status, contentType: response.headers.get('content-type'), lines: text.split('\n').filter((line) => line !== '').map((line) => JSON.parse(line) as Record<string, unknown>), text };
+      return { status: response.status, contentType: response.headers.get('content-type'), headers: Object.fromEntries(response.headers.entries()), lines: text.split('\n').filter((line) => line !== '').map((line) => JSON.parse(line) as Record<string, unknown>), text };
     },
     close: app.close,
   };

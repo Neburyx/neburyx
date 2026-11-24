@@ -400,6 +400,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     app.get('/v1/assistant/investigations/:id/thread', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => {
       throw new AppError('ACCESS_DENIED', { reason: 'ai-off' });
     });
+    app.post('/v1/assistant/investigations/:id/thread/clear', { config: { permission: 'principal' } }, async () => {
+      throw new AppError('ACCESS_DENIED', { reason: 'ai-off' });
+    });
   }
 
   const fallbackKeyMaterial = randomBytes(32);

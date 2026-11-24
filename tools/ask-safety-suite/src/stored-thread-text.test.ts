@@ -52,3 +52,41 @@ describe('the text a thread keeps, through the real application of the assistant
     await rig.close();
   });
 });
+
+describe('the clearing of a thread, through the real application of the assistant', () => {
+  it('leaves no question, answer or call text of the thread in its rows or its run records, and the clearing’s own answer and the events and log lines of the call hold none', async () => {
+    const rig = await startAssistantRig({ stub, threads: true, respond: (call) => (['entity-load', 'entity-load-many', 'file-query'].includes(call.templateId) ? { status: 'rows', rows: [{ n: plainNode(['Widget'], { widgetId: 'W-1', ownerName: 'Ana Silva' }, '4') }] } : undefined) });
+    const answer = await rig.turn(QUESTION, [FORM, READ_VIEW, DONE, JSON.stringify({ columns: ['Element'], rows: [{ cells: [ANSWER_CELL], cites: ['n1'] }] })], { viewElementKeys: [WIDGET_KEY] });
+    expect(answer.status).toBe(200);
+    await rig.threadWritten(1);
+    // a positive control: before the clearing the thread and the run records do hold the text
+    expect(rig.threadText()).toContain('SENTINEL-QUESTION-31');
+    expect(rig.callText()).toContain('SENTINEL-QUESTION-31');
+    const eventsBefore = rig.events().length;
+    const logsBefore = rig.logs.length;
+    const cleared = await rig.clearChat();
+    expect([cleared.status, cleared.body]).toEqual([200, { cleared: true }]);
+    expect(rig.threadText()).toBe('[]');
+    expect(rig.threadRows()).toBe('[]');
+    expectNoValue([rig.callText(), rig.threadText()], ['SENTINEL-QUESTION-31', ANSWER_CELL]);
+    expect(rig.runRows()).not.toBe('[]');
+    // the clearing writes no text anywhere: its answer, headers and the events and log lines it added
+    expectNoValue([cleared.body, cleared.headers, rig.events().slice(eventsBefore), rig.logs.slice(logsBefore)], ['SENTINEL-QUESTION-31', ANSWER_CELL]);
+    expect((await rig.clearChat()).body).toEqual({ cleared: false });
+    await rig.close();
+  });
+
+  it('canary: a call text that is still there after a clearing is found by the same read, so the case above can fail', () => {
+    expect(() => expectNoValue([JSON.stringify([['SENTINEL-QUESTION-31']])], ['SENTINEL-QUESTION-31'])).toThrow();
+  });
+
+  it('refuses a body that is not the empty object and an investigation that is not there, and deletes nothing', async () => {
+    const rig = await startAssistantRig({ stub, threads: true, respond: (call) => (['entity-load', 'entity-load-many', 'file-query'].includes(call.templateId) ? { status: 'rows', rows: [{ n: plainNode(['Widget'], { widgetId: 'W-1', ownerName: 'Ana Silva' }, '4') }] } : undefined) });
+    await rig.turn(QUESTION, [FORM, READ_VIEW, DONE, JSON.stringify({ columns: ['Element'], rows: [{ cells: [ANSWER_CELL], cites: ['n1'] }] })], { viewElementKeys: [WIDGET_KEY] });
+    await rig.threadWritten(1);
+    for (const payload of [{ cleared: true }, [], 'x']) expect((await rig.clearChat(rig.investigationId, payload)).status).toBe(400);
+    expect((await rig.clearChat('0192f000-0000-7000-8000-00000000ffff')).status).toBe(404);
+    expect(rig.threadText()).toContain('SENTINEL-QUESTION-31');
+    await rig.close();
+  });
+});

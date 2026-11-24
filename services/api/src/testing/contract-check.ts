@@ -41,6 +41,7 @@ const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
   'GET /v1/sources/{id}/profile': { url: '/v1/sources/demo/profile' },
   'GET /v1/templates': { url: '/v1/templates?sourceId=demo' },
   'GET /v1/assistant/investigations/{id}/thread': { url: '/v1/assistant/investigations/0192f000-0000-7000-8000-000000000001/thread' },
+  'POST /v1/assistant/investigations/{id}/thread/clear': { url: '/v1/assistant/investigations/0192f000-0000-7000-8000-000000000001/thread/clear', payload: '{}' },
   'POST /v1/sources/{id}/test': { url: '/v1/sources/demo/test' },
   'GET /v1/entities/{sourceId}/{entityType}/{stableId}': { url: '/v1/entities/demo/node_a/A-1' },
   'GET /v1/edges/{ref}': { url: `/v1/edges/${Buffer.from(JSON.stringify({ sourceId: 'demo', type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })).toString('base64url')}` },

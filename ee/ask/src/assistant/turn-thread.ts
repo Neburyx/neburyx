@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ExtensionRefusal, assistantThreadTurnWriteSchema, type AssistantThreadResponse, type AssistantThreadTurnWrite, type ExtensionLogger, type ExtensionRequest, type RecordQueue } from '@neburyx/contracts';
+import { ASSISTANT_EPOCH_HEADER, ExtensionRefusal, assistantThreadTurnWriteSchema, type AssistantThreadResponse, type AssistantThreadTurnWrite, type ExtensionLogger, type ExtensionRequest, type RecordQueue } from '@neburyx/contracts';
 import { presentThread } from './thread-present.js';
 import { AssistantThreadStoreError, type AssistantContextTurn, type AssistantThreadStore } from './thread-store.js';
 
@@ -16,6 +16,10 @@ type TurnThreadInput = Omit<AssistantThreadTurnWrite, 'id' | 'investigationId' |
 export interface TurnThread {
   /** The id of the turn's row, made when the turn started, so a write that is tried again is one write. */
   readonly turnId: string;
+  /** The count the turn read before it did any work, or undefined when it could not be read (then nothing is stored and no text of the turn's model calls is kept). */
+  readonly epoch: number | undefined;
+  /** The guard of a write of the turn's run record could not be read: nothing of the turn is stored in its thread from now on (the failure is counted as a failed record write). */
+  suppress(): void;
   /** Builds the write through the strict schema and hands it to the queue of the records; it never waits and never throws. */
   write(input: TurnThreadInput): void;
   /** A write that was refused before it was built (a binding the classifier could not have approved): nothing is stored, and the failure is counted as a failed record write. */
@@ -61,12 +65,19 @@ export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionReq
 
   let epoch: number | undefined;
   try {
-    epoch = await store.epoch(started.investigationId);
+    epoch = await store.epoch(started.investigationId, request.principalId);
   } catch {
     failed('epoch');
   }
+  // the count is told to the client with the answer (and before the first line of a stream), so a window that holds this turn can tell it from one that began after a clearing
+  if (epoch !== undefined) request.setResponseHeader?.(ASSISTANT_EPOCH_HEADER, String(epoch));
+  let suppressed = false;
   return {
     turnId,
+    epoch,
+    suppress() {
+      suppressed = true;
+    },
     refused: (step) => failed(step),
     async context(limit) {
       try {
@@ -88,6 +99,10 @@ export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionReq
     },
     write(input) {
       if (epoch === undefined) return;
+      if (suppressed) {
+        failed('guard');
+        return;
+      }
       const known = epoch;
       let turn: AssistantThreadTurnWrite;
       try {
@@ -96,7 +111,10 @@ export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionReq
         failed('build');
         return;
       }
-      const write = async (): Promise<void> => void (await store.append(turn, known));
+      const write = async (): Promise<void> => {
+        if (suppressed) throw new AssistantThreadStoreError();
+        await store.append(turn, known);
+      };
       const queue = deps.queue();
       if (queue !== undefined) {
         queue.enqueue({ ids: { turnId, step: 'append' }, write });

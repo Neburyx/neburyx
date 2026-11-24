@@ -17,6 +17,7 @@ The table is checked against the code (`pnpm test` runs the check in `tools/work
 | `assistant.ask` | any | queued | `ee/ask/src/assistant/turn-route.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `assistant.continue` | any | queued | `ee/ask/src/assistant/turn-route.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `assistant.route` | any | queued | `ee/ask/src/assistant/router.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
+| `assistant.thread.cleared` | any | queued | `ee/ask/src/assistant/thread-clear-route.ts` | A person cleared their own thread: queued, so the answer is never withheld for it. The detail is `threadClear.cleared` (whether a thread was deleted); a failed clearing is `failed` with no detail. Never a text, a count of turns, a hash or a run id. |
 | `assistant.turn.closed` | any | queued | `ee/ask/src/assistant/turn-audit.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `assistant.view` | any | queued | `ee/ask/src/assistant/view-answer.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `assistant.overview` | any | queued | `ee/ask/src/assistant/verdict-overview.ts` | The audit of the model call that drafts the overview beside a refusal of a verdict: queued, so the answer is never withheld for it. |

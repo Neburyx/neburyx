@@ -370,7 +370,7 @@ describe('the assistant_runs and assistant_run_calls tables of the preview', () 
 
   it('has the columns of the data model, a cascade from the calls to the run, and no foreign key to the users table', async () => {
     const database = await migratedWithPreview();
-    expect((await columnsOf(database, 'assistant_runs')).map((column) => column['column_name'])).toEqual(['id', 'actor_id', 'investigation_id', 'source_id', 'trace_id', 'started_at', 'finished_at', 'outcome', 'calls', 'settings']);
+    expect((await columnsOf(database, 'assistant_runs')).map((column) => column['column_name'])).toEqual(['id', 'actor_id', 'investigation_id', 'source_id', 'trace_id', 'started_at', 'finished_at', 'outcome', 'calls', 'settings', 'thread_epoch']);
     expect((await columnsOf(database, 'assistant_run_calls')).map((column) => column['column_name'])).toEqual(['run_id', 'call_number', 'started_at', 'duration_ms', 'instructions_sha256', 'instructions_text', 'values_text', 'reply_text', 'status', 'failure_kind', 'tokens_in', 'tokens_out', 'error_class', 'error_code', 'error_type', 'tools_offered']);
     expect(await rows(database.ownerUrl, `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'assistant_run_calls'::regclass AND contype = 'f'`)).toEqual([{ definition: 'FOREIGN KEY (run_id) REFERENCES assistant_runs(id) ON DELETE CASCADE' }]);
     expect(await rows(database.ownerUrl, `SELECT 1 FROM pg_constraint WHERE conrelid = 'assistant_runs'::regclass AND contype = 'f'`)).toEqual([]);

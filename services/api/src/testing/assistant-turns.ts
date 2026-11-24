@@ -160,8 +160,8 @@ export function typologyFile(): string {
 }
 
 export async function startAssistantApp(options: AssistantAppOptions) {
-  const threadStore = createMemoryAssistantThreadStore();
-  const runStore = createMemoryAssistantRunStore();
+  const runStore = createMemoryAssistantRunStore({ epochOf: (investigationId, userId) => threadStore.epochOf(investigationId, userId) });
+  const threadStore = createMemoryAssistantThreadStore({ blankRunText: (investigationId, userId) => runStore.blankText(investigationId, userId) });
   const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => runStore, assistantThreadStore: () => threadStore, assistantPendingStore: () => createMemoryAssistantPendingStore(), ...(options.now === undefined ? {} : { now: options.now }) });
   const records = options.threads === true ? createEventQueue<RecordJob>({ sinks: [{ name: 'run-records', sink: { record: (job) => job.write() } }], idFields: (job) => job.ids, settings: { queueSize: 100, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: () => undefined } }) : undefined;
   if (records !== undefined) extension.attachRecordQueue?.({ enqueue: (job) => void records.sink.record(job) });
@@ -216,6 +216,13 @@ export async function startAssistantApp(options: AssistantAppOptions) {
       if (downloaded.statusCode !== 200) throw new Error(`the export was not downloaded: ${downloaded.statusCode}`);
       return downloaded.body;
     },
+    /** What each run record holds of the text of its model calls: what was sent and what came back. */
+    callText: (): string => JSON.stringify(runStore.runs.map((run) => [run.callStarts.map((call) => call.valuesText), run.callEnds.map((call) => call.replyText)])),
+    /** The call of the person to clear their own thread of the investigation, as the panel makes it. */
+    clearChat: async (id: string = investigation.id, payload: unknown = {}) => {
+      const response = await rig.app.inject({ method: 'POST', url: `/v1/assistant/investigations/${id}/thread/clear`, payload: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
+      return { status: response.statusCode, body: response.json() as Record<string, unknown>, headers: response.headers };
+    },
     /** The text of the rows of the threads: the question as typed and the answer in its stored form. */
     threadText: (): string => JSON.stringify([...threadStore.threads.values()].flatMap((thread) => thread.turns.map((turn) => ({ question: turn.question, answer: turn.answer })))),
     /** The investigation the turns are made in. */
@@ -232,6 +239,8 @@ export async function startAssistantApp(options: AssistantAppOptions) {
       for (let wait = 0; wait < 200 && (records?.counts().written ?? 0) < count; wait += 1) await new Promise((resolve) => setTimeout(resolve, 10));
       if ((records?.counts().written ?? 0) < count) throw new Error(`the thread holds ${records?.counts().written ?? 0} records, not ${count}`);
     },
+    /** The address of the application on the loopback, listening from the first call: for a client that talks to it over a real connection. */
+    baseUrl: async (): Promise<string> => (address ??= await rig.app.listen({ host: '127.0.0.1', port: 0 })),
     /** One turn over the real connection, which the caller may abort. */
     sendTurn: async (message: string, signal: AbortSignal, over: Record<string, unknown> = {}, headers: Record<string, string> = {}) => {
       address ??= await rig.app.listen({ host: '127.0.0.1', port: 0 });

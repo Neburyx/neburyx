@@ -168,7 +168,7 @@ describe('a follow-up that names no entity, resolved from the thread', () => {
 const widget = (stableId: string, sourceId = 'demo') => ({ sourceId, entityType: 'widget', stableId });
 const turnOf = (over: Partial<AssistantThreadTurnWrite> & Pick<AssistantThreadTurnWrite, 'route' | 'outcome'>, user = PERSON, investigation = INVESTIGATION): AssistantThreadTurnWrite => ({ id: randomUUID(), investigationId: investigation, userId: user, at: new Date(1_800_000_000_000), questionHash: 'a'.repeat(64), entities: [], citationRefs: [], steps: 0, ...over });
 const seed = async (threads: MemoryAssistantThreadStore, ...turns: AssistantThreadTurnWrite[]): Promise<void> => {
-  for (const turn of turns) await threads.append(turn, await threads.epoch(turn.investigationId));
+  for (const turn of turns) await threads.append(turn, await threads.epoch(turn.investigationId, turn.userId));
 };
 const asked = (intent: string, over: Partial<AssistantThreadTurnWrite> = {}) => turnOf({ route: 'ask', outcome: 'answered', intent, templateId: 'shared-attribute', steps: 1, ...over });
 const everyone: NonNullable<RigOptions['readNodes']> = (refs) => refs.entities.map((ref) => nodeOf(ref.stableId));

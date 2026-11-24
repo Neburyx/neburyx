@@ -4,9 +4,10 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, answerOf, fileQueryResult, heavyResult, ok, okResult, rig, routeAsk, sign, type Rig, type RigOptions } from '../testing/assistant-rig.js';
 import { ROUTER_PROMPT_VERSION } from './router.js';
+import { queuedAssistantRunStore } from './queued-run-store.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 import { createMemoryAssistantThreadStore, type AssistantThreadStore, type MemoryAssistantThreadStore } from './thread-store.js';
-import { TURN_CLOSED_ACTION, noteTurn, noteTurnStarted, withTurnAudit } from './turn-audit.js';
+import { TURN_CLOSED_ACTION, noteTurn, noteTurnStarted, startModelCall, withTurnAudit } from './turn-audit.js';
 
 afterAll(removeAskFolders);
 
@@ -293,7 +294,7 @@ describe('the writes of a thread never change a turn and never outlive the inves
     const threads = createMemoryAssistantThreadStore();
     const held = { release: (): void => undefined };
     const waiting = new Promise<void>((resolve) => (held.release = resolve));
-    const delayed: AssistantThreadStore = { ...threads, epoch: async (id) => (await waiting, threads.epoch(id)) };
+    const delayed: AssistantThreadStore = { ...threads, epoch: async (id, user) => (await waiting, threads.epoch(id, user)) };
     const r = await rig({ reply: REFUSE, threadStore: delayed, records: queue().records });
     const pending = r.route.handler(r.request(BASE, { principalId: PERSON }));
     await drain();
@@ -494,5 +495,102 @@ describe('the id of a turn that the panel gave', () => {
     const turn = await turnRig({ view: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] })) }, threads);
     const result = await run(turn, body());
     expect('value' in result).toBe(true);
+  });
+});
+
+describe('the count a turn reads and the run it opens', () => {
+  const opened = async (options: { readonly threads: MemoryAssistantThreadStore; readonly runs: ReturnType<typeof createMemoryAssistantRunStore>; readonly order?: string[] }) => {
+    const r = await rig({ threadStore: options.threads, records: queue().records });
+    const order = options.order ?? [];
+    const threads: AssistantThreadStore = { ...options.threads, epoch: async (id, user) => (order.push('epoch'), options.threads.epoch(id, user)) };
+    const runs = { ...options.runs, begin: (start: Parameters<typeof options.runs.begin>[0]) => (order.push('begin'), options.runs.begin(start)) };
+    const wrapped = withTurnAudit({ logger: () => undefined, threads: () => threads, runs: () => runs }, async () => {
+      await noteTurnStarted({ sourceId: 'demo', investigationId: INVESTIGATION, questionHash: 'b'.repeat(64) });
+      return PLACEHOLDER;
+    });
+    await wrapped(r.request(BASE, { principalId: PERSON }));
+    await drain();
+    return order;
+  };
+
+  it('is read before the run is opened, and the run keeps it', async () => {
+    const threads = createMemoryAssistantThreadStore();
+    await threads.clearOwn(INVESTIGATION, PERSON);
+    await threads.clearOwn(INVESTIGATION, PERSON);
+    const runs = createMemoryAssistantRunStore();
+    const order = await opened({ threads, runs });
+    expect(order).toEqual(['epoch', 'begin']);
+    expect(runs.runs[0]?.start.threadEpoch).toBe(2);
+  });
+
+  it('is absent from the run when it cannot be read, and the turn goes on', async () => {
+    const threads = createMemoryAssistantThreadStore({ failOn: 'epoch' });
+    const runs = createMemoryAssistantRunStore();
+    await opened({ threads, runs });
+    expect(runs.runs).toHaveLength(1);
+    expect(runs.runs[0]?.start.threadEpoch).toBeUndefined();
+  });
+});
+
+describe('a turn whose run record guard cannot be read', () => {
+  const callOf = () => startModelCall({ modelRef: 'm', promptId: 'p', promptVersion: 1, instructionsSha256: 'a'.repeat(64), instructions: 'fixed', values: 'SENTINEL-VALUES' });
+
+  it('is not stored in its thread, and its call is written without text', async () => {
+    const threads = createMemoryAssistantThreadStore();
+    const runs = createMemoryAssistantRunStore({ failOn: 'guard' });
+    const records = queue();
+    const r = await rig({ threadStore: threads, records: records.records });
+    const wrapped = withTurnAudit({ logger: () => undefined, threads: () => threads, runs: () => runs, records: () => records.records }, async () => {
+      await noteTurnStarted({ sourceId: 'demo', investigationId: INVESTIGATION, questionHash: 'b'.repeat(64) });
+      callOf().end({ aborted: false });
+      await drain();
+      noteTurn({ route: 'view', answered: true, citedRefs: [] });
+      return PLACEHOLDER;
+    });
+    await wrapped(r.request(BASE, { principalId: PERSON }));
+    await drain();
+    expect(threads.threads.size).toBe(0);
+    expect(records.failed.map((ids) => ids['step'])).toContain('guard');
+    expect(JSON.stringify(runs.runs.map((run) => run.callStarts.map((call) => call.valuesText)))).not.toContain('SENTINEL');
+  });
+
+  it('is not stored in its thread through the queued run store either, when the thread write is still queued behind the failing run write', async () => {
+    const threads = createMemoryAssistantThreadStore();
+    const memory = createMemoryAssistantRunStore({ failOn: 'guard' });
+    const jobs: RecordJob[] = [];
+    const held: RecordQueue = { enqueue: (job) => void jobs.push(job) };
+    const runs = queuedAssistantRunStore(memory, () => held);
+    const r = await rig({ threadStore: threads, records: held });
+    const wrapped = withTurnAudit({ logger: () => undefined, threads: () => threads, runs: () => runs, records: () => held }, async () => {
+      await noteTurnStarted({ sourceId: 'demo', investigationId: INVESTIGATION, questionHash: 'b'.repeat(64) });
+      callOf().end({ aborted: false });
+      noteTurn({ route: 'view', answered: true, citedRefs: [] });
+      return PLACEHOLDER;
+    });
+    await wrapped(r.request(BASE, { principalId: PERSON }));
+    expect(jobs.map((job) => job.ids['step'])).toEqual(['begin', 'beginCall', 'endCall', 'finish', 'append']);
+    const failed: string[] = [];
+    for (const job of jobs) await job.write().catch(() => void failed.push(String(job.ids['step'])));
+    expect(failed).toEqual(['beginCall', 'endCall', 'append']);
+    expect(threads.threads.size).toBe(0);
+    expect(JSON.stringify(memory.runs.map((run) => run.callStarts.map((call) => call.valuesText)))).not.toContain('SENTINEL');
+  });
+
+  it('is stored as usual when the guard can be read', async () => {
+    const threads = createMemoryAssistantThreadStore();
+    const runs = createMemoryAssistantRunStore();
+    const records = queue();
+    const r = await rig({ threadStore: threads, records: records.records });
+    const wrapped = withTurnAudit({ logger: () => undefined, threads: () => threads, runs: () => runs, records: () => records.records }, async () => {
+      await noteTurnStarted({ sourceId: 'demo', investigationId: INVESTIGATION, questionHash: 'b'.repeat(64) });
+      callOf().end({ aborted: false });
+      await drain();
+      noteTurn({ route: 'view', answered: true, citedRefs: [] });
+      return PLACEHOLDER;
+    });
+    await wrapped(r.request(BASE, { principalId: PERSON }));
+    await drain();
+    expect(threads.threads.size).toBe(1);
+    expect(records.failed).toEqual([]);
   });
 });

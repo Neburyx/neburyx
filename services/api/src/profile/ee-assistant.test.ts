@@ -540,6 +540,21 @@ describe('a turn when the audit store is down, blocked or full, through the queu
   });
 });
 
+describe('the clearing of a chat when the audit store is down, through the queue of the application', () => {
+  it('answers the clearing as when the store is up, and counts and logs the failed event by its ids, never a text', async () => {
+    const logs: Record<string, unknown>[] = [];
+    const queue = createAuditQueue({ sinks: [{ name: 'test', sink: { record: () => Promise.reject(new Error('the store is down')) } }], settings: { queueSize: 100, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: (fields) => void logs.push(fields) } });
+    const threads = createMemoryAssistantThreadStore();
+    const rig = await assistantRig({ requestAudit: queue.sink, threadStore: threads });
+    const cleared = await rig.rig.app.inject({ method: 'POST', url: `/v1/assistant/investigations/${rig.body.investigationId}/thread/clear`, payload: '{}', headers: { 'content-type': 'application/json' } });
+    expect([cleared.statusCode, cleared.json()]).toEqual([200, { cleared: false }]);
+    await vi.waitFor(() => expect(queue.counts().failed).toBeGreaterThan(0));
+    expect(logs.some((line) => line['action'] === 'assistant.thread.cleared')).toBe(true);
+    expect(JSON.stringify(logs)).not.toMatch(/the store is down|cleared":/);
+    await rig.stop();
+  });
+});
+
 describe('the closing event of a turn in the running application', () => {
   const CANARY = 'CANARY-MESSAGE-7';
   const REPLY_CANARY = 'REPLY-CANARY';

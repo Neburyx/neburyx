@@ -5,7 +5,7 @@ import type { AssistantThreadRead } from './thread-store.js';
 
 const REF = { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' };
 const turn = (stored?: StoredTurnText) => ({ id: '0192f000-0000-7000-8000-0000000000f1', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view' as const, outcome: 'answered' as const, citedElements: 1, steps: 0, ...(stored === undefined ? {} : { stored }) });
-const read = (...turns: ReturnType<typeof turn>[]): AssistantThreadRead => ({ turns, earlierTurns: 0, previousThreadClearedAt: null });
+const read = (...turns: ReturnType<typeof turn>[]): AssistantThreadRead => ({ turns, earlierTurns: 0, previousThreadClearedAt: null, epoch: 0 });
 const answer: StoredAnswer = {
   blocks: [
     {
@@ -108,7 +108,7 @@ describe('what a read sends of a stored thread', () => {
   });
 
   it('keeps the count of the earlier turns and the clearing', () => {
-    expect(presentThread({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' }, false, undefined)).toEqual({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' });
+    expect(presentThread({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z', epoch: 2 }, false, undefined)).toEqual({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z', epoch: 2 });
   });
 
   it('withholds an unbound item under the mask whatever mask the turn was written under, a refusal with its overview and an unbound column label when the version is not verified or the item may hold a value, and sends no literal of a bound item then', () => {

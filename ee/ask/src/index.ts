@@ -15,6 +15,7 @@ import { createPgAssistantRunStore, type AssistantRunStore } from './assistant/r
 import { createPgAssistantThreadStore, type AssistantThreadStore } from './assistant/thread-store.js';
 import { createPgAssistantPendingStore, type AssistantPendingStore } from './assistant/pending-store.js';
 import { createAssistantThreadRoute } from './assistant/thread-route.js';
+import { createAssistantThreadClearRoute } from './assistant/thread-clear-route.js';
 import { createCaseSummarizer } from './case-summary/summarizer.js';
 import { summaryProviderConfiguration } from './case-summary/provider-configuration.js';
 import { readTokenKeys } from './case-summary/token-keys.js';
@@ -57,7 +58,7 @@ export { createCaseSummarizer } from './case-summary/summarizer.js';
 /** @public Test hooks: the services/api tests build a case summarizer with the in-memory store, and the integration test runs the real store on a Postgres. */
 export { createMemorySummaryRunStore, createPgSummaryRunStore } from './case-summary/run-store.js';
 /** @public Test hooks, as for the summary: the services/api tests build the assistant with the in-memory store, and the integration test runs the real store on a Postgres. */
-export { createMemoryAssistantRunStore, createPgAssistantRunStore } from './assistant/run-store.js';
+export { AssistantRunGuardError, createMemoryAssistantRunStore, createPgAssistantRunStore } from './assistant/run-store.js';
 /** @public Test hooks for the threads of the assistant: the services/api tests run the real store on a Postgres and build the assistant with the in-memory one. */
 export { createMemoryAssistantThreadStore, createPgAssistantThreadStore, type AssistantThreadStore } from './assistant/thread-store.js';
 /** @public Test hooks for the confirmations that wait for the analyst: the services/api tests and the suites build the assistant with the in-memory store, and the integration test runs the real store on a Postgres. */
@@ -214,7 +215,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, agentTurn: assistantAgentTurn, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, contextTextTokens: () => (assistantSettings?.contextText === true ? textBudgetOf(assistantSettings.maxInputTokens) : undefined), typology: (sourceId) => typologyLines(sourceId), notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, overview: assistantOverview, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantThreadClearRoute({ threads: () => assistantThreads, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, agentTurn: assistantAgentTurn, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, contextTextTokens: () => (assistantSettings?.contextText === true ? textBudgetOf(assistantSettings.maxInputTokens) : undefined), typology: (sourceId) => typologyLines(sourceId), notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, overview: assistantOverview, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },

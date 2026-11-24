@@ -138,6 +138,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(readSourceElements === undefined ? {} : { readSourceElements }),
               ...(investigationReadable === undefined ? {} : { investigationReadable }),
               ...(aiNotes === undefined ? {} : { aiNotes }),
+              setResponseHeader: (name, value) => void replyOut.header(name, value),
               ...(body === undefined ? {} : { body }),
               ...(params === undefined ? {} : { params }),
               ...(queryValues === undefined ? {} : { query: queryValues }),

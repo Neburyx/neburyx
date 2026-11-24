@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { ExtensionRefusal, type AuditEvent, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
+import { ExtensionRefusal, assistantThreadClearRequestSchema, type AuditEvent, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
 import Fastify from 'fastify';
 import { z } from 'zod';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -185,6 +185,27 @@ describe('a POST route of an extension', () => {
     expect(answer.statusCode).toBe(200);
     expect(seen).toEqual([{ previewOn: false, hasBody: false }]);
     await app.close();
+  });
+
+  describe('with the strict empty body of the clearing route', () => {
+    const emptyExtension = (handler: () => Promise<unknown>): ProfileExtension => ({ name: 'probe', routeGroups: [{ routes: [{ method: 'POST', url: URL_OF_ROUTE, permission: 'principal', requestSchema: assistantThreadClearRequestSchema, responseSchema: z.unknown(), handler }] }] });
+
+    it('runs the handler for {} and for nothing else', async () => {
+      let ran = 0;
+      const { app } = await started(emptyExtension(async () => (ran++, { cleared: false })), { previewOn: true });
+      expect((await app.inject({ method: 'POST', url: URL_OF_ROUTE, payload: {} })).statusCode).toBe(200);
+      expect(ran).toBe(1);
+      await app.close();
+    });
+
+    it.each([['no body', undefined], ['a body that is an array', []], ['a body that is a string', JSON.stringify('x')], ['a body that is null', 'null'], ['an object with a member', { cleared: true }]])('answers INVALID_REQUEST for %s and runs nothing', async (_name, payload) => {
+      let ran = 0;
+      const { app } = await started(emptyExtension(async () => (ran++, { cleared: false })), { previewOn: true });
+      const answer = await app.inject({ method: 'POST', url: URL_OF_ROUTE, ...(payload === undefined ? {} : { payload, headers: { 'content-type': 'application/json' } }) });
+      expect([answer.statusCode, answer.json().error.code]).toEqual([400, 'INVALID_REQUEST']);
+      expect(ran).toBe(0);
+      await app.close();
+    });
   });
 
   it.each([['a body that is missing', undefined], ['a field of another name', { message: 'x', secret: 'SENTINEL-VALUE' }], ['an empty message', { message: '' }], ['a message that is not text', { message: 'SENTINEL-VALUE'.length }]])('answers INVALID_REQUEST for %s without running the handler or writing a value to the answer or the log', async (_name, payload) => {

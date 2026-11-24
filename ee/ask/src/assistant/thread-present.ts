@@ -71,5 +71,6 @@ export function presentThread(read: AssistantThreadRead, maskNow: boolean, curre
     }),
     earlierTurns: read.earlierTurns,
     previousThreadClearedAt: read.previousThreadClearedAt,
+    epoch: read.epoch,
   };
 }

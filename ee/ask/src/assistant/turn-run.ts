@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExtensionLogger, ExtensionRequest } from '@neburyx/contracts';
 import type { ModelAnswer, TokenUsage } from '@neburyx/ee-ai-runtime';
 import type { AssistantSettings } from './settings.js';
-import type { AssistantRunStore } from './run-store.js';
+import { AssistantRunGuardError, type AssistantRunStore } from './run-store.js';
 
 const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -61,8 +61,9 @@ const durationOf = (startedAt: number, endedAt: number): number => Math.max(0, M
 /**
  * A write that fails never changes the turn. The application's queue counts and logs the failure of a write it was given; a store used without a queue is written at once, and its failure is logged here by the run and the step, never by text.
  */
-const quietly = (deps: TurnRunDeps, ids: { readonly runId: string; readonly step: string }, work: () => Promise<void>): void => {
-  const failed = (): void => {
+const quietly = (deps: TurnRunDeps & { readonly guardLost?: () => void }, ids: { readonly runId: string; readonly step: string }, work: () => Promise<void>): void => {
+  const failed = (error?: unknown): void => {
+    if (error instanceof AssistantRunGuardError) deps.guardLost?.();
     try {
       deps.logger()?.warn({ event: 'assistant-run.not-recorded', ...ids }, 'a record of an assistant turn could not be written');
     } catch {
@@ -72,8 +73,8 @@ const quietly = (deps: TurnRunDeps, ids: { readonly runId: string; readonly step
   // the write is handed to the store at once, so it is queued before the model is asked
   try {
     work().catch(failed);
-  } catch {
-    failed();
+  } catch (error) {
+    failed(error);
   }
 };
 
@@ -81,7 +82,8 @@ const quietly = (deps: TurnRunDeps, ids: { readonly runId: string; readonly step
  * The run of a turn: its id is made here, before any call, and its rows are handed to the store in the order made: the run, each call's start before the call and its end after it, then the finish. Nothing here waits for the store.
  * With no store the id is still made, so the events of the turn carry it, and nothing is written.
  */
-export function createTurnRun(deps: TurnRunDeps, request: ExtensionRequest, started: { readonly sourceId: string; readonly investigationId: string }): TurnRun {
+export function createTurnRun(base: TurnRunDeps, request: ExtensionRequest, started: { readonly sourceId: string; readonly investigationId: string; readonly threadEpoch?: number; /** Told when the guard of a write of this run cannot be read, so the turn is not stored in its thread. */ readonly guardLost?: () => void }): TurnRun {
+  const deps = { ...base, ...(started.guardLost === undefined ? {} : { guardLost: started.guardLost }) };
   const id = randomUUID();
   const store = deps.runs();
   const settings = deps.settings();
@@ -95,6 +97,7 @@ export function createTurnRun(deps: TurnRunDeps, request: ExtensionRequest, star
         traceId: request.traceId,
         startedAt: new Date(deps.now()),
         settings: settings === undefined ? {} : { ...settings },
+        ...(started.threadEpoch === undefined ? {} : { threadEpoch: started.threadEpoch }),
       }),
     );
   }
@@ -105,7 +108,7 @@ export function createTurnRun(deps: TurnRunDeps, request: ExtensionRequest, star
       calls += 1;
       const number = calls;
       const startedAt = deps.now();
-      if (store !== undefined) quietly(deps, { runId: id, step: 'beginCall' }, () => store.beginCall({ runId: id, number, startedAt: new Date(startedAt), instructionsSha256: call.instructionsSha256, instructionsText: call.instructions, valuesText: call.values, ...(call.tools === undefined || call.tools.length === 0 ? {} : { toolsOffered: call.tools.join(',') }) }));
+      if (store !== undefined) quietly(deps, { runId: id, step: 'beginCall' }, () => store.beginCall({ runId: id, number, startedAt: new Date(startedAt), instructionsSha256: call.instructionsSha256, instructionsText: call.instructions, valuesText: call.values, ...(deps.guardLost === undefined ? {} : { onGuardLost: deps.guardLost }), ...(call.tools === undefined || call.tools.length === 0 ? {} : { toolsOffered: call.tools.join(',') }) }));
       let answer: ModelAnswer | undefined;
       let ended = false;
       return {
@@ -131,6 +134,7 @@ export function createTurnRun(deps: TurnRunDeps, request: ExtensionRequest, star
               ...(replyText === undefined ? {} : { replyText }),
               ...(usage?.kind === 'known' ? { tokensIn: usage.inputTokens, tokensOut: usage.outputTokens } : {}),
               durationMs: durationOf(startedAt, deps.now()),
+              ...(deps.guardLost === undefined ? {} : { onGuardLost: deps.guardLost }),
             }),
           );
         },

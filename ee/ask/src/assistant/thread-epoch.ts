@@ -1,0 +1,2 @@
+/** The count a turn reads before it does any work: how many times the investigation was cleared (closed, archived or deleted) plus how many times this person cleared their own thread of it. Both only grow, so the sum never repeats a value a turn holds. $1 is the investigation, $2 the person. */
+export const READ_EPOCH = 'SELECT COALESCE((SELECT epoch FROM assistant_investigation_epochs WHERE investigation_id = $1), 0) + COALESCE((SELECT epoch FROM assistant_thread_person_epochs WHERE investigation_id = $1 AND user_id = $2), 0) AS epoch';

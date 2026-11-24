@@ -1,4 +1,5 @@
 import { rmSync } from 'node:fs';
+import { ASSISTANT_EPOCH_HEADER, assistantEpochHeaderSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { createLogger } from './logger.js';
@@ -40,6 +41,7 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
       '/v1/ai/status': committed.paths['/v1/ai/status'],
       '/v1/assistant/turns': committed.paths['/v1/assistant/turns'],
       '/v1/assistant/investigations/{id}/thread': committed.paths['/v1/assistant/investigations/{id}/thread'],
+      '/v1/assistant/investigations/{id}/thread/clear': committed.paths['/v1/assistant/investigations/{id}/thread/clear'],
       '/v1/sources': committed.paths['/v1/sources'],
       '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'],
       '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'],
@@ -81,6 +83,18 @@ function referencing(schema: unknown): Record<string, unknown> {
     '/v1/test/ref': { get: { responses: { '200': { content: { 'application/json': { schema } } } } } },
   };
 }
+
+describe('the committed openapi.json on the epoch header of the assistant turn', () => {
+  it('declares the header on the answer of the turn, as a whole number, for the JSON answer and the stream, and on no refusal', () => {
+    const committed = loadCommittedDocument();
+    const post = (committed.paths['/v1/assistant/turns'] as { post: { responses: Record<string, { headers?: Record<string, { schema: unknown }>; content?: Record<string, unknown> }> } }).post;
+    expect(post.responses['200']?.headers?.[ASSISTANT_EPOCH_HEADER]?.schema).toEqual({ type: 'integer', minimum: 0 });
+    expect(Object.keys(post.responses['200']?.content ?? {})).toEqual(['application/json', 'application/x-ndjson']);
+    for (const status of Object.keys(post.responses).filter((code) => code !== '200')) expect(post.responses[status]?.headers).toBeUndefined();
+    expect(assistantEpochHeaderSchema.safeParse('3').success).toBe(true);
+    expect(assistantEpochHeaderSchema.safeParse('-3').success).toBe(false);
+  });
+});
 
 describe('a probe route at the root', () => {
   it('is reported by name when it is not in the document', async () => {
@@ -372,7 +386,7 @@ describe('a document the check cannot trust', () => {
       instance.get('/v1/test/from-plugin', async () => ({ name: 'x' }));
     });
     const empty = parseDocument({
-      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/ai/status': committed.paths['/v1/ai/status'], '/v1/assistant/turns': committed.paths['/v1/assistant/turns'], '/v1/assistant/investigations/{id}/thread': committed.paths['/v1/assistant/investigations/{id}/thread'], '/v1/me/preferences': committed.paths['/v1/me/preferences'], '/v1/sources': committed.paths['/v1/sources'], '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'], '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'] },
+      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/ai/status': committed.paths['/v1/ai/status'], '/v1/assistant/turns': committed.paths['/v1/assistant/turns'], '/v1/assistant/investigations/{id}/thread': committed.paths['/v1/assistant/investigations/{id}/thread'], '/v1/assistant/investigations/{id}/thread/clear': committed.paths['/v1/assistant/investigations/{id}/thread/clear'], '/v1/me/preferences': committed.paths['/v1/me/preferences'], '/v1/sources': committed.paths['/v1/sources'], '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'], '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'] },
       components: {
         schemas: {
           ErrorResponse: committed.components.schemas['ErrorResponse'],

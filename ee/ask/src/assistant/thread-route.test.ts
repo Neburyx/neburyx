@@ -54,7 +54,7 @@ describe('the route that reads the thread of an investigation', () => {
     const store = createMemoryAssistantThreadStore();
     await store.append(turn({ userId: OTHER }), 0);
     const route = createAssistantThreadRoute({ threads: () => store, limit: () => 100, logger: () => undefined });
-    expect((await route.handler(requestOf())) as unknown).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: null });
+    expect((await route.handler(requestOf())) as unknown).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: null, epoch: 0 });
     expect(((await route.handler(requestOf({ principalId: OTHER }))) as { turns: unknown[] }).turns).toHaveLength(1);
   });
 
@@ -71,8 +71,8 @@ describe('the route that reads the thread of an investigation', () => {
     store.clear(INVESTIGATION);
     store.reopen(INVESTIGATION);
     const route = createAssistantThreadRoute({ threads: () => store, limit: () => 100, logger: () => undefined });
-    expect(await route.handler(requestOf())).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z' });
-    expect(await route.handler(requestOf({ principalId: OTHER }))).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: null });
+    expect(await route.handler(requestOf())).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z', epoch: 1 });
+    expect(await route.handler(requestOf({ principalId: OTHER }))).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: null, epoch: 1 });
   });
 
   it('refuses as unsupported without a store or an investigation, and ends in an error with no text of the failure when the store cannot read, logging the investigation id only', async () => {

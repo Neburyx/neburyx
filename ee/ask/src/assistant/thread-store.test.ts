@@ -32,6 +32,7 @@ interface Script {
   readonly total?: number;
   readonly cleared?: Date;
   readonly hasThread?: boolean;
+  readonly deleted?: number;
 }
 
 function pool(script: Script = {}) {
@@ -43,9 +44,11 @@ function pool(script: Script = {}) {
       statements.push(text);
       parameters.push(values);
       if (script.failAt?.test(text) === true) throw new Error('DRIVER-TEXT canary-secret-7f3 INSERT INTO ...');
+      if (/FOR NO KEY UPDATE/.test(text)) return { rows: script.status === 'none' ? [] : [{ '?column?': 1 }] };
       if (/FOR SHARE/.test(text)) return { rows: script.status === 'none' ? [] : [{ status: script.status ?? 'open', deleted: false }] };
       if (/FROM assistant_investigation_epochs/.test(text)) return { rows: script.epoch === undefined ? [] : [{ epoch: script.epoch }] };
       if (/SELECT 1 FROM assistant_turns/.test(text)) return { rows: script.exists === true ? [{ '?column?': 1 }] : [] };
+      if (/^DELETE FROM assistant_threads/.test(text)) return { rows: [], rowCount: script.deleted ?? 1 };
       if (/INSERT INTO assistant_threads/.test(text)) return { rows: [{ id: 'thread-1' }] };
       if (/MAX\(seq\)/.test(text)) return { rows: [{ seq: 3 }] };
       if (/INSERT INTO assistant_turns/.test(text)) return { rows: [], rowCount: script.inserted ?? 1 };
@@ -66,7 +69,7 @@ describe('the Postgres store of the threads', () => {
     const { held, statements, released } = pool({ epoch: 2 });
     const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
     expect(await store.append(turn(), 2)).toBe('stored');
-    expect(statements.map((text) => text.split(' ').slice(0, 4).join(' '))).toEqual(['BEGIN', 'SELECT status, deleted_at IS', 'SELECT epoch FROM assistant_investigation_epochs', 'SELECT 1 FROM assistant_turns', 'INSERT INTO assistant_threads (id,', 'SELECT COALESCE(MAX(seq), 0) +', 'INSERT INTO assistant_turns (id,', 'COMMIT']);
+    expect(statements.map((text) => text.split(' ').slice(0, 4).join(' '))).toEqual(['BEGIN', 'SELECT status, deleted_at IS', 'SELECT COALESCE((SELECT epoch FROM', 'SELECT 1 FROM assistant_turns', 'INSERT INTO assistant_threads (id,', 'SELECT COALESCE(MAX(seq), 0) +', 'INSERT INTO assistant_turns (id,', 'COMMIT']);
     expect(statements[1]).toContain('FOR SHARE');
     expect(statements[4]).toContain('ON CONFLICT (investigation_id, user_id) DO UPDATE SET last_turn_at = GREATEST');
     expect(statements[6]).toContain('ON CONFLICT (id) DO NOTHING');
@@ -105,7 +108,7 @@ describe('the Postgres store of the threads', () => {
 
   it('answers the fixed error when no connection can be made, and refuses a turn the schema does not accept before any statement', async () => {
     const down: ThreadPool = { connect: () => Promise.reject(new Error('connect ECONNREFUSED 10.0.0.1')), end: async () => undefined, on: () => undefined };
-    await expect(createPgAssistantThreadStore(CONTEXT, { createPool: () => down }).epoch(INVESTIGATION)).rejects.toBeInstanceOf(AssistantThreadStoreError);
+    await expect(createPgAssistantThreadStore(CONTEXT, { createPool: () => down }).epoch(INVESTIGATION, OWNER)).rejects.toBeInstanceOf(AssistantThreadStoreError);
     const { held, statements } = pool();
     await expect(createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).append({ ...turn(), questionHash: 'not-a-hash' }, 0)).rejects.toBeInstanceOf(AssistantThreadStoreError);
     expect(statements).toEqual([]);
@@ -113,9 +116,9 @@ describe('the Postgres store of the threads', () => {
 
   it('reads the epoch as 0 when the investigation was never cleared', async () => {
     const { held } = pool();
-    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).epoch(INVESTIGATION)).toBe(0);
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).epoch(INVESTIGATION, OWNER)).toBe(0);
     const cleared = pool({ epoch: 4 });
-    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => cleared.held }).epoch(INVESTIGATION)).toBe(4);
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => cleared.held }).epoch(INVESTIGATION, OWNER)).toBe(4);
   });
 
   it('closes its pool once', async () => {
@@ -196,13 +199,13 @@ describe('the read of the Postgres store', () => {
     expect(statements.at(-1)).toBe('COMMIT');
     expect(statements.slice(1, -1).every((text) => text.startsWith('SELECT'))).toBe(true);
     expect(statements[1]).toContain('ORDER BY t.seq DESC LIMIT $3');
-    expect(answer).toEqual({ turns: [expect.objectContaining({ seq: 6 }), expect.objectContaining({ seq: 7, intent: 'widgetById', citedElements: 2 })], earlierTurns: 5, previousThreadClearedAt: null });
+    expect(answer).toEqual({ turns: [expect.objectContaining({ seq: 6 }), expect.objectContaining({ seq: 7, intent: 'widgetById', citedElements: 2 })], earlierTurns: 5, previousThreadClearedAt: null, epoch: 0 });
     expect(released.count).toBe(1);
   });
 
   it('says when the person’s thread was cleared only when they have no thread since, and rolls back and answers the fixed error when a read fails', async () => {
-    const cleared = pool({ turns: [], hasThread: false, cleared: new Date('2026-11-18T12:00:00Z') });
-    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => cleared.held }).read(INVESTIGATION, OWNER, 100)).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z' });
+    const cleared = pool({ turns: [], hasThread: false, cleared: new Date('2026-11-18T12:00:00Z'), epoch: 3 });
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => cleared.held }).read(INVESTIGATION, OWNER, 100)).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z', epoch: 3 });
     const since = pool({ turns: [row(1)], hasThread: true, cleared: new Date('2026-11-18T12:00:00Z') });
     expect((await createPgAssistantThreadStore(CONTEXT, { createPool: () => since.held }).read(INVESTIGATION, OWNER, 100)).previousThreadClearedAt).toBeNull();
     const failing = pool({ failAt: /count\(\*\)/ });
@@ -281,11 +284,11 @@ describe('the memory store of the threads', () => {
     const store = createMemoryAssistantThreadStore({ now: () => new Date('2026-11-18T12:00:00Z') });
     await store.append(turn(), 0);
     store.clear(INVESTIGATION);
-    expect(await store.epoch(INVESTIGATION)).toBe(1);
+    expect(await store.epoch(INVESTIGATION, OWNER)).toBe(1);
     expect(await store.append(turn(), 0)).toBe('refused');
     store.reopen(INVESTIGATION);
     expect(await store.append(turn(), 0)).toBe('refused');
-    expect(await store.read(INVESTIGATION, OWNER, 100)).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z' });
+    expect(await store.read(INVESTIGATION, OWNER, 100)).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z', epoch: 1 });
     expect((await store.read(INVESTIGATION, OTHER, 100)).previousThreadClearedAt).toBeNull();
     expect(await store.append(turn(), 1)).toBe('stored');
     expect((await store.read(INVESTIGATION, OWNER, 100)).previousThreadClearedAt).toBeNull();
@@ -305,8 +308,83 @@ describe('the memory store of the threads', () => {
     await expect(createMemoryAssistantThreadStore().append({ ...turn(), questionHash: 'x' }, 0)).rejects.toThrow();
     for (const step of ['epoch', 'append', 'read'] as const) {
       const failing = createMemoryAssistantThreadStore({ failOn: step });
-      const work = step === 'epoch' ? failing.epoch(INVESTIGATION) : step === 'append' ? failing.append(turn(), 0) : failing.read(INVESTIGATION, OWNER, 100);
+      const work = step === 'epoch' ? failing.epoch(INVESTIGATION, OWNER) : step === 'append' ? failing.append(turn(), 0) : failing.read(INVESTIGATION, OWNER, 100);
       await expect(work).rejects.toBeInstanceOf(AssistantThreadStoreError);
     }
+  });
+});
+
+describe('the clearing of the caller’s own thread by the Postgres store', () => {
+  it('deletes the thread, blanks the call text of the caller’s runs of the investigation, forgets the caller’s clearing notice, all in one transaction, and says a thread was deleted', async () => {
+    const { held, statements, parameters, released } = pool({ deleted: 1 });
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    expect(await store.clearOwn(INVESTIGATION, OWNER)).toBe(true);
+    expect(statements.map((text) => text.split(' ').slice(0, 3).join(' '))).toEqual(['BEGIN', 'SELECT 1 FROM', 'DELETE FROM assistant_threads', 'UPDATE assistant_run_calls SET', 'DELETE FROM assistant_thread_clears', 'INSERT INTO assistant_thread_person_epochs', 'COMMIT']);
+    expect(statements[3]).toContain("values_text = ''");
+    expect(statements[3]).toContain('reply_text = NULL');
+    expect(statements[3]).toContain('actor_id = $2 AND investigation_id = $1');
+    expect(statements[3]).not.toMatch(/instructions_text|DELETE/);
+    expect(statements[1]).toContain('FOR NO KEY UPDATE');
+    expect(statements[5]).toContain('ON CONFLICT (investigation_id, user_id) DO UPDATE SET epoch = assistant_thread_person_epochs.epoch + 1');
+    for (const index of [2, 3, 4, 5]) expect(parameters[index]).toEqual([INVESTIGATION, OWNER]);
+    expect(parameters[1]).toEqual([INVESTIGATION]);
+    expect(released.count).toBe(1);
+  });
+
+  it('says no thread was deleted, and still blanks the call text, for a person with no thread row', async () => {
+    const { held, statements } = pool({ deleted: 0 });
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    expect(await store.clearOwn(INVESTIGATION, OWNER)).toBe(false);
+    expect(statements.some((text) => /^UPDATE assistant_run_calls/.test(text))).toBe(true);
+    expect(statements.at(-1)).toBe('COMMIT');
+  });
+
+  it.each([/^UPDATE assistant_run_calls/, /^DELETE FROM assistant_thread_clears/, /^DELETE FROM assistant_threads/, /^INSERT INTO assistant_thread_person_epochs/])('rolls the whole clearing back and answers the fixed error, with no driver text, when %s fails', async (failAt) => {
+    const { held, statements, released } = pool({ failAt });
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    const error = await store.clearOwn(INVESTIGATION, OWNER).then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AssistantThreadStoreError);
+    expect(JSON.stringify([(error as Error).message])).not.toMatch(/DRIVER-TEXT|canary-secret-7f3/);
+    expect(statements.at(-1)).toBe('ROLLBACK');
+    expect(statements).not.toContain('COMMIT');
+    expect(released.count).toBe(1);
+  });
+
+  it('does nothing and says false for an investigation that is not there', async () => {
+    const { held, statements } = pool({ status: 'none' });
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).clearOwn(INVESTIGATION, OWNER)).toBe(false);
+    expect(statements).toEqual([expect.stringMatching(/^BEGIN/), expect.stringContaining('FOR NO KEY UPDATE'), 'ROLLBACK']);
+  });
+
+  it('answers the fixed error when no connection can be made', async () => {
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => ({ connect: async () => { throw new Error('refused DRIVER-TEXT'); }, end: async () => undefined, on: () => undefined }) });
+    await expect(store.clearOwn(INVESTIGATION, OWNER)).rejects.toBeInstanceOf(AssistantThreadStoreError);
+  });
+});
+
+describe('the clearing of the caller’s own thread by the memory store', () => {
+  it('deletes only the caller’s thread of the investigation, and the caller’s other investigation and another person’s thread stay', async () => {
+    const store = createMemoryAssistantThreadStore();
+    const elsewhere = '0192f000-0000-7000-8000-0000000000a2';
+    await store.append(turn(), 0);
+    await store.append(turn({ userId: OTHER }), 0);
+    await store.append(turn({ investigationId: elsewhere }), 0);
+    expect(await store.clearOwn(INVESTIGATION, OWNER)).toBe(true);
+    expect((await store.read(INVESTIGATION, OWNER, 100)).turns).toHaveLength(0);
+    expect((await store.read(INVESTIGATION, OTHER, 100)).turns).toHaveLength(1);
+    expect((await store.read(elsewhere, OWNER, 100)).turns).toHaveLength(1);
+    expect(await store.clearOwn(INVESTIGATION, OWNER)).toBe(false);
+  });
+
+  it('forgets the caller’s clearing notice and gives the run records the same call, and fails when told to', async () => {
+    const seen: string[] = [];
+    const store = createMemoryAssistantThreadStore({ now: () => new Date('2026-11-18T12:00:00Z'), blankRunText: (investigationId, userId) => void seen.push(`${investigationId}:${userId}`) });
+    await store.append(turn(), 0);
+    store.clear(INVESTIGATION);
+    expect((await store.read(INVESTIGATION, OWNER, 100)).previousThreadClearedAt).not.toBeNull();
+    await store.clearOwn(INVESTIGATION, OWNER);
+    expect((await store.read(INVESTIGATION, OWNER, 100)).previousThreadClearedAt).toBeNull();
+    expect(seen).toEqual([`${INVESTIGATION}:${OWNER}`]);
+    await expect(createMemoryAssistantThreadStore({ failOn: 'clear' }).clearOwn(INVESTIGATION, OWNER)).rejects.toBeInstanceOf(AssistantThreadStoreError);
   });
 });

@@ -31,7 +31,7 @@ type Usage = { readonly kind: 'known'; readonly inputTokens: number; readonly ou
 /** What a turn knows as it runs: ids, codes, hashes and counts, never a message, a reply or a value. */
 interface TurnNotes {
   /** Opens the turn's run when the turn passes its first checks. */
-  readonly open: (started: { readonly sourceId: string; readonly investigationId: string }) => TurnRun;
+  readonly open: (started: { readonly sourceId: string; readonly investigationId: string; readonly threadEpoch?: number; readonly guardLost?: () => void }) => TurnRun;
   readonly openThread: (started: { readonly investigationId: string; readonly turnId?: string }) => Promise<TurnThread | undefined>;
   run?: TurnRun;
   thread?: TurnThread;
@@ -131,11 +131,12 @@ export const noteTurnStarted = async (started: { readonly sourceId: string; read
   if (notes === undefined) return;
   notes.started = { sourceId: started.sourceId, investigationId: started.investigationId };
   notes.steps = 0;
-  notes.run = notes.open(notes.started);
   if (started.questionHash !== undefined) notes.questionHash = started.questionHash;
   if (started.question !== undefined) notes.question = started.question;
   notes.maskOn = started.maskOn === true;
   notes.thread = await notes.openThread({ ...notes.started, ...(started.turnId === undefined ? {} : { turnId: started.turnId }) });
+  // the run is opened once the thread's count is known, so its record keeps the count its turn read and a late write of its text can be told from one that belongs to the thread as it is
+  notes.run = notes.open({ ...notes.started, ...(notes.thread?.epoch === undefined ? {} : { threadEpoch: notes.thread.epoch }), guardLost: () => notes.thread?.suppress() });
 };
 
 /** The caller's last `limit` turns of the thread of the turn that is running; none outside a turn, before the turn started or when the thread cannot be read. */

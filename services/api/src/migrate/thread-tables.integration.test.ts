@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import pg from 'pg';
 import { stringify } from 'yaml';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createPgAssistantThreadStore, type AssistantThreadStore } from '@neburyx/ee-ask';
+import { AssistantRunGuardError, createPgAssistantRunStore, createPgAssistantThreadStore, type AssistantThreadStore } from '@neburyx/ee-ask';
 import { changeInvestigationStatus } from '../db/investigations-repository.js';
 import type { AssistantThreadTurnWrite } from '@neburyx/contracts';
 import { clearRegisteredExtension, type ExtensionLoader } from '../profile/extension.js';
@@ -61,8 +61,8 @@ async function withStore<T>(database: TestDatabase, work: (store: AssistantThrea
 
 const count = async (database: TestDatabase, table: string, where = 'true'): Promise<number> => Number((await rows(database.ownerUrl, `SELECT count(*)::int AS n FROM ${table} WHERE ${where}`))[0]?.['n']);
 const ALLOWED_TURN_COLUMNS = ['id', 'thread_id', 'seq', 'at', 'route', 'outcome', 'cause', 'question_hash', 'intent', 'template_id', 'entities', 'citation_refs', 'steps', 'model_ref', 'prompt_version', 'tokens_in', 'tokens_out', 'run_id', 'question_text', 'mask_on', 'answer', 'sensitivity_version'];
-const TEXT_TABLES = ['assistant_threads', 'assistant_turns', 'assistant_investigation_epochs', 'assistant_thread_clears'];
-const ALLOWED_COLUMNS: Readonly<Record<string, readonly string[]>> = { assistant_threads: ['id', 'investigation_id', 'user_id', 'created_at', 'last_turn_at'], assistant_turns: ALLOWED_TURN_COLUMNS, assistant_investigation_epochs: ['investigation_id', 'epoch'], assistant_thread_clears: ['investigation_id', 'user_id', 'cleared_at'] };
+const TEXT_TABLES = ['assistant_threads', 'assistant_turns', 'assistant_investigation_epochs', 'assistant_thread_clears', 'assistant_thread_person_epochs'];
+const ALLOWED_COLUMNS: Readonly<Record<string, readonly string[]>> = { assistant_threads: ['id', 'investigation_id', 'user_id', 'created_at', 'last_turn_at'], assistant_turns: ALLOWED_TURN_COLUMNS, assistant_investigation_epochs: ['investigation_id', 'epoch'], assistant_thread_clears: ['investigation_id', 'user_id', 'cleared_at'], assistant_thread_person_epochs: ['investigation_id', 'user_id', 'epoch'] };
 
 const waitUntilBlocked = async (database: TestDatabase): Promise<void> => {
   for (let attempt = 0; attempt < 200; attempt += 1) {
@@ -191,7 +191,7 @@ describe('the store as the application role', () => {
   it('creates the thread, follows seq, moves last_turn_at, and reads the caller’s own thread only', async () => {
     const database = await seeded();
     await withStore(database, async (store) => {
-      expect(await store.epoch(FIRST)).toBe(0);
+      expect(await store.epoch(FIRST, OWNER)).toBe(0);
       await store.append(turn({ at: new Date('2026-11-18T10:00:00Z') }), 0);
       await store.append(turn({ at: new Date('2026-11-18T10:05:00Z'), route: 'refuse', outcome: 'refused', cause: 'verdict', intent: undefined, entities: [], citationRefs: [], steps: 0, modelRef: undefined, promptVersion: undefined, tokensIn: undefined, tokensOut: undefined }), 0);
       await store.append(turn({ userId: OTHER }), 0);
@@ -407,12 +407,12 @@ describe('the writes of the store under retries, concurrency and the closing of 
   it('refuses a write that waited across a close and a reopen, whatever clock the turn carries', async () => {
     const database = await seeded();
     await withStore(database, async (store) => {
-      const started = await store.epoch(FIRST);
+      const started = await store.epoch(FIRST, OWNER);
       await rows(database.ownerUrl, `UPDATE investigations SET status = 'closed', closed_at = now() WHERE id = '${FIRST}'`);
       await rows(database.ownerUrl, `UPDATE investigations SET status = 'open', closed_at = NULL WHERE id = '${FIRST}'`);
       for (const at of [new Date('2000-01-01T00:00:00Z'), new Date(), new Date('2999-01-01T00:00:00Z')]) expect(await store.append(turn({ at }), started)).toBe('refused');
       expect(await count(database, 'assistant_threads')).toBe(0);
-      expect(await store.append(turn(), await store.epoch(FIRST))).toBe('stored');
+      expect(await store.append(turn(), await store.epoch(FIRST, OWNER))).toBe('stored');
     });
   });
 });
@@ -476,19 +476,284 @@ describe('the text of a turn (0013)', () => {
   });
 });
 
-describe('the enterprise migrations 0010 to 0013 in order', () => {
-  it('applies 0010, 0011, 0012 and 0013 one after another on a fresh database, records them in that order, and a second run has nothing to apply', async () => {
+describe('the enterprise migrations 0010 to 0014 in order', () => {
+  it('applies 0010, 0011, 0012, 0013 and 0014 one after another on a fresh database, records them in that order, and a second run has nothing to apply', async () => {
     const database = await postgres.newDatabase();
     const env = { DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole, NEBURYX_CONFIG: PREVIEW_FILE, NEBURYX_PROFILE: 'enterprise' };
     const files = readdirSync(PREVIEW_MIGRATIONS).filter((name) => name.endsWith('.sql')).sort();
-    expect(files.slice(-4).map((name) => name.slice(0, 4))).toEqual(['0010', '0011', '0012', '0013']);
+    expect(files.slice(-5).map((name) => name.slice(0, 4))).toEqual(['0010', '0011', '0012', '0013', '0014']);
     const first = await runInProcess(env, SHIPPED, { extensionLoader: loader });
     expect([first.code, first.stderr]).toEqual([0, '']);
     const history = await rows(database.ownerUrl, 'SELECT name FROM kysely_migration_ee ORDER BY name');
     expect(history.map((row) => row.name)).toEqual(files.map((name) => name.replace(/\.sql$/, '')));
-    // the last file's change is there
+    expect(await rows(database.ownerUrl, "SELECT column_name FROM information_schema.columns WHERE table_name = 'assistant_thread_person_epochs' ORDER BY ordinal_position")).toEqual([{ column_name: 'investigation_id' }, { column_name: 'user_id' }, { column_name: 'epoch' }]);
+    expect(await rows(database.ownerUrl, "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'assistant_runs' AND column_name = 'thread_epoch'")).toEqual([{ n: 1 }]);
     expect(await rows(database.ownerUrl, "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'assistant_turns' AND column_name IN ('question_text', 'mask_on', 'answer', 'sensitivity_version')")).toEqual([{ n: 4 }]);
     const second = await runInProcess(env, SHIPPED, { extensionLoader: loader });
     expect([second.code, second.stdout]).toEqual([0, 'nothing to apply\n']);
+  });
+});
+
+describe('the clearing of one person’s own thread by the real store', () => {
+  async function plantRuns(database: TestDatabase, actor: string, investigation: string): Promise<string> {
+    const id = randomUUID();
+    await rows(database.ownerUrl, `INSERT INTO assistant_runs (id, actor_id, investigation_id, source_id, trace_id, started_at, settings) VALUES ($1, $2, $3, 'alpha', 'trace', now(), '{}')`, [id, actor, investigation]);
+    await rows(database.ownerUrl, `INSERT INTO assistant_run_calls (run_id, call_number, started_at, instructions_sha256, instructions_text, values_text, reply_text, status, tokens_in, tokens_out) VALUES ($1, 1, now(), 'sha', 'fixed instructions', 'SENTINEL-VALUES', 'SENTINEL-REPLY', 'answered', 7, 9)`, [id]);
+    return id;
+  }
+  const fingerprint = async (database: TestDatabase): Promise<string> => JSON.stringify(await Promise.all(['investigations', 'saved_views', 'exports', 'sources'].map(async (table) => (await rows(database.ownerUrl, `SELECT count(*)::int AS n, md5(coalesce(string_agg(t::text, '' ORDER BY t::text), '')) AS h FROM ${table} t`))[0])));
+
+  it('deletes the thread and its turns, blanks the call text of the person’s runs of the investigation, and leaves the rows, the counts, the other person, the other investigation and everything of the graph, notes and views', async () => {
+    const database = await seeded();
+    for (const [user, investigation] of [[OWNER, FIRST], [OTHER, FIRST], [OWNER, SECOND]] as const) await withStore(database, (store) => store.append(turn({ userId: user, investigationId: investigation, question: 'SENTINEL-QUESTION', maskOn: false }), 0));
+    const mine = await plantRuns(database, OWNER, FIRST);
+    const theirs = await plantRuns(database, OTHER, FIRST);
+    const elsewhere = await plantRuns(database, OWNER, SECOND);
+    const before = await fingerprint(database);
+    expect(await withStore(database, (store) => store.clearOwn(FIRST, OWNER))).toBe(true);
+    expect(await count(database, 'assistant_threads', `investigation_id = '${FIRST}' AND user_id = '${OWNER}'`)).toBe(0);
+    expect(await count(database, 'assistant_turns', `question_text = 'SENTINEL-QUESTION'`)).toBe(2);
+    expect(await count(database, 'assistant_threads', `user_id = '${OTHER}'`)).toBe(1);
+    expect(await count(database, 'assistant_threads', `investigation_id = '${SECOND}'`)).toBe(1);
+    const calls = async (id: string) => (await rows(database.ownerUrl, 'SELECT run_id, call_number, instructions_text, values_text, reply_text, status, tokens_in, tokens_out FROM assistant_run_calls WHERE run_id = $1', [id]))[0];
+    expect(await calls(mine)).toEqual({ run_id: mine, call_number: 1, instructions_text: 'fixed instructions', values_text: '', reply_text: null, status: 'answered', tokens_in: 7, tokens_out: 9 });
+    for (const id of [theirs, elsewhere]) expect(await calls(id)).toMatchObject({ values_text: 'SENTINEL-VALUES', reply_text: 'SENTINEL-REPLY' });
+    expect(await count(database, 'assistant_runs')).toBe(3);
+    expect(await fingerprint(database)).toBe(before);
+  });
+
+  it('says false and still blanks the text of a run that has no stored thread, and says false again on a repeat', async () => {
+    const database = await seeded();
+    const id = await plantRuns(database, OWNER, FIRST);
+    expect(await withStore(database, (store) => store.clearOwn(FIRST, OWNER))).toBe(false);
+    expect((await rows(database.ownerUrl, 'SELECT values_text, reply_text FROM assistant_run_calls WHERE run_id = $1', [id]))[0]).toEqual({ values_text: '', reply_text: null });
+    expect(await withStore(database, (store) => store.clearOwn(FIRST, OWNER))).toBe(false);
+  });
+
+  it('forgets the person’s notice of an earlier closing, so a new thread that is cleared shows none', async () => {
+    const database = await seeded();
+    await withStore(database, (store) => store.append(turn(), 0));
+    await rows(database.ownerUrl, `UPDATE investigations SET status = 'closed' WHERE id = '${FIRST}'`);
+    expect(await count(database, 'assistant_thread_clears', `investigation_id = '${FIRST}'`)).toBe(1);
+    expect(await withStore(database, (store) => store.clearOwn(FIRST, OWNER))).toBe(false);
+    expect(await count(database, 'assistant_thread_clears', `investigation_id = '${FIRST}' AND user_id = '${OWNER}'`)).toBe(0);
+    expect((await withStore(database, (store) => store.read(FIRST, OWNER, 10))).previousThreadClearedAt).toBeNull();
+  });
+
+  it('is one transaction: a statement that fails leaves the thread and the call text as they were, with the fixed error', async () => {
+    const database = await seeded();
+    await withStore(database, (store) => store.append(turn(), 0));
+    const id = await plantRuns(database, OWNER, FIRST);
+    await rows(database.ownerUrl, `CREATE OR REPLACE FUNCTION fail_forget() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'DRIVER-TEXT canary'; END; $$`);
+    await rows(database.ownerUrl, `CREATE TRIGGER fail_forget BEFORE DELETE ON assistant_thread_clears FOR EACH ROW EXECUTE FUNCTION fail_forget()`);
+    await rows(database.ownerUrl, `INSERT INTO assistant_thread_clears (investigation_id, user_id, cleared_at) VALUES ('${FIRST}', '${OWNER}', now())`);
+    const error = await withStore(database, (store) => store.clearOwn(FIRST, OWNER)).then(() => undefined, (failure: unknown) => failure);
+    expect((error as Error).message).not.toMatch(/DRIVER-TEXT|canary/);
+    expect(await count(database, 'assistant_threads', `user_id = '${OWNER}' AND investigation_id = '${FIRST}'`)).toBe(1);
+    expect((await rows(database.ownerUrl, 'SELECT values_text, reply_text FROM assistant_run_calls WHERE run_id = $1', [id]))[0]).toEqual({ values_text: 'SENTINEL-VALUES', reply_text: 'SENTINEL-REPLY' });
+  });
+
+  it('is rolled back whole when a statement exceeds the store’s timeout', async () => {
+    const database = await seeded();
+    await withStore(database, (store) => store.append(turn(), 0));
+    const id = await plantRuns(database, OWNER, FIRST);
+    const blocker = new pg.Client({ connectionString: database.ownerUrl });
+    await blocker.connect();
+    await blocker.query('BEGIN');
+    await blocker.query(`UPDATE assistant_run_calls SET status = 'answered' WHERE run_id = $1`, [id]);
+    const quick = createPgAssistantThreadStore({ ...contextOf(database), statementTimeoutMs: 300, queryTimeoutMs: 600 });
+    try {
+      await expect(quick.clearOwn(FIRST, OWNER)).rejects.toThrow();
+    } finally {
+      await blocker.query('ROLLBACK');
+      await blocker.end();
+      await quick.close();
+    }
+    expect(await count(database, 'assistant_threads', `user_id = '${OWNER}' AND investigation_id = '${FIRST}'`)).toBe(1);
+    expect((await rows(database.ownerUrl, 'SELECT values_text FROM assistant_run_calls WHERE run_id = $1', [id]))[0]).toEqual({ values_text: 'SENTINEL-VALUES' });
+  });
+});
+
+describe('the count of a person’s own clearings and the writes of a turn that began before one', () => {
+  const runStoreOf = (database: TestDatabase, over: Partial<ReturnType<typeof contextOf>> = {}) => createPgAssistantRunStore({ ...contextOf(database), ...over });
+  const startOf = (id: string, actor: string, epoch: number | undefined) => ({ id, actorId: actor, investigationId: FIRST, sourceId: 'alpha', traceId: 't', startedAt: new Date('2026-11-18T10:00:00Z'), settings: {}, ...(epoch === undefined ? {} : { threadEpoch: epoch }) });
+  const callStart = (runId: string, number: number) => ({ runId, number, startedAt: new Date('2026-11-18T10:00:01Z'), instructionsSha256: 'sha', instructionsText: 'fixed', valuesText: 'SENTINEL-VALUES' });
+  const callEnd = (runId: string, number: number) => ({ runId, number, status: 'answered' as const, replyText: 'SENTINEL-REPLY', tokensIn: 3, tokensOut: 5, durationMs: 9 });
+  const callText = async (database: TestDatabase, runId: string) => (await rows(database.ownerUrl, 'SELECT call_number, values_text, reply_text FROM assistant_run_calls WHERE run_id = $1 ORDER BY call_number', [runId])).map((row) => [row['call_number'], row['values_text'], row['reply_text']]);
+
+  it('adds the person’s count to the investigation’s, moves it with each clearing and refuses a turn that read an older sum', async () => {
+    const database = await seeded();
+    await withStore(database, async (store) => {
+      expect(await store.epoch(FIRST, OWNER)).toBe(0);
+      await store.clearOwn(FIRST, OWNER);
+      expect([await store.epoch(FIRST, OWNER), await store.epoch(FIRST, OTHER), await store.epoch(SECOND, OWNER)]).toEqual([1, 0, 0]);
+      expect(await store.append(turn(), 0)).toBe('refused');
+      expect(await store.append(turn({ userId: OTHER }), 0)).toBe('stored');
+      expect(await store.append(turn(), 1)).toBe('stored');
+      expect((await store.read(FIRST, OWNER, 10)).epoch).toBe(1);
+    });
+    expect(await rows(database.ownerUrl, `SELECT epoch::int AS epoch FROM assistant_thread_person_epochs WHERE investigation_id = '${FIRST}' AND user_id = '${OWNER}'`)).toEqual([{ epoch: 1 }]);
+  });
+
+  it.each([
+    ['closed', `status = 'closed', closed_at = now()`],
+    ['archived', `status = 'archived', archived_at = now()`],
+    ['soft-deleted', `deleted_at = now()`],
+  ])('keeps the person’s count when the investigation is %s, so the sum only grows', async (_name, change) => {
+    const database = await seeded();
+    await withStore(database, async (store) => {
+      await store.clearOwn(FIRST, OWNER);
+      await store.append(turn({ userId: OTHER }), 0);
+    });
+    await rows(database.ownerUrl, `UPDATE investigations SET ${change} WHERE id = '${FIRST}'`);
+    expect(await rows(database.ownerUrl, `SELECT epoch::int AS epoch FROM assistant_thread_person_epochs WHERE investigation_id = '${FIRST}'`)).toEqual([{ epoch: 1 }]);
+    expect(await withStore(database, (store) => store.epoch(FIRST, OWNER))).toBe(2);
+    expect(await withStore(database, (store) => store.epoch(FIRST, OTHER))).toBe(1);
+  });
+
+  it('never repeats a sum a turn holds across a clearing, a close, a reopen and another clearing, and refuses the turn that read before', async () => {
+    const database = await seeded();
+    const seen: number[] = [];
+    await withStore(database, async (store) => {
+      seen.push(await store.epoch(FIRST, OWNER));
+      await store.clearOwn(FIRST, OWNER);
+      seen.push(await store.epoch(FIRST, OWNER));
+      await rows(database.ownerUrl, `UPDATE investigations SET status = 'closed', closed_at = now() WHERE id = '${FIRST}'`);
+      seen.push(await store.epoch(FIRST, OWNER));
+      await rows(database.ownerUrl, `UPDATE investigations SET status = 'open', closed_at = NULL WHERE id = '${FIRST}'`);
+      await store.clearOwn(FIRST, OWNER);
+      seen.push(await store.epoch(FIRST, OWNER));
+      for (const old of seen.slice(0, -1)) expect(await store.append(turn(), old)).toBe('refused');
+      expect(await store.append(turn(), seen.at(-1) ?? -1)).toBe('stored');
+    });
+    expect(seen).toEqual([0, 1, 2, 3]);
+  });
+
+  it('removes the person’s count only when the investigation row itself is deleted', async () => {
+    const database = await seeded();
+    await withStore(database, (store) => store.clearOwn(FIRST, OWNER));
+    expect(await count(database, 'assistant_thread_person_epochs')).toBe(1);
+    await rows(database.ownerUrl, `DELETE FROM investigations WHERE id = '${FIRST}'`);
+    expect(await count(database, 'assistant_thread_person_epochs')).toBe(0);
+  });
+
+  it('bounds the count: a negative one is refused by the database', async () => {
+    const database = await seeded();
+    await expect(rows(database.ownerUrl, `INSERT INTO assistant_thread_person_epochs (investigation_id, user_id, epoch) VALUES ('${FIRST}', '${OWNER}', -1)`)).rejects.toThrow();
+    await expect(rows(database.ownerUrl, `UPDATE assistant_runs SET thread_epoch = -1`)).resolves.toEqual([]);
+  });
+
+  it('writes the text of a call while the count holds, and none of it once the person has cleared, whether the write is first, late or repeated', async () => {
+    const database = await seeded();
+    const runs = runStoreOf(database);
+    const store = createPgAssistantThreadStore(contextOf(database));
+    try {
+      const runId = randomUUID();
+      const epoch = await store.epoch(FIRST, OWNER);
+      await runs.begin(startOf(runId, OWNER, epoch));
+      await runs.beginCall(callStart(runId, 1));
+      await runs.endCall(callEnd(runId, 1));
+      expect(await callText(database, runId)).toEqual([[1, 'SENTINEL-VALUES', 'SENTINEL-REPLY']]);
+      await store.clearOwn(FIRST, OWNER);
+      expect(await callText(database, runId)).toEqual([[1, '', null]]);
+      await runs.beginCall(callStart(runId, 2));
+      await runs.endCall(callEnd(runId, 2));
+      await runs.endCall(callEnd(runId, 1));
+      await runs.beginCall(callStart(runId, 2));
+      expect(await callText(database, runId)).toEqual([[1, '', null], [2, '', null]]);
+      expect((await rows(database.ownerUrl, 'SELECT tokens_in, tokens_out, status FROM assistant_run_calls WHERE run_id = $1 AND call_number = 2', [runId]))[0]).toEqual({ tokens_in: 3, tokens_out: 5, status: 'answered' });
+      const stale = randomUUID();
+      await runs.begin(startOf(stale, OWNER, epoch));
+      await runs.beginCall(callStart(stale, 1));
+      const none = randomUUID();
+      await runs.begin(startOf(none, OWNER, undefined));
+      await runs.beginCall(callStart(none, 1));
+      expect([await callText(database, stale), await callText(database, none)]).toEqual([[[1, '', null]], [[1, '', null]]]);
+      const fresh = randomUUID();
+      await runs.begin(startOf(fresh, OWNER, await store.epoch(FIRST, OWNER)));
+      await runs.beginCall(callStart(fresh, 1));
+      const theirs = randomUUID();
+      await runs.begin(startOf(theirs, OTHER, 0));
+      await runs.beginCall(callStart(theirs, 1));
+      expect([await callText(database, fresh), await callText(database, theirs)]).toEqual([[[1, 'SENTINEL-VALUES', null]], [[1, 'SENTINEL-VALUES', null]]]);
+    } finally {
+      await runs.close();
+      await store.close();
+    }
+  });
+
+  it.each(['beginCall', 'endCall'] as const)('waits for a clearing that holds the investigation row and then writes no text, for a %s on its own connection', async (step) => {
+    const database = await seeded();
+    const runs = runStoreOf(database);
+    const runId = randomUUID();
+    try {
+      await runs.begin(startOf(runId, OWNER, 0));
+      if (step === 'endCall') await runs.beginCall(callStart(runId, 1));
+      const clearing = new pg.Client({ connectionString: database.ownerUrl });
+      await clearing.connect();
+      await clearing.query('BEGIN');
+      await clearing.query(`SELECT 1 FROM investigations WHERE id = '${FIRST}' FOR NO KEY UPDATE`);
+      const late = step === 'beginCall' ? runs.beginCall(callStart(runId, 1)) : runs.endCall(callEnd(runId, 1));
+      await waitUntilBlocked(database);
+      await clearing.query(`INSERT INTO assistant_thread_person_epochs (investigation_id, user_id, epoch) VALUES ('${FIRST}', '${OWNER}', 1)`);
+      await clearing.query('COMMIT');
+      await clearing.end();
+      await late;
+      // the start of the call that was written before the clearing is the clearing's to blank (the statements above stand in for its count only); the late write adds no text
+      expect(await callText(database, runId)).toEqual(step === 'beginCall' ? [[1, '', null]] : [[1, 'SENTINEL-VALUES', null]]);
+    } finally {
+      await runs.close();
+    }
+  });
+
+  it('writes the call without its text, in a statement of its own, and says the guard could not be read', async () => {
+    const database = await seeded();
+    const runs = runStoreOf(database);
+    const runId = randomUUID();
+    try {
+      await runs.begin(startOf(runId, OWNER, 0));
+      await rows(database.ownerUrl, 'ALTER TABLE assistant_thread_person_epochs RENAME TO assistant_thread_person_epochs_away');
+      await expect(runs.beginCall(callStart(runId, 1))).rejects.toBeInstanceOf(AssistantRunGuardError);
+      await expect(runs.endCall(callEnd(runId, 1))).rejects.toBeInstanceOf(AssistantRunGuardError);
+      expect(await callText(database, runId)).toEqual([[1, '', null]]);
+    } finally {
+      await runs.close();
+    }
+  });
+});
+
+describe('the notice of an earlier closing and the rollback of the person’s count', () => {
+  it('shows no notice after a closing, a reopening, a new chat and a clearing of it, for a read and for a read again on a new connection', async () => {
+    const database = await seeded();
+    await withStore(database, (store) => store.append(turn(), 0));
+    await rows(database.ownerUrl, `UPDATE investigations SET status = 'closed', closed_at = now() WHERE id = '${FIRST}'`);
+    expect((await withStore(database, (store) => store.read(FIRST, OWNER, 10))).previousThreadClearedAt).not.toBeNull();
+    await rows(database.ownerUrl, `UPDATE investigations SET status = 'open', closed_at = NULL WHERE id = '${FIRST}'`);
+    await withStore(database, async (store) => {
+      expect(await store.append(turn(), await store.epoch(FIRST, OWNER))).toBe('stored');
+      expect(await store.clearOwn(FIRST, OWNER)).toBe(true);
+      expect(await store.read(FIRST, OWNER, 10)).toMatchObject({ turns: [], previousThreadClearedAt: null });
+    });
+    expect(await withStore(database, (store) => store.read(FIRST, OWNER, 10))).toMatchObject({ turns: [], previousThreadClearedAt: null });
+  });
+
+  it('is undone by the rollback instructions of the file, which drop the table and the column and touch nothing else', async () => {
+    const database = await seeded();
+    await withStore(database, async (store) => {
+      await store.append(turn(), 0);
+      await store.clearOwn(FIRST, OWNER);
+      await store.append(turn({ userId: OTHER }), 0);
+    });
+    await rows(database.ownerUrl, `INSERT INTO assistant_runs (id, actor_id, investigation_id, source_id, trace_id, started_at, settings, thread_epoch) VALUES ('${randomUUID()}', '${OWNER}', '${FIRST}', 'alpha', 't', now(), '{}', 1)`);
+    const tables = ['assistant_threads', 'assistant_turns', 'assistant_runs', 'assistant_investigation_epochs', 'assistant_thread_clears', 'investigations'];
+    const before = await Promise.all(tables.map((table) => count(database, table)));
+    const file = readFileSync(join(PREVIEW_MIGRATIONS, '0014-assistant-thread-person-epochs.sql'), 'utf8');
+    const rollback = /^-- Rollback \(by hand[^)]*\): (.*)$/mu.exec(file)?.[1] ?? '';
+    expect(rollback).toBe('ALTER TABLE assistant_runs DROP COLUMN thread_epoch; DROP TABLE assistant_thread_person_epochs; no other table is touched.');
+    await rows(database.ownerUrl, rollback.replace(/; no other table is touched\.$/u, ''));
+    expect(await rows(database.ownerUrl, "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'assistant_thread_person_epochs'")).toEqual([{ n: 0 }]);
+    expect(await rows(database.ownerUrl, "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'assistant_runs' AND column_name = 'thread_epoch'")).toEqual([{ n: 0 }]);
+    expect(await Promise.all(tables.map((table) => count(database, table)))).toEqual(before);
+    expect((await columnsOf(database, 'assistant_runs')).join()).toBe('id,actor_id,investigation_id,source_id,trace_id,started_at,finished_at,outcome,calls,settings');
   });
 });
