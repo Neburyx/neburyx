@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MAX_INVESTIGATION_LIST_LIMIT } from './investigations.js';
 import { ASSISTANT_EPOCH_HEADER, assistantEpochHeaderSchema } from './assistant-turn.js';
+import { ASSISTANT_CLEAR_OUTCOME_HEADER, ASSISTANT_CLEAR_OUTCOME_UNKNOWN } from './assistant-thread.js';
 import { buildOpenApiDocument } from './openapi.js';
 import { patternRunHeavySchema } from './pattern-run.js';
 
@@ -252,5 +253,14 @@ describe('buildOpenApiDocument', () => {
     const answer = { status: 'heavy', templateVersion: '1', estimate: { value: 500, quality: 'lowerBound', scope: 's' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] };
     expect(patternRunHeavySchema.safeParse(answer).success).toBe(true);
     expect(patternRunHeavySchema.safeParse({ ...answer, estimate: { value: 500, quality: 'exact', scope: 's' } }).success).toBe(false);
+  });
+});
+
+describe('the outcome header of the clear route of the document', () => {
+  it('is declared on the 500 answer alone, under the name the contract exports, with the one value', () => {
+    const post = (buildOpenApiDocument().paths['/v1/assistant/investigations/{id}/thread/clear'] as { post: { responses: Record<string, { headers?: Record<string, { schema: unknown; description: string }> }> } }).post;
+    expect(ASSISTANT_CLEAR_OUTCOME_HEADER).toBe('x-assistant-clear-outcome');
+    expect(post.responses['500']?.headers?.[ASSISTANT_CLEAR_OUTCOME_HEADER]?.schema).toEqual({ type: 'string', enum: [ASSISTANT_CLEAR_OUTCOME_UNKNOWN] });
+    for (const status of ['200', '400', '403', '404', '415']) expect(post.responses[status]?.headers).toBeUndefined();
   });
 });

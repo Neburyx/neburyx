@@ -654,7 +654,18 @@
             }
           },
           "500": {
-            "description": "INTERNAL_ERROR, also when the thread cannot be cleared (no text of the failure; nothing is deleted)",
+            "headers": {
+              "x-assistant-clear-outcome": {
+                "description": "Present, with the value unknown, when the commit of the clearing failed or was cut off, so that the thread may or may not have been deleted. Absent on any other error of the clearing: the transaction was rolled back and nothing was deleted.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "unknown"
+                  ]
+                }
+              }
+            },
+            "description": "INTERNAL_ERROR, also when the thread cannot be cleared (no text of the failure; nothing is deleted unless the header says the outcome is unknown)",
             "content": {
               "application/json": {
                 "schema": {

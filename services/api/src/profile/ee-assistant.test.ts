@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { ASSISTANT_CLEAR_OUTCOME_HEADER, ASSISTANT_CLEAR_OUTCOME_UNKNOWN, ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
 import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantPendingStore, createMemoryAssistantThreadStore, sealToken } from '@neburyx/ee-ask';
 import fc from 'fast-check';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -537,6 +537,23 @@ describe('a turn when the audit store is down, blocked or full, through the queu
     expect(blocked.queue.counts().dropped).toBeGreaterThan(0);
     expect(JSON.stringify(blocked.logs)).not.toContain(SENTINEL);
     await rig.stop();
+  });
+});
+
+describe('the clearing of a chat that fails, through the mounted application', () => {
+  const clear = (rig: Awaited<ReturnType<typeof assistantRig>>) => rig.rig.app.inject({ method: 'POST', url: `/v1/assistant/investigations/${rig.body.investigationId}/thread/clear`, payload: '{}', headers: { 'content-type': 'application/json' } });
+
+  it('says in a header of the INTERNAL_ERROR that the outcome is not known when the commit failed, and sends none when the clearing was rolled back', async () => {
+    const unknown = await assistantRig({ threadStore: createMemoryAssistantThreadStore({ failOn: 'commit' }) });
+    const committed = await clear(unknown);
+    expect([committed.statusCode, committed.json().error.code]).toEqual([500, 'INTERNAL_ERROR']);
+    expect(committed.headers[ASSISTANT_CLEAR_OUTCOME_HEADER]).toBe(ASSISTANT_CLEAR_OUTCOME_UNKNOWN);
+    await unknown.stop();
+    const rolledBack = await assistantRig({ threadStore: createMemoryAssistantThreadStore({ failOn: 'clear' }) });
+    const refused = await clear(rolledBack);
+    expect([refused.statusCode, refused.json().error.code]).toEqual([500, 'INTERNAL_ERROR']);
+    expect(refused.headers[ASSISTANT_CLEAR_OUTCOME_HEADER]).toBeUndefined();
+    await rolledBack.stop();
   });
 });
 

@@ -188,3 +188,7 @@ export type AssistantThreadClearResponse = z.infer<typeof assistantThreadClearRe
 export type StoredTurnText = { readonly question?: string; readonly maskOn?: boolean; readonly answer?: StoredAnswer; readonly sensitivityVersion?: string };
 
 export type AssistantThreadResponse = z.infer<typeof assistantThreadResponseSchema>;
+
+/** Sent with the INTERNAL_ERROR of a clearing whose commit failed or was cut off: the thread may or may not have been deleted. Without it, an error of the clearing says the transaction was rolled back and nothing was deleted. */
+export const ASSISTANT_CLEAR_OUTCOME_HEADER = 'x-assistant-clear-outcome';
+export const ASSISTANT_CLEAR_OUTCOME_UNKNOWN = 'unknown';

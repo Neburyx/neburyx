@@ -1,6 +1,6 @@
 import { type AssistantThreadTurnWrite, type AuditSinkContext } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { AssistantThreadStoreError, createMemoryAssistantThreadStore, createPgAssistantThreadStore, type ThreadClient, type ThreadPool } from './thread-store.js';
+import { AssistantThreadOutcomeUnknownError, AssistantThreadStoreError, createMemoryAssistantThreadStore, createPgAssistantThreadStore, type ThreadClient, type ThreadPool } from './thread-store.js';
 
 const CONTEXT: AuditSinkContext = { databaseUrl: 'postgres://app@db.example.test/neburyx', poolSize: 1, connectionTimeoutMs: 1000, statementTimeoutMs: 1000, queryTimeoutMs: 1000, newId: () => '00000000-0000-7000-8000-000000000000', onConnectionError: () => undefined };
 const INVESTIGATION = '0192f000-0000-7000-8000-0000000000a1';
@@ -350,6 +350,24 @@ describe('the clearing of the caller’s own thread by the Postgres store', () =
     expect(released.count).toBe(1);
   });
 
+  it('says the outcome is not known, with no driver text, when the COMMIT fails or is cut off, and still rolls back and releases the connection', async () => {
+    const { held, statements, released } = pool({ failAt: /^COMMIT$/ });
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    const error = await store.clearOwn(INVESTIGATION, OWNER).then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AssistantThreadOutcomeUnknownError);
+    expect(error).toBeInstanceOf(AssistantThreadStoreError);
+    expect(JSON.stringify([(error as Error).message])).not.toMatch(/DRIVER-TEXT|canary-secret-7f3/);
+    expect(statements.slice(-2)).toEqual(['COMMIT', 'ROLLBACK']);
+    expect(released.count).toBe(1);
+  });
+
+  it.each([/^UPDATE assistant_run_calls/, /^DELETE FROM assistant_threads/, /FOR NO KEY UPDATE/])('does not say the outcome is unknown when %s fails: nothing was committed', async (failAt) => {
+    const { held } = pool({ failAt });
+    const error = await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).clearOwn(INVESTIGATION, OWNER).then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AssistantThreadStoreError);
+    expect(error).not.toBeInstanceOf(AssistantThreadOutcomeUnknownError);
+  });
+
   it('does nothing and says false for an investigation that is not there', async () => {
     const { held, statements } = pool({ status: 'none' });
     expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).clearOwn(INVESTIGATION, OWNER)).toBe(false);
@@ -386,5 +404,6 @@ describe('the clearing of the caller’s own thread by the memory store', () => 
     expect((await store.read(INVESTIGATION, OWNER, 100)).previousThreadClearedAt).toBeNull();
     expect(seen).toEqual([`${INVESTIGATION}:${OWNER}`]);
     await expect(createMemoryAssistantThreadStore({ failOn: 'clear' }).clearOwn(INVESTIGATION, OWNER)).rejects.toBeInstanceOf(AssistantThreadStoreError);
+    await expect(createMemoryAssistantThreadStore({ failOn: 'commit' }).clearOwn(INVESTIGATION, OWNER)).rejects.toBeInstanceOf(AssistantThreadOutcomeUnknownError);
   });
 });

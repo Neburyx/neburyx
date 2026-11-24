@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS } from '@neburyx/contracts';
+import { ASSISTANT_CLEAR_OUTCOME_HEADER, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS } from '@neburyx/contracts';
 import { createApiClient, type Fetcher } from './client.js';
 
 const ME = {
@@ -536,5 +536,19 @@ describe('the API client, running a template', () => {
     const error = { error: { code: 'CONFLICT', message: ERROR_TABLE.CONFLICT.message, retryable: ERROR_TABLE.CONFLICT.retryable, traceId: 'trace-9' } };
     const result = await createApiClient(async () => new Response(JSON.stringify(error), { status: 409 })).runTemplate('shared-attribute', body, 'key-1');
     expect(result).toMatchObject({ ok: false, failure: { code: 'CONFLICT' } });
+  });
+});
+
+describe('the clearing of an assistant thread', () => {
+  const internal = { error: { code: 'INTERNAL_ERROR', message: ERROR_TABLE.INTERNAL_ERROR.message, retryable: false, traceId: 'tr-1' } };
+  const answer = (headers: Record<string, string>): Fetcher => async () => new Response(JSON.stringify(internal), { status: 500, headers: { 'content-type': 'application/json', ...headers } });
+
+  it('answers as the server did for an error that rolled back, and as unknown for one that says the commit may have happened', async () => {
+    expect(await createApiClient(answer({})).clearAssistantThread('inv-1')).toEqual({ ok: false, failure: internal.error });
+    expect(await createApiClient(answer({ [ASSISTANT_CLEAR_OUTCOME_HEADER]: 'unknown' })).clearAssistantThread('inv-1')).toEqual({ ok: false, failure: { code: 'UNEXPECTED_FAILURE' } });
+  });
+
+  it('takes no other value of the header for a statement that the outcome is not known', async () => {
+    expect(await createApiClient(answer({ [ASSISTANT_CLEAR_OUTCOME_HEADER]: 'rolled-back' })).clearAssistantThread('inv-1')).toEqual({ ok: false, failure: internal.error });
   });
 });

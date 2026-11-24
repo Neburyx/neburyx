@@ -62,6 +62,8 @@ import {
   assistantTurnAnswerSchema,
   ASSISTANT_EPOCH_HEADER,
   assistantEpochHeaderSchema,
+  ASSISTANT_CLEAR_OUTCOME_HEADER,
+  ASSISTANT_CLEAR_OUTCOME_UNKNOWN,
   assistantThreadClearResponseSchema,
   assistantThreadResponseSchema,
   type AssistantTurnAnswer,
@@ -343,6 +345,8 @@ interface RequestExtras {
   readonly readStream?: (response: Response) => Promise<unknown>;
   /** Hears the headers of a response that came back, before its body is read. */
   readonly onHeaders?: (headers: Headers) => void;
+  /** Hears the headers of an answer that is an error, before its body is read. */
+  readonly onErrorHeaders?: (headers: Headers) => void;
 }
 
 async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined, method?: 'POST' | 'PUT' | 'DELETE', body?: unknown, extras: RequestExtras = {}): Promise<ApiResult<T>> {
@@ -352,6 +356,7 @@ async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, 
   try {
     response = await fetcher(path, signal === undefined && method === undefined ? undefined : { ...(signal === undefined ? {} : { signal }), ...(method === undefined ? {} : { method }), ...(extras.keepalive === true ? { keepalive: true } : {}), ...(body === undefined ? (extras.headers === undefined ? {} : { headers: extras.headers }) : { headers: { 'content-type': 'application/json', ...extras.headers }, body: JSON.stringify(body) }) });
     if (response.ok) extras.onHeaders?.(response.headers);
+    else extras.onErrorHeaders?.(response.headers);
     if (extras.readStream !== undefined && response.ok && (response.headers.get('content-type') ?? '').toLowerCase().startsWith('application/x-ndjson')) return (await extras.readStream(response)) as ApiResult<T>;
     text = await response.text();
   } catch {
@@ -432,7 +437,12 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
         ...(onStep === undefined ? {} : { headers: { accept: 'application/x-ndjson' }, readStream: (response: Response) => settledTurn(response, onStep, signal) }),
         ...(onEpoch === undefined ? {} : { onHeaders: (headers: Headers) => epochOfHeaders(headers, onEpoch) }),
       }),
-    clearAssistantThread: (investigationId, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread/clear`, assistantThreadClearResponseSchema, signal, 'POST', {}),
+    clearAssistantThread: async (investigationId, signal) => {
+      let unknown = false;
+      const result = await request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread/clear`, assistantThreadClearResponseSchema, signal, 'POST', {}, { onErrorHeaders: (headers) => void (unknown = headers.get(ASSISTANT_CLEAR_OUTCOME_HEADER) === ASSISTANT_CLEAR_OUTCOME_UNKNOWN) });
+      // an error that says the commit may have happened is a failure after which what the server did is not known, like a lost response
+      return !result.ok && unknown ? failed('UNEXPECTED_FAILURE') : result;
+    },
     assistantThread: (investigationId, mask, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread${mask ? '?mask=true' : ''}`, assistantThreadResponseSchema, signal),
     copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
     readAiNotes: (investigationId, mask, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes?mask=${mask ? 'true' : 'false'}`, aiNotesResponseSchema, signal),

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { errorResponseSchema } from './error-response.js';
 import { aiStatusResponseSchema } from './ai.js';
 import { askAnswerSchema, askContinueRequestSchema, askQuestionRequestSchema } from './ask-question.js';
+import { ASSISTANT_CLEAR_OUTCOME_HEADER, ASSISTANT_CLEAR_OUTCOME_UNKNOWN } from './assistant-thread.js';
 import { ASSISTANT_EPOCH_HEADER, assistantTurnAnswerSchema, assistantTurnRequestSchema, assistantTurnStreamEventSchema } from './assistant-turn.js';
 import { assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, assistantThreadResponseSchema } from './assistant-thread.js';
 import { aiNotesResponseSchema } from './ai-notes.js';
@@ -268,7 +269,7 @@ export function buildOpenApiDocument(
             '403': { description: 'The assistant is switched off or no AI provider is configured (ACCESS_DENIED with the reason ai-off)', content: jsonBody('ErrorResponse') },
             '404': { description: 'The investigation does not exist or is not the caller\'s: NOT_FOUND', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON: UNSUPPORTED_MEDIA_TYPE', content: jsonBody('ErrorResponse') },
-            '500': { description: 'INTERNAL_ERROR, also when the thread cannot be cleared (no text of the failure; nothing is deleted)', content: jsonBody('ErrorResponse') },
+            '500': { headers: { [ASSISTANT_CLEAR_OUTCOME_HEADER]: { description: 'Present, with the value unknown, when the commit of the clearing failed or was cut off, so that the thread may or may not have been deleted. Absent on any other error of the clearing: the transaction was rolled back and nothing was deleted.', schema: { type: 'string', enum: [ASSISTANT_CLEAR_OUTCOME_UNKNOWN] } } }, description: 'INTERNAL_ERROR, also when the thread cannot be cleared (no text of the failure; nothing is deleted unless the header says the outcome is unknown)', content: jsonBody('ErrorResponse') },
           },
         },
       },

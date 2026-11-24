@@ -16,6 +16,9 @@ export class AssistantThreadStoreError extends Error {
   }
 }
 
+/** The commit of a clearing failed or was cut off: the thread may or may not have been deleted. Any other failure of a clearing happened before the commit, which is rolled back. */
+export class AssistantThreadOutcomeUnknownError extends AssistantThreadStoreError {}
+
 /** What an append did: the turn was stored, was already there (a retry), or was refused because its investigation is closed, deleted or was cleared since the turn began. */
 type AppendResult = 'stored' | 'duplicate' | 'refused';
 
@@ -141,8 +144,9 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
     }
     try {
       return await work(client);
-    } catch {
-      throw new AssistantThreadStoreError();
+    } catch (error) {
+      // the one failure that says more than the fixed error: a commit that may have happened
+      throw error instanceof AssistantThreadOutcomeUnknownError ? error : new AssistantThreadStoreError();
     } finally {
       client.release();
     }
@@ -234,6 +238,7 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
     clearOwn: (investigationId, userId) =>
       withClient(async (client) => {
         await client.query('BEGIN');
+        let committing = false;
         try {
           // the investigation row is locked first, as the append and the writes of a run record lock it to check the count, so each of them is wholly before the clearing or wholly after it
           if ((await client.query(LOCK_FOR_CLEAR, [investigationId])).rows[0] === undefined) {
@@ -244,11 +249,12 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
           await client.query(BLANK_OWN_CALLS, [investigationId, userId]);
           await client.query(FORGET_OWN_CLEARING, [investigationId, userId]);
           await client.query(BUMP_PERSON_EPOCH, [investigationId, userId]);
+          committing = true;
           await client.query('COMMIT');
           return (deleted.rowCount ?? 0) > 0;
         } catch (error) {
           await client.query('ROLLBACK').catch(() => undefined);
-          throw error;
+          throw committing ? new AssistantThreadOutcomeUnknownError() : error;
         }
       }),
     close: () => (closing ??= pool.end()),
@@ -278,7 +284,7 @@ export interface MemoryAssistantThreadStore extends AssistantThreadStore {
 }
 
 /** Only a test uses this: the behaviour of the store and of the trigger kept in memory, and a store that can be made to fail, so no database is needed. */
-export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'epoch' | 'append' | 'read' | 'clear'; readonly now?: () => Date; /** What the same transaction does to the run records of the person's runs of the investigation; a test gives the memory run store's. */ readonly blankRunText?: (investigationId: string, userId: string) => void } = {}): MemoryAssistantThreadStore {
+export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'epoch' | 'append' | 'read' | 'clear' | 'commit'; readonly now?: () => Date; /** What the same transaction does to the run records of the person's runs of the investigation; a test gives the memory run store's. */ readonly blankRunText?: (investigationId: string, userId: string) => void } = {}): MemoryAssistantThreadStore {
   const threads = new Map<string, MemoryThread>();
   const investigations = new Map<string, MemoryInvestigation>();
   const cleared = new Map<string, Date>();
@@ -376,6 +382,8 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
       cleared.delete(name);
       personal.set(name, (personal.get(name) ?? 0) + 1);
       options.blankRunText?.(investigationId, userId);
+      // the commit's failure leaves the outcome unknown: the twin has applied the clearing, the worst case for a claim that nothing was deleted
+      if (options.failOn === 'commit') throw new AssistantThreadOutcomeUnknownError();
       return had;
     },
     async close() {},

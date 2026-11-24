@@ -1,5 +1,5 @@
-import { ExtensionRefusal, type AuditEvent, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, copyToNotesParamsSchema, type AssistantThreadClearResponse, type ExtensionLogger, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
-import type { AssistantThreadStore } from './thread-store.js';
+import { ASSISTANT_CLEAR_OUTCOME_HEADER, ASSISTANT_CLEAR_OUTCOME_UNKNOWN, ExtensionRefusal, type AuditEvent, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, copyToNotesParamsSchema, type AssistantThreadClearResponse, type ExtensionLogger, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { AssistantThreadOutcomeUnknownError, type AssistantThreadStore } from './thread-store.js';
 
 const CLEAR_URL = '/v1/assistant/investigations/:id/thread/clear';
 const CLEAR_FAILED = 'assistant-thread.clear-failed';
@@ -28,7 +28,7 @@ export interface ThreadClearRouteOptions {
 
 /**
  * Clears the caller's own thread of one of their investigations and the text of the model calls of their runs of it. The investigation is the caller's or the answer is `NOT_FOUND` before the handler runs, and the thread is found by the caller's own id, so another person's thread is never touched.
- * Nothing of the source is read. A store that fails ends in the application's fixed `INTERNAL_ERROR`, nothing is deleted, and the log holds the investigation's id only.
+ * Nothing of the source is read. A store that fails ends in the application's fixed `INTERNAL_ERROR`, nothing is deleted (the transaction was rolled back) unless the commit itself failed, which the response says by a header, and the log holds the investigation's id only.
  */
 export function createAssistantThreadClearRoute(options: ThreadClearRouteOptions): ExtensionRoute {
   return {
@@ -47,7 +47,9 @@ export function createAssistantThreadClearRoute(options: ThreadClearRouteOptions
         const cleared = await store.clearOwn(investigation.id, request.principalId);
         await writeEvent(request, investigation, 'success', cleared);
         return { cleared };
-      } catch {
+      } catch (error) {
+        // a commit that failed or was cut off may have deleted the thread: the answer says so with a header, and every other failure rolled back
+        if (error instanceof AssistantThreadOutcomeUnknownError) request.setResponseHeader?.(ASSISTANT_CLEAR_OUTCOME_HEADER, ASSISTANT_CLEAR_OUTCOME_UNKNOWN);
         await writeEvent(request, investigation, 'failed');
         try {
           options.logger()?.warn({ event: CLEAR_FAILED, investigationId: investigation.id }, 'the thread of an investigation could not be cleared');

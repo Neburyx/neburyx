@@ -1,4 +1,4 @@
-import { ExtensionRefusal, auditDetailSchema, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, type AssistantThreadTurnWrite, type AuditEvent, type ExtensionRequest } from '@neburyx/contracts';
+import { ASSISTANT_CLEAR_OUTCOME_HEADER, ASSISTANT_CLEAR_OUTCOME_UNKNOWN, ExtensionRefusal, auditDetailSchema, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, type AssistantThreadTurnWrite, type AuditEvent, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { createMemoryAssistantRunStore } from './run-store.js';
 import { createAssistantThreadClearRoute } from './thread-clear-route.js';
@@ -142,5 +142,14 @@ describe('the event of a clearing', () => {
     const { events, request } = recorded();
     await expect(createAssistantThreadClearRoute({ threads: () => undefined, logger: () => undefined }).handler(request())).rejects.toBeInstanceOf(ExtensionRefusal);
     expect(events).toEqual([]);
+  });
+  it('marks the answer with the header when the commit failed, and with none for a failure that rolled back', async () => {
+    const headers: [string, string][] = [];
+    const request = requestOf({ setResponseHeader: (name, value) => void headers.push([name, value]) });
+    await expect(createAssistantThreadClearRoute({ threads: () => createMemoryAssistantThreadStore({ failOn: 'commit' }), logger: () => undefined }).handler(request)).rejects.toThrow('could not be cleared');
+    expect(headers).toEqual([[ASSISTANT_CLEAR_OUTCOME_HEADER, ASSISTANT_CLEAR_OUTCOME_UNKNOWN]]);
+    headers.length = 0;
+    await expect(createAssistantThreadClearRoute({ threads: () => createMemoryAssistantThreadStore({ failOn: 'clear' }), logger: () => undefined }).handler(request)).rejects.toThrow('could not be cleared');
+    expect(headers).toEqual([]);
   });
 });
