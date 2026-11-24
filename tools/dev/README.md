@@ -11,6 +11,10 @@ The command behind `pnpm dev`. It is a developer tool: it runs other programs wi
 - `src/lock.ts`: the machine-wide lock; `src/supervisor.ts` restarts the API when its build output changes and tells a start that never becomes ready from a crash after it was ready.
 - `external-postgres.sql`: the statements that set up the Postgres.
 
+## Making an old row
+
+`old-row-turn.sh <settings file> <investigation id>` turns the newest turn of an investigation's thread into a turn stored before the thread kept text (the four text columns null), for a hand test of the old-row display. It reads the migration login from the settings file without printing it and refuses a database whose name does not start with `nbx_test_`; `old-row-turn.sql` is the statement, tested in `services/api/src/migrate/thread-tables.integration.test.ts`.
+
 ## What it refuses
 
 Before it takes the lock, builds or starts anything, the command stops with a message that names the problem when:

@@ -89,6 +89,19 @@ describe('a turn kept in the thread as references and metadata', () => {
     expect(kept?.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('keeps the result card of an answer of the ask route, with its count and the values the person typed, as references when the mask is off and as the masked text when it is on, and reads it back', async () => {
+    for (const mask of [false, true]) {
+      const turn = await turnRig({ reply: SHARED });
+      await run(turn, { ...BASE, mask });
+      const [kept] = stored(turn);
+      const card = kept?.answer?.blocks.find((block) => block.kind === 'ask-result');
+      expect(card, `the card of a turn written with mask ${String(mask)}: ${JSON.stringify(kept?.answer)}`).toMatchObject({ kind: 'ask-result', templateId: 'shared-attribute' });
+      expect(kept?.maskOn).toBe(mask);
+      const read = await turn.threads.read(INVESTIGATION, PERSON, 10);
+      expect(read.turns[0]?.stored?.answer?.blocks.some((block) => block.kind === 'ask-result')).toBe(true);
+    }
+  });
+
   it('keeps the element of each place a parameter has: both ends of a path, and two parameters of equal value each with their own role', async () => {
     const ends = await turnRig({ reply: routeAsk('between', { a: 'a', b: 'z' }), intents: BETWEEN, run: () => ({ status: 'ok', result: pathsResult() }) });
     await run(ends);

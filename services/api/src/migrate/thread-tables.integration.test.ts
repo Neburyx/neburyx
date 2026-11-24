@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -443,6 +443,23 @@ describe('the text of a turn (0013)', () => {
       expect(await store.turnIdTaken(id, SECOND, OWNER)).toBe(true);
       expect(await store.turnIdTaken(randomUUID(), FIRST, OWNER)).toBe(false);
       expect(await store.turnIdTaken(id.toUpperCase(), FIRST.toUpperCase(), OWNER.toUpperCase())).toBe(false);
+    });
+  });
+
+  it('turns the newest turn of a thread into an old row with the statement of the hand test tool, and changes nothing else of it', async () => {
+    const database = await seeded();
+    const statement = readFileSync(new URL('../../../../tools/dev/old-row-turn.sql', import.meta.url), 'utf8').replace(":'investigation'", `'${FIRST}'`);
+    await withStore(database, async (store) => {
+      expect(await store.append(turn({ question: 'Older?', maskOn: false }), 0)).toBe('stored');
+      expect(await store.append(turn({ question: 'Newest?', maskOn: false, answer: { blocks: [{ kind: 'refusal', sentence: { form: 'frozen', text: 'No.' } }] } as never }), 0)).toBe('stored');
+    });
+    await rows(database.ownerUrl, statement);
+    const held = await rows(database.ownerUrl, 'SELECT seq, question_text, mask_on, answer, sensitivity_version, outcome FROM assistant_turns ORDER BY seq');
+    expect(held[0]).toMatchObject({ question_text: 'Older?', mask_on: false });
+    expect(held[1]).toMatchObject({ question_text: null, mask_on: null, answer: null, sensitivity_version: null, outcome: 'answered' });
+    await withStore(database, async (store) => {
+      const read = await store.read(FIRST, OWNER, 10);
+      expect(read.turns[1]).not.toHaveProperty('stored');
     });
   });
 

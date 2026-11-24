@@ -424,6 +424,19 @@ describe('choosing a candidate', () => {
     expect(t.rig.fixture.calls).toHaveLength(1);
   });
 
+  it('stores the result card of the answer to a chosen candidate, with no question, and reads it back from the thread (the token of a choice belongs to the masking it was offered under, so the masked case is the one of the direct route)', async () => {
+    for (const mask of [false]) {
+      const { t, choices } = await asked_();
+      await pick(t, choices[1] as AssistantChoice, { mask });
+      await drain();
+      const chosen = storedTurns(t.threads)[1];
+      expect(chosen?.maskOn).toBe(mask);
+      expect(chosen?.answer?.blocks.find((block) => block.kind === 'ask-result'), JSON.stringify(chosen?.answer)).toMatchObject({ kind: 'ask-result', templateId: 'shared-attribute' });
+      const read = await t.threads.read(INVESTIGATION, PERSON, 10);
+      expect(read.turns[1]?.stored?.answer?.blocks.some((block) => block.kind === 'ask-result')).toBe(true);
+    }
+  });
+
   it('closes with an event of the route ask with the intent, the parameter hash and the outcome and no text, stores the turn with its references and puts it in the next context', async () => {
     const { t, choices } = await asked_();
     await pick(t, choices[1] as AssistantChoice);

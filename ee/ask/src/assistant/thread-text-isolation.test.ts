@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const FOLDERS = ['ee', 'services', 'packages', 'apps', 'tools'];
-/** The one reader of the text columns of a stored turn is the thread store, for the thread route; the migrations that make and change the table name them too. */
-const ALLOWED = new Set(['ee/ask/src/assistant/thread-store.ts', 'ee/migrations/0008-assistant-threads.sql', 'ee/migrations/0009-assistant-pending-confirmations.sql', 'ee/migrations/0013-assistant-thread-text.sql']);
+/** The one reader of the text columns of a stored turn is the thread store, for the thread route; the migrations that make and change the table name them too, and the statement of the hand test tool that empties them in a test database (it reads none). */
+const ALLOWED = new Set(['ee/ask/src/assistant/thread-store.ts', 'ee/migrations/0008-assistant-threads.sql', 'ee/migrations/0009-assistant-pending-confirmations.sql', 'ee/migrations/0013-assistant-thread-text.sql', 'tools/dev/old-row-turn.sql']);
 const SKIPPED = new Set(['node_modules', 'dist', 'coverage', '.turbo']);
 
 function filesUnder(folder: string): string[] {
