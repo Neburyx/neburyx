@@ -62,7 +62,7 @@ export function EmptyThread({ send, busy, limit }: { readonly send: (text: strin
       <p>{ASSISTANT_COPY.pageEmptyBody}</p>
       <div className="assistant-empty-suggestions">
         {suggestions.map((suggestion) => (
-          <button key={suggestion.question} type="button" disabled={busy} title={suggestion.question} aria-label={suggestion.question} onClick={() => send(suggestion.question)}>
+          <button key={suggestion.question} type="button" disabled={busy} onClick={() => send(suggestion.question)}>
             {suggestion.label}
           </button>
         ))}

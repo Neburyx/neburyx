@@ -125,7 +125,7 @@ describe('the confirmation of Clear chat', () => {
     await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
     await waitFor(() => expect(dialog()).toBeNull());
     expect(screen.getByText(ASSISTANT_COPY.introTitle)).toBeTruthy();
-    expect(screen.getByText('“What am I looking at?”')).toBeTruthy();
+    expect(screen.getByText('“Summarize what is on screen”')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeNull();
     expect(button()).toBeNull();
     expect(screen.getByLabelText(ASSISTANT_COPY.fieldLabel)).toBe(document.activeElement);

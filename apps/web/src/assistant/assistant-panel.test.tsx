@@ -127,21 +127,14 @@ describe('the Assistant panel: the keyboard', () => {
 
 
 describe('the Assistant panel: the examples of the empty thread', () => {
-  it('shows two examples and the neutral note when the view holds no entity', async () => {
+  it('shows the two fixed examples and the neutral note when the profile is not known', async () => {
     const h = harness(async () => ({ ok: true, value: REFUSE }));
     render(h.tree());
-    expect(await screen.findByText('“What am I looking at?”')).toBeTruthy();
-    expect(screen.getByText('“Summarize what is on screen”')).toBeTruthy();
+    expect(await screen.findByText('“Summarize what is on screen”')).toBeTruthy();
+    expect(screen.getByText('“Is anything useful in the data?”')).toBeTruthy();
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
     expect(screen.getByText('It gives no verdict on guilt or intent. It never writes queries.')).toBeTruthy();
   });
 
-  it.each(['Title one', 'A different title of another source'])('names the entity on screen by its own title (%s)', async (title) => {
-    const h = harness(async () => ({ ok: true, value: REFUSE }));
-    const entity = { ...node('a', 'e1'), display: { title, type: 'type-a' } };
-    h.state.show({ id: 'inv-2', sourceId: 'a', record: RECORD, resultKeys: [key('a')], nodeRefs: [entity.ref], edgeRefs: [] }, [{ key: key('a'), result: { sourceId: 'a', nodes: [entity], edges: [] } }]);
-    render(h.tree());
-    expect(await screen.findByText(`“What is connected to ${title}?”`)).toBeTruthy();
-    expect(screen.getAllByRole('listitem')).toHaveLength(3);
-  });
+
 });

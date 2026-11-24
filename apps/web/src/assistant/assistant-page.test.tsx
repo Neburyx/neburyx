@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AssistantThreadResponse, AssistantTurnAnswer, AssistantTurnRequest } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
+import { testProfile } from '../dev/test-profile.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf } from '../investigations/test-data.js';
 import { NOT_FOUND_TITLE } from '../investigations/messages.js';
 import { createClientState } from '../state/client-state.js';
@@ -141,10 +142,10 @@ describe('/assistant/{id}: the empty thread', () => {
     const h = setup(`/assistant/${INVESTIGATION_A}`);
     expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.pageEmptyTitle('kind-a A-1'), level: 2 })).toBeTruthy();
     await waitFor(() => expect(screen.getByText(/Model: claude-sonnet-5-5 · 1 entity · 0 relationships on the canvas/)).toBeTruthy());
-    const press = screen.getByRole('button', { name: 'What is connected to kind-a A-1?' });
+    const press = screen.getByRole('button', { name: 'What is connected to this KIND-A?' });
     await userEvent.click(press);
     await waitFor(() => expect(h.sent).toHaveLength(1));
-    expect(h.sent[0]).toMatchObject({ message: 'What is connected to kind-a A-1?' });
+    expect(h.sent[0]).toMatchObject({ message: 'What is connected to this KIND-A?' });
     await waitFor(() => expect(screen.queryByRole('heading', { name: ASSISTANT_COPY.pageEmptyTitle('kind-a A-1'), level: 2 })).toBeNull());
   });
 
@@ -202,15 +203,17 @@ describe('/assistant/{id}: suggestions', () => {
     expect((screen.getByLabelText(ASSISTANT_COPY.fieldLabel) as HTMLTextAreaElement).value).toBe('half a thought');
   });
 
-  it('cuts a title over 60 characters on the button, keeps the full title in its tooltip and name, and sends the full title', async () => {
-    const long = 'a very long title '.repeat(6).trim();
-    const entry = { ...A, investigation: { ...A.investigation, title: long }, node: { ...A.node, display: { ...A.node.display, title: long } } };
-    const h = setup(`/assistant/${INVESTIGATION_A}`, { known: [entry, B] });
-    const full = `What is connected to ${long}?`;
-    const button = await screen.findByRole('button', { name: full });
-    expect(button.textContent?.endsWith('…?')).toBe(true);
-    expect(button.getAttribute('title')).toBe(full);
-    await userEvent.click(button);
-    await waitFor(() => expect(h.sent[0]).toMatchObject({ message: full }));
+  it('shows two suggestions when the type of the investigation entity is not in the source profile', async () => {
+    const { client } = knowing([A], {
+      getAiStatus: async () => ({ ok: true, value: aiStatus({ assistant: 800 }) }),
+      assistantThread: async () => ({ ok: true, value: EMPTY }),
+      getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId, ['unrelated-type']) }),
+    });
+    const state = createClientState();
+    const view = renderApp(`/assistant/${INVESTIGATION_A}`, client, state, undefined, undefined, undefined, undefined, undefined, createPanelRegistryFor(state));
+    unbinds.push(bindAssistantPanel(state, view.panels, createAssistantSession(null)));
+    await screen.findByRole('button', { name: 'Summarize what is on screen' });
+    expect(screen.getByRole('button', { name: 'Is anything useful in the data?' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /What is connected/ })).toBeNull();
   });
 });
