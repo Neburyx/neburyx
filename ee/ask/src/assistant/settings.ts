@@ -9,6 +9,7 @@ export const ASSISTANT_VARIABLES = {
   maxSteps: 'NEBURYX_ASSISTANT_MAX_STEPS',
   maxRows: 'NEBURYX_ASSISTANT_MAX_ROWS',
   contextTurns: 'NEBURYX_ASSISTANT_CONTEXT_TURNS',
+  contextText: 'NEBURYX_ASSISTANT_CONTEXT_TEXT',
   maxMessageWords: 'NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS',
   maxInputTokens: 'NEBURYX_ASSISTANT_MAX_INPUT_TOKENS',
   maxOutputTokens: 'NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS',
@@ -57,6 +58,8 @@ export interface AssistantSettings {
   /** Rows read a turn, lowered by the operator; absent, the bound is the source's own `max_page` times the steps. */
   readonly maxRows?: number;
   readonly contextTurns: number;
+  /** Whether the loop is also given the earlier turns' question and answer text, as the thread read presents it under this message's mask. Off unless the operator turns it on. */
+  readonly contextText: boolean;
   readonly maxMessageWords: number;
   readonly maxInputTokens: number;
   readonly maxOutputTokens: number;
@@ -72,6 +75,15 @@ export type AssistantSettingsRead = { readonly ok: true; readonly settings: Assi
 
 function wholeNumber(env: Env, name: string, range: { readonly min: number; readonly max: number }, fallback: number, problems: string[]): number {
   return integerChoice(env, name, range, fallback, problems);
+}
+
+/** A switch that is off unless it is `true`; any other value that is not `false` is a problem, which names the variable and never the value. */
+function switchOf(env: Env, name: string, problems: string[]): boolean {
+  const value = given(env, name);
+  if (value === undefined || value === 'false') return false;
+  if (value === 'true') return true;
+  problems.push(`${name} must be true or false`);
+  return false;
 }
 
 function positiveWholeNumber(env: Env, name: string, fallback: number, problems: string[]): number {
@@ -94,6 +106,7 @@ export function readAssistantSettings(env: Env): AssistantSettingsRead {
   const maxCalls = wholeNumber(env, ASSISTANT_VARIABLES.maxCalls, RANGES.maxCalls, DEFAULTS.maxCalls, problems);
   const maxSteps = wholeNumber(env, ASSISTANT_VARIABLES.maxSteps, RANGES.maxSteps, DEFAULTS.maxSteps, problems);
   const contextTurns = wholeNumber(env, ASSISTANT_VARIABLES.contextTurns, RANGES.contextTurns, DEFAULTS.contextTurns, problems);
+  const contextText = switchOf(env, ASSISTANT_VARIABLES.contextText, problems);
   const maxMessageWords = wholeNumber(env, ASSISTANT_VARIABLES.maxMessageWords, RANGES.maxMessageWords, DEFAULTS.maxMessageWords, problems);
   const maxInputTokens = wholeNumber(env, ASSISTANT_VARIABLES.maxInputTokens, RANGES.maxInputTokens, DEFAULTS.maxInputTokens, problems);
   const maxOutputTokens = wholeNumber(env, ASSISTANT_VARIABLES.maxOutputTokens, RANGES.maxOutputTokens, DEFAULTS.maxOutputTokens, problems);
@@ -106,7 +119,7 @@ export function readAssistantSettings(env: Env): AssistantSettingsRead {
   if (rows !== undefined && maxRows === undefined) problems.push(`${ASSISTANT_VARIABLES.maxRows} must be a positive whole number`);
   if (timeoutMs > totalTimeoutMs) problems.push(`${ASSISTANT_VARIABLES.timeoutMs} must not be above ${ASSISTANT_VARIABLES.totalTimeoutMs}`);
   if (problems.length > 0) return { ok: false, problems };
-  return { ok: true, settings: Object.freeze({ model, timeoutMs, totalTimeoutMs, maxCalls, maxSteps, ...(maxRows === undefined ? {} : { maxRows }), contextTurns, maxMessageWords, maxInputTokens, maxOutputTokens, runRetentionDays, threadRetention: 'close' as const, threadReadTurns }) };
+  return { ok: true, settings: Object.freeze({ model, timeoutMs, totalTimeoutMs, maxCalls, maxSteps, ...(maxRows === undefined ? {} : { maxRows }), contextTurns, contextText, maxMessageWords, maxInputTokens, maxOutputTokens, runRetentionDays, threadRetention: 'close' as const, threadReadTurns }) };
 }
 
 /** The rows a turn may read from a source: the source's own page limit times the steps, or less when the operator set a lower figure. */

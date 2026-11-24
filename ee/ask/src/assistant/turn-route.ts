@@ -48,12 +48,13 @@ import { checkIntentValues } from '../questions/written-values.js';
 import { candidatesFor, candidatesOfReply, clarificationAnswer, roleEntityType, type Candidate } from './clarification.js';
 import { followUpsOf, type FollowUp } from './follow-ups.js';
 import { buildContext, canonical, withView, type TurnContext } from './context.js';
+import { threadTextContext } from './thread-text-context.js';
 import { ATTACHED_SUMMARY_LINE, openAttachment, type SummaryAttachment } from './summary-attachment.js';
 import type { TokenKeys } from '../case-summary/token-keys.js';
 import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
 import { verdictRefusal } from './verdict-overview.js';
-import { noteResumes, noteStep, noteTurn, noteTurnStarted, carryProvenance, readTurnContext, stampProvenance, withTurnAudit } from './turn-audit.js';
+import { noteResumes, noteStep, noteTurn, noteTurnStarted, notePropertyValuesSent, carryProvenance, readTurnContext, readTurnText, stampProvenance, withTurnAudit } from './turn-audit.js';
 import { auditConfirmation, openDecision, waitingAnswer, type WaitContext } from './confirmation.js';
 import type { AssistantPendingStore } from './pending-store.js';
 import { countWords } from './words.js';
@@ -89,6 +90,8 @@ export interface TurnRouteOptions {
   readonly records?: () => RecordQueue | undefined;
   /** How many of the person's last turns of the thread the router is shown; absent, it is shown none. */
   readonly contextTurns?: () => number | undefined;
+  /** The most estimated tokens of the earlier turns' stored text the loop is given as context, or absent when the operator has not turned the text on: then it is not read at all. */
+  readonly contextTextTokens?: () => number | undefined;
   /** The lines of the typology the loop may offer as a tool; none, and it is not offered. */
   readonly typology?: (sourceId: string) => readonly string[] | undefined;
   /** The most references an entry of the person's AI notes may hold for the notes tool to read it. */
@@ -267,6 +270,29 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
   }
 
   /**
+   * The text of the person's last turns for the loop, when the operator has turned it on: the thread as a read of it presents it under this message's mask, each bound value read again through the gate under that mask. Absent when it is off (nothing is read),
+   * when there is none, or when the thread cannot be read; a failure of the gate's read is the caller's to answer.
+   */
+  async function storedTextOf(request: ExtensionRequest, body: Extract<AssistantTurnRequest, { message: string }>, signal: AbortSignal): Promise<string | undefined> {
+    const maxTokens = options.contextTextTokens?.();
+    const limit = options.contextTurns?.();
+    const { readElements } = request;
+    if (maxTokens === undefined || limit === undefined || readElements === undefined) return undefined;
+    let version: string | undefined;
+    try {
+      version = request.sensitivityVersion?.(body.sourceId);
+    } catch {
+      version = undefined;
+    }
+    const thread = await readTurnText(limit, body.mask === true, version);
+    if (thread === undefined) return undefined;
+    const text = await threadTextContext({ thread, sourceId: body.sourceId, maxTokens, read: (refs) => readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, refs) });
+    // the text holds what the analyst was shown, which may be the value of a property
+    if (text !== undefined) notePropertyValuesSent(true);
+    return text;
+  }
+
+  /**
    * The values the person wrote for the roles of an intent, looked up through the gate before the intent runs (or a choice is offered): Ask's refusal for the first that is not an element of the type its role needs, or undefined
    * when every one fits. The lookup is a read of the turn under its time bound; a read that fails ends the turn as any read of it does.
    */
@@ -400,7 +426,9 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     const contextTypes = run.context === undefined ? undefined : [...new Set([...run.context.keys.values()].map((ref) => ref.entityType))];
     const scope = { request, capabilities: capabilitiesOf(request), options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(run.form === undefined ? {} : { form: run.form }), ...(run.askedTypes === undefined ? {} : { askedTypes: run.askedTypes }), ...(contextTypes === undefined ? {} : { contextTypes }), ...(run.patterns === undefined ? {} : { patterns: run.patterns }) };
     try {
-      const looped = await agent({ scope, route: run.route, message: body.message, deadline: run.deadline, startedAt: run.startedAt, callsUsed: run.callsUsed, ...(run.context === undefined ? {} : { context: contextForAgent(run.context) }) });
+      const stored = await storedTextOf(request, body, AbortSignal.any([request.signal, run.deadline]));
+      const context = run.context === undefined ? stored : stored === undefined ? contextForAgent(run.context) : `${contextForAgent(run.context)}\n\n${stored}`;
+      const looped = await agent({ scope, route: run.route, message: body.message, deadline: run.deadline, startedAt: run.startedAt, callsUsed: run.callsUsed, ...(context === undefined ? {} : { context }) });
       if (looped === undefined) return undefined;
       const turn = await loopAnswer(looped, run.route, waitingOf(request, body, body.message, run.startedAt, run.form));
       // an answer of the ask route that rests on a read of one of the folder's questions carries the follow-ups of Ask's own answer to that read

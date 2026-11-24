@@ -198,6 +198,8 @@ export interface RigOptions {
   readonly readNodes?: (refs: ElementRefs, mask: boolean) => readonly ReturnType<typeof node>[];
   /** The relationships the stand-in of the gate gives back for the references it is asked for. */
   readonly readEdges?: (refs: ElementRefs) => readonly unknown[];
+  /** A stand-in of the loop, given what the loop is given, in place of the real one. */
+  readonly loopStub?: ReturnType<typeof createAgentTurn>;
   /** The replies of the model to the step call; its presence turns the tool loop on. */
   readonly step?: FixtureReplies[string];
   /** The replies of the model to the answer call after tool steps. */
@@ -262,7 +264,9 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const scripted = options.agent === undefined && options.step !== undefined ? { model: scriptedAgentModel(options) } : undefined;
   const agentOptions: RigOptions['agent'] = options.agent ?? scripted;
   const agentTurn =
-    agentOptions === undefined
+    options.loopStub !== undefined
+      ? options.loopStub
+      : agentOptions === undefined
       ? undefined
       : createAgentTurn({
           model: (context, trace) => Promise.resolve(agentOptions === undefined ? undefined : auditChatModel(agentOptions.model, { recorder: createCallRecorder({ sink }), context, promptId: agentOptions.promptId ?? AGENT_PROMPT_ID, promptVersion: AGENT_PROMPT_VERSION, modelRef: 'configured-model', ...(trace === undefined ? {} : { trace }) })),
@@ -273,7 +277,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
           ...(agentOptions.removalFeedback === undefined ? {} : { removalFeedback: agentOptions.removalFeedback }),
           ...(agentOptions.onRun === undefined ? {} : { onRun: agentOptions.onRun }),
         });
-  const route = createAssistantTurnRoute({ ...(agentTurn === undefined ? {} : { agentTurn: () => agentTurn }), ...(options.typology === undefined ? {} : { typology: () => options.typology }), ...(options.summaryKeys === undefined ? {} : { summaryKeys: () => options.summaryKeys }),  totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer, overview: () => overviewAnswer }), ...(options.pending === undefined ? {} : { pending: () => options.pending }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
+  const route = createAssistantTurnRoute({ ...(agentTurn === undefined ? {} : { agentTurn: () => agentTurn }), ...(options.typology === undefined ? {} : { typology: () => options.typology }), ...(options.summaryKeys === undefined ? {} : { summaryKeys: () => options.summaryKeys }),  totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer, overview: () => overviewAnswer }), ...(options.pending === undefined ? {} : { pending: () => options.pending }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined), contextTextTokens: () => (settings.ok && settings.settings.contextText ? Math.floor(settings.settings.maxInputTokens / 2) : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
     principalId: 'p-1',
     principalRole: 'investigator',

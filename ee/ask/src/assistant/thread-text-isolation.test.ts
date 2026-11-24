@@ -23,8 +23,14 @@ const forbiddenNamers = (files: readonly { readonly path: string; readonly text:
 
 /** The files that reach the text through the store's own read or the presenter and are not the route that sends it. */
 const REACHES_TEXT = /\b(?:thread-present|AssistantThreadRead|StoredTurnText|presentThread)\b/u;
-const ALLOWED_READERS = new Set(['ee/ask/src/assistant/thread-route.ts', 'ee/ask/src/assistant/thread-present.ts', 'ee/ask/src/assistant/thread-store.ts', 'packages/contracts/src/assistant-thread.ts', 'packages/contracts/src/index.ts']);
+/** The thread route sends the text to the panel; the turn's thread handle reads it, presented, for the loop's text context when the operator turns that on (it hands the presented thread to `thread-text-context.ts`, which names neither the presenter nor the store's read). */
+const ALLOWED_READERS = new Set(['ee/ask/src/assistant/thread-route.ts', 'ee/ask/src/assistant/turn-thread.ts', 'ee/ask/src/assistant/thread-present.ts', 'ee/ask/src/assistant/thread-store.ts', 'packages/contracts/src/assistant-thread.ts', 'packages/contracts/src/index.ts']);
 const forbiddenReaders = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => REACHES_TEXT.test(file.text) && !ALLOWED_READERS.has(file.path)).map((file) => file.path);
+
+/** The files that call the thread store's read, which returns the stored text, without naming any of the words above: the thread route, and the turn's thread handle that presents the read at once. */
+const RAW_READ = /\b(?:store|threads?|assistantThreads)\.read\(/u;
+const RAW_READERS = new Set(['ee/ask/src/assistant/thread-route.ts', 'ee/ask/src/assistant/turn-thread.ts', 'ee/ask/src/assistant/thread-store.ts']);
+const forbiddenRawReaders = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => RAW_READ.test(file.text) && !RAW_READERS.has(file.path)).map((file) => file.path);
 
 /** Whether the statement that gives the router its context selects any text of a stored turn. */
 const contextSelectsText = (statement: string): boolean => /question_text|\banswer\b|mask_on|sensitivity_version/u.test(statement);
@@ -55,8 +61,16 @@ describe('the text a thread keeps', () => {
     expect(forbiddenReaders(sources.map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf8') })))).toEqual([]);
   });
 
+  it('is read raw from the store by the thread route and the turn\'s thread handle alone, which presents it at once: no module calls the store\'s read without naming the words the other checks look for', () => {
+    expect(forbiddenRawReaders(sources.map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf8') })))).toEqual([]);
+  });
+
+  it('canary: the check of the raw read fails a module that calls it and passes the two readers', () => {
+    expect(forbiddenRawReaders([{ path: 'ee/ask/src/assistant/new-context.ts', text: 'const turns = await threads.read(investigationId, userId, 3);' }, { path: 'ee/ask/src/assistant/turn-thread.ts', text: 'await store.read(a, b, c)' }, { path: 'ee/ask/src/assistant/thread-route.ts', text: 'await store.read(a, b, c)' }, { path: 'ee/ask/src/assistant/context.ts', text: 'await options.read({})' }])).toEqual(['ee/ask/src/assistant/new-context.ts']);
+  });
+
   it('canary: the same check fails a new module that imports the presenter or names the stored text, and the check of the context statement fails one that selects it', () => {
-    expect(forbiddenReaders([{ path: 'ee/ask/src/assistant/new-export.ts', text: "import { presentThread } from './thread-present.js';" }, { path: 'services/api/src/graph/new-route.ts', text: 'const turns: StoredTurnText[] = [];' }, { path: 'ee/ask/src/assistant/thread-route.ts', text: "import { presentThread } from './thread-present.js';" }])).toEqual(['ee/ask/src/assistant/new-export.ts', 'services/api/src/graph/new-route.ts']);
+    expect(forbiddenReaders([{ path: 'ee/ask/src/assistant/new-export.ts', text: "import { presentThread } from './thread-present.js';" }, { path: 'services/api/src/graph/new-route.ts', text: 'const turns: StoredTurnText[] = [];' }, { path: 'ee/ask/src/assistant/thread-route.ts', text: "import { presentThread } from './thread-present.js';" }, { path: 'ee/ask/src/assistant/turn-thread.ts', text: "import { presentThread } from './thread-present.js';" }, { path: 'ee/ask/src/assistant/thread-text-context.ts', text: "import { presentThread } from './thread-present.js';" }])).toEqual(['ee/ask/src/assistant/new-export.ts', 'services/api/src/graph/new-route.ts', 'ee/ask/src/assistant/thread-text-context.ts']);
     expect(contextSelectsText('SELECT t.route, t.question_text FROM assistant_turns t')).toBe(true);
     expect(contextSelectsText('SELECT t.route, t.outcome FROM assistant_turns t')).toBe(false);
   });

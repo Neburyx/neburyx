@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { ExtensionRefusal, assistantThreadTurnWriteSchema, type AssistantThreadTurnWrite, type ExtensionLogger, type ExtensionRequest, type RecordQueue } from '@neburyx/contracts';
+import { ExtensionRefusal, assistantThreadTurnWriteSchema, type AssistantThreadResponse, type AssistantThreadTurnWrite, type ExtensionLogger, type ExtensionRequest, type RecordQueue } from '@neburyx/contracts';
+import { presentThread } from './thread-present.js';
 import { AssistantThreadStoreError, type AssistantContextTurn, type AssistantThreadStore } from './thread-store.js';
 
 export interface TurnThreadDeps {
@@ -21,6 +22,8 @@ export interface TurnThread {
   refused(step: string): void;
   /** The person's last `limit` turns of the thread as the router's context; a thread that cannot be read is counted as a failed record and gives none, so the turn goes on without it. */
   context(limit: number): Promise<readonly AssistantContextTurn[]>;
+  /** The person's last `limit` turns of the thread as a read of it presents them for this mask and sensitivity version, for the loop's text context; a thread that cannot be read is counted as a failed record and gives none. */
+  text(limit: number, maskNow: boolean, sensitivityVersion: string | undefined): Promise<AssistantThreadResponse | undefined>;
 }
 
 /**
@@ -71,6 +74,14 @@ export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionReq
       } catch {
         failed('context');
         return [];
+      }
+    },
+    async text(limit, maskNow, sensitivityVersion) {
+      try {
+        return presentThread(await store.read(started.investigationId, request.principalId, limit), maskNow, sensitivityVersion);
+      } catch {
+        failed('context-text');
+        return undefined;
       }
     },
     write(input) {
