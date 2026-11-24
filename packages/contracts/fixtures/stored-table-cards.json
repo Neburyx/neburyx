@@ -1,0 +1,758 @@
+{
+  "cards": [
+    {
+      "name": "unmasked, a unit and a row left out",
+      "read": {
+        "kind": "table",
+        "caption": {
+          "subject": "widget"
+        },
+        "units": [
+          {
+            "type": "widget",
+            "property": "sizeUsd"
+          }
+        ],
+        "droppedRows": 1,
+        "columns": [
+          {
+            "state": "text",
+            "text": "Element"
+          },
+          {
+            "state": "text",
+            "text": "Size"
+          }
+        ],
+        "rows": [
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              },
+              {
+                "state": "text",
+                "text": "4,200"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-2"
+              },
+              {
+                "state": "text",
+                "text": "80"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-2"
+              }
+            ]
+          }
+        ]
+      },
+      "profile": {
+        "entityTypes": [
+          {
+            "type": "widget",
+            "displayName": "Holding record",
+            "propertyDisplay": {
+              "sizeUsd": {
+                "label": "size",
+                "unit": "USD"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "title": "Holding records · 2 rows",
+        "note": "Size in USD. Each row selects its elements on the graph.",
+        "droppedRows": 1
+      }
+    },
+    {
+      "name": "masked at the write, the anchor as shown",
+      "read": {
+        "kind": "table",
+        "caption": {
+          "subject": "widget",
+          "anchor": {
+            "state": "text",
+            "text": "Account A-1"
+          }
+        },
+        "columns": [
+          {
+            "state": "text",
+            "text": "Element"
+          }
+        ],
+        "rows": [
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-2"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-2"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-3"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-3"
+              }
+            ]
+          }
+        ]
+      },
+      "profile": {
+        "entityTypes": [
+          {
+            "type": "widget",
+            "displayName": "Holding record",
+            "propertyDisplay": {
+              "sizeUsd": {
+                "label": "size",
+                "unit": "USD"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "title": "Holding records of Account A-1 · 2 rows",
+        "note": "Each row selects its elements on the graph."
+      }
+    },
+    {
+      "name": "unmasked at the write, masked after: the anchor withheld",
+      "read": {
+        "kind": "table",
+        "caption": {
+          "subject": "widget",
+          "anchor": {
+            "state": "withheld"
+          }
+        },
+        "columns": [
+          {
+            "state": "withheld"
+          }
+        ],
+        "rows": [
+          {
+            "cells": [
+              {
+                "state": "withheld"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-2"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "withheld"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-3"
+              }
+            ]
+          }
+        ]
+      },
+      "profile": {
+        "entityTypes": [
+          {
+            "type": "widget",
+            "displayName": "Holding record",
+            "propertyDisplay": {
+              "sizeUsd": {
+                "label": "size",
+                "unit": "USD"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "title": "Holding records of … · 2 rows",
+        "note": "Each row selects its elements on the graph."
+      }
+    },
+    {
+      "name": "the type gone from the mapping",
+      "read": {
+        "kind": "table",
+        "caption": {
+          "subject": "widget",
+          "anchor": {
+            "state": "text",
+            "text": "Account A-1"
+          }
+        },
+        "columns": [
+          {
+            "state": "text",
+            "text": "Element"
+          }
+        ],
+        "rows": [
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-2"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-2"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-3"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-3"
+              }
+            ]
+          }
+        ]
+      },
+      "profile": {
+        "entityTypes": []
+      },
+      "expected": {
+        "title": "Elements of Account A-1 · 2 rows",
+        "note": "Each row selects its elements on the graph."
+      }
+    },
+    {
+      "name": "the sensitivity version changed: the anchor withheld",
+      "read": {
+        "kind": "table",
+        "caption": {
+          "subject": "widget",
+          "anchor": {
+            "state": "withheld"
+          }
+        },
+        "columns": [
+          {
+            "state": "withheld"
+          }
+        ],
+        "rows": [
+          {
+            "cells": [
+              {
+                "state": "withheld"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-2"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "withheld"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-3"
+              }
+            ]
+          }
+        ]
+      },
+      "profile": {
+        "entityTypes": [
+          {
+            "type": "widget",
+            "displayName": "Holding record",
+            "propertyDisplay": {
+              "sizeUsd": {
+                "label": "size",
+                "unit": "USD"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "title": "Holding records of … · 2 rows",
+        "note": "Each row selects its elements on the graph."
+      }
+    },
+    {
+      "name": "rows not shown",
+      "read": {
+        "kind": "table",
+        "caption": {
+          "subject": "widget"
+        },
+        "moreNotShown": 2,
+        "columns": [
+          {
+            "state": "text",
+            "text": "Element"
+          }
+        ],
+        "rows": [
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "state": "text",
+                "text": "Account A-1"
+              }
+            ],
+            "cites": [
+              {
+                "sourceId": "demo",
+                "entityType": "widget",
+                "stableId": "A-1"
+              }
+            ]
+          }
+        ]
+      },
+      "profile": {
+        "entityTypes": [
+          {
+            "type": "widget",
+            "displayName": "Holding record",
+            "propertyDisplay": {
+              "sizeUsd": {
+                "label": "size",
+                "unit": "USD"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "title": "Holding records · 25 rows",
+        "note": "Each row selects its elements on the graph.",
+        "moreNotShown": 2
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import type { AssistantFailureKind } from '@neburyx/contracts';
+import { ASSISTANT_TABLE_ANCHOR_WITHHELD, type AssistantFailureKind } from '@neburyx/contracts';
 
 export const ASSISTANT_COPY = {
   title: 'Assistant',
@@ -141,7 +141,7 @@ export const ASSISTANT_COPY = {
   storedNotice: 'Showing the earlier chat of this investigation. It is cleared when the investigation is closed.',
   storedWithheld: 'Masking is on, so this text is not shown.',
   /** Stands for the element a reopened table was listed from when the read withheld its title. */
-  storedAnchorWithheld: '…',
+  storedAnchorWithheld: ASSISTANT_TABLE_ANCHOR_WITHHELD,
   valuesLoading: 'Reading the values of the earlier answers…',
   valuesFailed: 'Some values of the earlier answers could not be read.',
   sourcesLoading: 'Reading the sources…',

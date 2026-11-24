@@ -76,7 +76,7 @@ describe('the caption, the note and the notices of a table opened again from the
     if (pack === undefined) throw new Error('no pack');
     expect(drawn(table({ caption: { subject: 'gone-type' } }), pack.profile).title).toBe('Elements · 2 rows');
     expect(drawn(table({ caption: {} }), pack.profile).title).toBe('Elements · 2 rows');
-    expect(drawn(table({ caption: { subject: pack.type } }), undefined).title).toBe('Elements · 2 rows');
+
   });
 
   it('draws an ellipsis for an anchor that the read withheld, and no clause for a unit the mapping no longer gives', () => {
@@ -86,6 +86,20 @@ describe('the caption, the note and the notices of a table opened again from the
     const shown = drawn(answer, pack.profile);
     expect(shown.title).toBe(tableTitle(pluralOf(pack.name), 2, ASSISTANT_COPY.storedAnchorWithheld));
     expect(shown.note).toBe(ASSISTANT_TABLE_SELECT_SENTENCE);
+  });
+
+  it('holds the words of the type until the profile is there: the count of the rows while it loads, when it failed and where none is provided, then the words, on the same line', () => {
+    const pack = packs[0];
+    if (pack === undefined) throw new Error('no pack');
+    const answer = table({ caption: { subject: pack.type, anchor: { state: 'text', text: 'Jordan Lee' } }, units: [{ type: pack.type, property: pack.unit?.property ?? '' }] });
+    const waiting = drawn(answer, undefined);
+    expect(waiting.title).toBe('2 rows');
+    expect(waiting.note).toBe(ASSISTANT_TABLE_SELECT_SENTENCE);
+    const ready = drawn(answer, pack.profile);
+    expect(ready.title).toBe(tableTitle(pluralOf(pack.name), 2, 'Jordan Lee'));
+    // both are one line of the caption row: nothing is added above or below
+    expect(waiting.title).not.toContain('\n');
+    expect(ready.title).not.toContain('\n');
   });
 
   it('draws a table stored before the caption was kept with the count of the rows it holds and the fixed sentence, and no notice', () => {
@@ -100,7 +114,7 @@ describe('the caption, the note and the notices of a table opened again from the
     const answer = readAnswerSchema.parse({ blocks: [{ kind: 'table', caption: {}, columns: [{ state: 'text', text: 'Name' }], rows: [{ cells: [{ state: 'text', text: 'Ana' }], cites: [REF] }] }] });
     const block = answer.blocks[0];
     if (block?.kind !== 'table') throw new Error('not a table');
-    expect(captionOf(block, undefined)).toBe('Elements · 1 row');
-    expect(noteOf(block, undefined)).toBe(ASSISTANT_TABLE_SELECT_SENTENCE);
+    expect(captionOf(block, packs[0]?.profile)).toBe('Elements · 1 row');
+    expect(noteOf(block, packs[0]?.profile)).toBe(ASSISTANT_TABLE_SELECT_SENTENCE);
   });
 });

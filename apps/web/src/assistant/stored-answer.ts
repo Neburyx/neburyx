@@ -38,12 +38,13 @@ type StoredTableBlock = Extract<Block, { kind: 'table' }>;
 
 /**
  * The title a stored table draws, written from what was stored and the current mapping as the live one was: "<plural of the type> [of <the element the rows were listed from>] · <n> rows". The plural comes from the display name of the type in the mapping, "Elements" when the rows
- * were about several types or about relationships and when the type is no longer in the mapping (never the key as if it were a name); the anchor is drawn when it was kept and may be shown, and as an ellipsis when the read withheld it (so the caption does not read as a table of everything). A table stored before the caption was kept says only the count of the rows it holds, which is true.
+ * were about several types or about relationships and when the type is no longer in the mapping (never the key as if it were a name); the anchor is drawn when it was kept and may be shown, and as an ellipsis when the read withheld it (so the caption does not read as a table of everything). A table stored before the caption was kept says only the count of the rows it holds, which is true, and so does one drawn before the profile is there.
  */
 export function captionOf(table: StoredTableBlock, profile: SourceProfile | undefined): string {
   const { caption } = table;
-  if (caption === undefined) return tableRowsPhrase(table.rows.length);
-  const type = caption.subject === undefined ? undefined : profile?.entityTypes.find((entry) => entry.type === caption.subject);
+  // the words of the type wait for the profile: while it is read, when it could not be read and where none is provided, the caption says what is true without it
+  if (caption === undefined || profile === undefined) return tableRowsPhrase(table.rows.length);
+  const type = caption.subject === undefined ? undefined : profile.entityTypes.find((entry) => entry.type === caption.subject);
   const plural = type === undefined ? 'Elements' : pluralOf(type.displayName);
   return tableTitle(plural, table.rows.length, caption.anchor === undefined ? undefined : caption.anchor.state === 'text' ? caption.anchor.text : ASSISTANT_COPY.storedAnchorWithheld);
 }

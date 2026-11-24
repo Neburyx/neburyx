@@ -1,7 +1,11 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AssistantThreadResponse } from '@neburyx/contracts';
+import type { AssistantThreadResponse, SourceProfile } from '@neburyx/contracts';
+import { ProfileProvider } from '../canvas/profile-context.js';
+import type { ProfileState } from '../canvas/profile-store.js';
+import { testProfile } from '../dev/test-profile.js';
+import { createStore } from '../state/store.js';
 import type { ApiResult } from '../api/client.js';
 import { harness, REFUSE } from './assistant-kit.js';
 import { ASSISTANT_COPY } from './copy.js';
@@ -157,3 +161,38 @@ describe('the answers of the stored turns, in the card of a live answer (frame A
     for (const marker of markers) expect(marker.tabIndex).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe('the caption of a stored table while the profile is read', () => {
+  const stored = thread([turn(1, { route: 'view', question: 'Show a table', answer: { blocks: [{ kind: 'table', caption: { subject: 'kind-a' }, columns: [text('Name')], rows: [{ cells: [text('Ana')], cites: [REF_A] }, { cells: [text('Bo')], cites: [REF_B] }] }] } })]);
+  const profileOf = (sourceId: string) => ({ ...testProfile(sourceId, ['kind-a']), entityTypes: [{ ...testProfile(sourceId, ['kind-a']).entityTypes[0] as SourceProfile['entityTypes'][number], displayName: 'Gadget' }] });
+  const withProfile = async (initial: ProfileState) => {
+    const store = createStore<ProfileState>(initial);
+    const h = harness(async () => ok(REFUSE), 1000, async () => ok(stored));
+    render(
+      <ProfileProvider store={{ ...store, reload: () => undefined }}>
+        {h.tree()}
+      </ProfileProvider>,
+    );
+    await screen.findByText('Show a table');
+    return store;
+  };
+
+  it('says the count of the rows while the profile loads, then the words of the type, on the same caption line', async () => {
+    const store = await withProfile({ sourceId: 'a', request: { phase: 'loading' } });
+    expect(screen.getByRole('table', { name: '2 rows' })).toBeTruthy();
+    act(() => store.setState({ sourceId: 'a', request: { phase: 'ready', data: profileOf('a') } }));
+    expect(await screen.findByRole('table', { name: 'Gadgets · 2 rows' })).toBeTruthy();
+  });
+
+  it('stays with the count of the rows when the profile could not be read, and does not call the rows Elements', async () => {
+    await withProfile({ sourceId: 'a', request: { phase: 'failed', failure: { code: 'NETWORK_UNAVAILABLE' } } });
+    expect(screen.getByRole('table', { name: '2 rows' })).toBeTruthy();
+    expect(screen.queryByText(/Elements/)).toBeNull();
+  });
+
+  it('says "Elements" only for a profile that is there and no longer holds the type', async () => {
+    await withProfile({ sourceId: 'a', request: { phase: 'ready', data: testProfile('a', ['other-kind']) } });
+    expect(screen.getByRole('table', { name: 'Elements · 2 rows' })).toBeTruthy();
+  });
+});
+

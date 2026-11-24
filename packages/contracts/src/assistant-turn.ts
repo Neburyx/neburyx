@@ -204,6 +204,9 @@ export const ASSISTANT_TABLE_NOTE_MAX = 700;
 /** The fixed sentence that ends the note of every table: the server writes it, so a stored table says it again without keeping it. */
 export const ASSISTANT_TABLE_SELECT_SENTENCE = 'Each row selects its elements on the graph.';
 
+/** What stands in a reopened table's title for the element its rows were listed from when the read withheld the title. */
+export const ASSISTANT_TABLE_ANCHOR_WITHHELD = '…';
+
 /** The words of a table's rows in a title: "1 row", "25 rows". */
 export const tableRowsPhrase = (count: number): string => `${count} ${count === 1 ? 'row' : 'rows'}`;
 
