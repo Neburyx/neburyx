@@ -20,10 +20,19 @@ export interface ConfirmDialogProps {
   /** What a refused or failed call says; announced when it appears. */
   readonly message?: ReactNode;
   readonly children: ReactNode;
+  /** While the call is out the dialog cannot be dismissed: Cancel is disabled and Esc, the close button and the scrim do nothing. */
+  readonly lockWhileBusy?: boolean;
+  /** A click on the scrim outside the dialog dismisses it (unless it is locked). */
+  readonly closeOnScrim?: boolean;
+  /** No close button in the heading: Cancel and Esc dismiss it. */
+  readonly hideClose?: boolean;
+  /** Replace the classes of the scrim and of the dialog, for a dialog that has a frame of its own. */
+  readonly scrimClassName?: string;
+  readonly dialogClassName?: string;
 }
 
 /** A modal that asks before something is deleted: the page behind it is inert, Tab stays inside, Esc and Cancel close it, and a call that is going on is not sent twice. */
-export function ConfirmDialog({ title, confirmLabel, busyLabel, busy, canConfirm, initialFocus, onConfirm, onClose, message, children }: ConfirmDialogProps) {
+export function ConfirmDialog({ title, confirmLabel, busyLabel, busy, canConfirm, initialFocus, onConfirm, onClose, message, children, lockWhileBusy = false, closeOnScrim = false, hideClose = false, scrimClassName = 'sheet-scrim rename-scrim', dialogClassName = 'sheet rename-dialog confirm-dialog' }: ConfirmDialogProps) {
   const dialog = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const headingId = useId();
@@ -38,11 +47,15 @@ export function ConfirmDialog({ title, confirmLabel, busyLabel, busy, canConfirm
     };
   }, [initialFocus]);
 
+  const locked = lockWhileBusy && busy;
+  const dismiss = (): void => {
+    if (!locked) onClose();
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      onClose();
+      dismiss();
       return;
     }
     if (event.key !== 'Tab') return;
@@ -60,15 +73,17 @@ export function ConfirmDialog({ title, confirmLabel, busyLabel, busy, canConfirm
   };
 
   return createPortal(
-    <div className="sheet-scrim rename-scrim">
-      <div ref={dialog} className="sheet rename-dialog confirm-dialog" role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1} onKeyDown={onKeyDown}>
+    <div className={scrimClassName} onClick={closeOnScrim ? (event) => (event.target === event.currentTarget ? dismiss() : undefined) : undefined}>
+      <div ref={dialog} className={dialogClassName} role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1} onKeyDown={onKeyDown}>
         <div className="rename-title">
           <h2 id={headingId} className="sheet-heading">
             {title}
           </h2>
-          <button type="button" className="sheet-close" aria-label="Close" onClick={onClose}>
-            <span aria-hidden="true">✕</span>
-          </button>
+          {hideClose ? null : (
+            <button type="button" className="sheet-close" aria-label="Close" disabled={locked} onClick={onClose}>
+              <span aria-hidden="true">✕</span>
+            </button>
+          )}
         </div>
         <div className="rename-form">
           {children}
@@ -78,7 +93,7 @@ export function ConfirmDialog({ title, confirmLabel, busyLabel, busy, canConfirm
             </p>
           )}
           <div className="rename-actions">
-            <button ref={cancel} type="button" className="secondary" onClick={onClose}>
+            <button ref={cancel} type="button" className="secondary" disabled={locked} onClick={onClose}>
               {CANCEL}
             </button>
             <button type="button" className="primary confirm-danger" disabled={!canConfirm || busy} aria-busy={busy ? true : undefined} onClick={onConfirm}>

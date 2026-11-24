@@ -6,6 +6,7 @@ import { isSourceChanged } from '../state/investigation-state.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { isAssistantOff } from './failure-kinds.js';
+import { rereadThread, takeRead } from './thread-reconcile.js';
 import { useAssistantSession } from './assistant-session.js';
 import type { StoredThreadState } from './stored-thread-state.js';
 
@@ -23,7 +24,8 @@ export const withoutLiveTurns = <T extends { readonly id: string }>(stored: read
 export function useStoredThread(available: boolean): StoredThreadState {
   const client = useApiClient();
   const state = useClientState();
-  const { store, stored, open, clear } = useAssistantSession();
+  const session = useAssistantSession();
+  const { store, stored, open, clear } = session;
   const principalId = usePrincipalIdWhenProvided();
   const held = useStoreSelector(stored, (value) => value);
   const inflight = useRef<AbortController | undefined>(undefined);
@@ -32,6 +34,7 @@ export function useStoredThread(available: boolean): StoredThreadState {
   useEffect(() => {
     if (!available || sourceChanged || investigationId === null || principalId === undefined || stored.getState().kind !== 'idle') return;
     const epoch = store.getState().epoch;
+    const token = session.invalidated.token;
     const controller = new AbortController();
     inflight.current = controller;
     open.add(controller);
@@ -39,6 +42,11 @@ export function useStoredThread(available: boolean): StoredThreadState {
     void client.assistantThread(investigationId, store.getState().mask, controller.signal).then((result) => {
       open.delete(controller);
       if (store.getState().epoch !== epoch) return;
+      // a notice of a clearing came while this read was out: it began before it, so it is read again
+      if (session.invalidated.token !== token) {
+        stored.setState({ kind: 'idle' });
+        return;
+      }
       if (controller.signal.aborted) {
         if (stored.getState().kind === 'loading') stored.setState({ kind: 'idle' });
         return;
@@ -52,10 +60,16 @@ export function useStoredThread(available: boolean): StoredThreadState {
         } else stored.setState({ kind: 'failed' });
         return;
       }
-      const earlier = withoutLiveTurns(result.value.turns, new Set(store.getState().turns.flatMap((turn) => turn.turnIds ?? [])));
-      stored.setState({ kind: 'ready', thread: { ...result.value, turns: earlier } });
+      const taken = takeRead(session, result.value);
+      // a read from before a clearing this session has heard of is not shown: the next one is
+      if (!taken.show) {
+        stored.setState({ kind: 'idle' });
+        return;
+      }
+      const earlier = withoutLiveTurns(taken.thread.turns, new Set(store.getState().turns.flatMap((turn) => turn.turnIds ?? [])));
+      stored.setState({ kind: 'ready', thread: { ...taken.thread, turns: earlier } });
     });
-  }, [available, clear, client, investigationId, open, principalId, sourceChanged, store, stored, held.kind]);
+  }, [available, clear, client, investigationId, open, principalId, session, sourceChanged, store, stored, held.kind]);
   // closing the panel ends the read it started and no other request of the session
   useEffect(
     () => () => {
@@ -64,4 +78,32 @@ export function useStoredThread(available: boolean): StoredThreadState {
     [],
   );
   return held;
+}
+
+/** Reads the thread again whenever the window is shown (made visible or focused) with the panel open and the stored thread read once: this is how a window that missed the notice of a clearing learns of it. */
+export function useRereadWhenShown(available: boolean): void {
+  const client = useApiClient();
+  const state = useClientState();
+  const session = useAssistantSession();
+  const investigationId = useStoreSelector(state.investigation, (investigation) => investigation.id);
+  const asked = useStoreSelector(session.refresh, (count) => count);
+  const shownThread = useStoreSelector(session.stored, (held) => held.kind);
+  useEffect(() => {
+    if (!available || investigationId === null || shownThread !== 'ready' || !session.refreshing.pending) return;
+    session.refreshing.pending = false;
+    void rereadThread(session, (signal) => client.assistantThread(investigationId, session.store.getState().mask, signal));
+  }, [asked, available, client, investigationId, session, shownThread]);
+  useEffect(() => {
+    if (!available || investigationId === null) return;
+    const show = (): void => {
+      if (document.visibilityState === 'hidden' || session.stored.getState().kind !== 'ready') return;
+      void rereadThread(session, (signal) => client.assistantThread(investigationId, session.store.getState().mask, signal));
+    };
+    document.addEventListener('visibilitychange', show);
+    window.addEventListener('focus', show);
+    return () => {
+      document.removeEventListener('visibilitychange', show);
+      window.removeEventListener('focus', show);
+    };
+  }, [available, client, investigationId, session]);
 }

@@ -7,7 +7,44 @@ import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { AssistantPanel } from './assistant-panel.js';
 import { AssistantSessionProvider, createAssistantSession, registerAssistantSession, type AssistantSession } from './assistant-session.js';
 import { ASSISTANT_COPY } from './copy.js';
+import { NO_STORED_THREAD } from './stored-thread-state.js';
 import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDEST_SHARE, ASSISTANT_PANEL_WIDTH } from './panel-layout.js';
+
+/**
+ * Another window of this person cleared the chat of the investigation on screen: the thread is read again from the server beside what is shown, which tells the count, and the live turns of before go while those of after stay; a read already out is dropped when it arrives. The channel is the person's own and is opened again when the person changes.
+ * Stops listening when the returned function is called.
+ */
+export function followClearNotice(state: ClientState, session: AssistantSession): () => void {
+  const { notice } = session;
+  if (notice === undefined) return () => undefined;
+  let stop: (() => void) | undefined;
+  let listening: string | null = null;
+  const follow = (): void => {
+    const principalId = session.store.getState().principalId;
+    if (principalId === listening) return;
+    stop?.();
+    stop = undefined;
+    listening = principalId;
+    if (principalId === null) return;
+    stop = notice.listen(principalId, (investigationId) => {
+      if (investigationId !== state.investigation.getState().id) return;
+      // a read that is out began before the clearing and is dropped when it arrives; a thread that is shown stays on screen and is read again beside it
+      session.invalidated.token += 1;
+      const { kind } = session.stored.getState();
+      if (kind === 'failed') session.stored.setState(NO_STORED_THREAD);
+      else if (kind === 'ready') {
+        session.refreshing.pending = true;
+        session.refresh.setState(session.refresh.getState() + 1);
+      }
+    });
+  };
+  follow();
+  const unsubscribe = session.store.subscribe(follow);
+  return () => {
+    unsubscribe();
+    stop?.();
+  };
+}
 
 /** Lives outside React: the panel is registered while the assistant is open, and the thread outlives the panel. A change of investigation, masking or source clears the thread here, so an answer shown under the old state is gone before it can be seen again. */
 export function bindAssistantPanel(state: ClientState, panels: PanelRegistry, session: AssistantSession = createAssistantSession()): () => void {
@@ -47,7 +84,7 @@ export function bindAssistantPanel(state: ClientState, panels: PanelRegistry, se
     }
     if (isSourceChanged(investigation.record?.sourceState) && (held.turns.length > 0 || held.summary !== undefined || session.stored.getState().kind !== 'idle')) session.clear(held.turns.length > 0 || held.summary !== undefined ? { notice: { kind: 'source-changed' } } : {});
   };
-  const stops = [state.presentation.view.subscribe(syncPanel), state.investigation.subscribe(syncThread), state.mask.subscribe(syncThread)];
+  const stops = [state.presentation.view.subscribe(syncPanel), state.investigation.subscribe(syncThread), state.mask.subscribe(syncThread), followClearNotice(state, session)];
   const unregisterSession = registerAssistantSession(state, session);
   const unregister = registerAiAction('assistant', () => state.presentation.setAssistantOpen(!state.presentation.view.getState().assistantOpen));
   syncThread();

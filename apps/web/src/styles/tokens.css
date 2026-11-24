@@ -197,6 +197,16 @@
   --font-size-small: 12px;
   --font-size-body: 13px;
   --font-size-title: 14px;
+  --font-size-dialog-title: 16px;
+  --clear-chat-dialog-width: 440px;
+  --color-clear-body: #4a5261;
+  --color-clear-border: #e3e6ec;
+  --clear-chat-button-height: 36px;
+  --color-tooltip-border: #cad0da;
+  --shadow-tooltip: 0 6px 8px rgba(0, 0, 0, 0.14);
+  --color-clear-note: #646d80;
+  --color-danger-action: #b82626;
+  --shadow-dialog: 0 12px 16px rgba(0, 0, 0, 0.2);
   --font-size-brand: 20px;
   --font-size-heading-2: 20px;
   --font-size-heading-1: 28px;

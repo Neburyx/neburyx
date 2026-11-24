@@ -1,3 +1,4 @@
+import { browserClearNotice, type ClearNotice } from './clear-notice.js';
 import type { TurnStep } from '../api/turn-stream.js';
 import { createContext, useContext } from 'react';
 import type { AssistantChoice, AssistantFailureKind, AssistantLimit, AssistantRead, AssistantRefusalCause, AssistantTurnAnswer, AskAnswer } from '@neburyx/contracts';
@@ -78,6 +79,10 @@ export interface Turn {
   readonly id: number;
   /** The ids of the requests this turn sent (its message, then a choice, a continue or a decision), each the id the server gives the turn it writes for it, so that the thread read can tell these turns from the earlier ones. */
   readonly turnIds?: readonly string[];
+  /** The count the server told for this turn when its response began (the header), so a turn that began before a clearing can be told from one that began after; absent until it arrives, and for a server that sends none. */
+  readonly threadEpoch?: number;
+  /** The turn was kept through a reconciliation while the server had told no count for it: its answer is not shown unless the count arrives. */
+  readonly unverified?: true;
   readonly message: string;
   readonly outcome: Outcome;
   /** The turn was started by pressing a follow-up, so its message is the follow-up's label and is not the analyst's to type again. */
@@ -118,23 +123,52 @@ export interface AssistantSession {
   readonly stored: Store<StoredThreadState>;
   /** The requests that are out; ending them is how a clearing keeps their answers from coming back. */
   readonly open: Set<AbortController>;
+  /** Counts the notices of a clearing this session has heard: a stored read that began before the last one is from before it and is not shown. */
+  readonly invalidated: { token: number };
+  /** Rises when a notice asks for the stored thread to be read again while it is shown; `pending` says the asking was not served yet (the panel may be closed). */
+  readonly refresh: Store<number>;
+  readonly refreshing: { pending: boolean };
+  /** The request of each pending turn by its number, so a turn that is dropped can be ended. */
+  readonly requests: Map<number, AbortController>;
+  /** `epoch` is the count of the last thread read taken, which the stored turns shown belong to; `seen` is the highest count heard from a read or a turn's header. A read or a turn with a count below `seen` is from before and is not shown. Both belong to one person and one investigation. */
+  readonly known: { epoch: number | undefined; seen: number | undefined };
   /** Clears the thread and every request that is out, and starts the next epoch. */
   clear(next: Partial<AssistantSessionState>): void;
+  /** Tells the other sessions of this person in the browser that a chat was cleared, and hears them; absent where the browser has no channel. */
+  readonly notice?: ClearNotice | undefined;
 }
 
-export function createAssistantSession(): AssistantSession {
+/** `notice` is the channel to the other windows: the browser's by default, none for `null` (a test that has no other window). */
+export function createAssistantSession(notice: ClearNotice | null | undefined = browserClearNotice()): AssistantSession {
   const store = createStore<AssistantSessionState>(EMPTY_ASSISTANT_SESSION);
   const stored = createStore<StoredThreadState>(NO_STORED_THREAD);
   const open = new Set<AbortController>();
+  const requests = new Map<number, AbortController>();
+  const invalidated = { token: 0 };
+  const refresh = createStore(0);
+  const refreshing = { pending: false };
+  const known: { epoch: number | undefined; seen: number | undefined } = { epoch: undefined, seen: undefined };
   return {
     store,
     stored,
     open,
+    requests,
+    known,
+    invalidated,
+    refresh,
+    refreshing,
+    notice: notice ?? undefined,
     clear(next) {
       for (const controller of open) controller.abort();
       open.clear();
+      requests.clear();
       stored.setState(NO_STORED_THREAD);
       const held = store.getState();
+      const otherScope = (next.investigationId !== undefined && next.investigationId !== held.investigationId) || (next.principalId !== undefined && next.principalId !== held.principalId);
+      if (otherScope) {
+        known.epoch = undefined;
+        known.seen = undefined;
+      }
       store.setState({ ...EMPTY_ASSISTANT_SESSION, investigationId: held.investigationId, principalId: held.principalId, mask: held.mask, epoch: held.epoch + 1, ...next });
     },
   };

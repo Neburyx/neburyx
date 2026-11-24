@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useApiClient } from '../api/client-context.js';
 import { useClientState } from '../state/context.js';
+import { useStoreSelector } from '../state/store.js';
 import { usePanelSize } from '../workspace/panel-host.js';
-import { useAiAvailabilityWhenProvided } from '../shell/shell-data.js';
+import { useAiAvailabilityWhenProvided, usePrincipalIdWhenProvided } from '../shell/shell-data.js';
 import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDE_SIZE, ASSISTANT_PANEL_WIDTH } from './panel-layout.js';
+import { ClearChatDialog } from './clear-chat-dialog.js';
 import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, wordsText } from './copy.js';
 import { MaskingCard, NewThreadCard, StandingNote } from './thread-notices.js';
 import { StoredTurns } from './stored-turns.js';
@@ -10,7 +13,7 @@ import { useAssistantSession } from './assistant-session.js';
 import { NO_STORED_THREAD } from './stored-thread-state.js';
 import { boundElementsOf } from './stored-answer.js';
 import { useRefReads } from './stored-reads.js';
-import { useStoredThread } from './stored-thread.js';
+import { useRereadWhenShown, useStoredThread } from './stored-thread.js';
 import { SummaryContext } from './summary-context.js';
 import { TurnView, stepSentenceOf } from './turn-cards.js';
 import { useAssistant } from './use-assistant.js';
@@ -39,9 +42,17 @@ function WideButton() {
   const wide = canWiden && size.width >= size.limits.max;
   const toggle = (): void => (wide ? presentation.clearPanelSize(ASSISTANT_PANEL_ID) : presentation.setPanelSize(ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDE_SIZE));
   return (
-    <button type="button" className="assistant-wide" aria-label={wide ? ASSISTANT_COPY.normalWidth : ASSISTANT_COPY.wide} aria-pressed={wide} disabled={!canWiden} onClick={toggle}>
+    <button type="button" className="assistant-wide" aria-label={wide ? ASSISTANT_COPY.normalWidth : ASSISTANT_COPY.wide} data-tip={wide ? ASSISTANT_COPY.normalWidth : ASSISTANT_COPY.wide} aria-pressed={wide} disabled={!canWiden} onClick={toggle}>
       <WideIcon />
     </button>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" className="assistant-clear-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3.2h8M4.6 3.2V1.8h2.8v1.4M3.2 3.2l.4 6.4h4.8l.4-6.4M5 5v3M7 5v3" />
+    </svg>
   );
 }
 
@@ -92,7 +103,15 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const model = useAssistant();
   const availability = useAiAvailabilityWhenProvided('assistant');
   const stored = useStoredThread(availability === 'available');
+  useRereadWhenShown(availability === 'available');
   const session = useAssistantSession();
+  const client = useApiClient();
+  const clientState = useClientState();
+  const investigationId = useStoreSelector(clientState.investigation, (investigation) => investigation.id);
+  const principalId = usePrincipalIdWhenProvided();
+  const [confirming, setConfirming] = useState<{ readonly investigationId: string; readonly principalId: string; readonly epoch: number } | undefined>(undefined);
+  const [clearedNote, setClearedNote] = useState(false);
+  const clearButton = useRef<HTMLButtonElement>(null);
   const off = stored.kind === 'off';
   const available = availability === 'available' && !off;
   const unavailable = availability === 'unavailable' || off;
@@ -105,6 +124,27 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const reads = useRefReads(bound, stored.kind === 'ready' && !off);
   const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
+  const hasThread = !off && investigationId !== null && principalId !== undefined && (storedTurns.length > 0 || turns.length > 0);
+  useEffect(() => {
+    if (turns.length > 0) setClearedNote(false);
+  }, [turns.length]);
+  useEffect(() => {
+    if (clearedNote) focusInside(field.current, null);
+  }, [clearedNote]);
+  // the clearing belongs to the person and investigation it was confirmed for: a completion that arrives after the panel moved on to another does not touch the thread now on screen
+  const cleared = (scope: NonNullable<typeof confirming>): void => {
+    session.notice?.announce(scope.principalId, scope.investigationId);
+    setConfirming(undefined);
+    const now = session.store.getState();
+    if ((now.investigationId !== null && now.investigationId !== scope.investigationId) || (now.principalId !== null && now.principalId !== scope.principalId) || now.epoch !== scope.epoch) return;
+    session.clear({});
+    session.stored.setState({ kind: 'ready', thread: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
+    setClearedNote(true);
+  };
+  const closeConfirm = (): void => {
+    setConfirming(undefined);
+    queueMicrotask(() => clearButton.current?.focus());
+  };
   useEffect(() => {
     const thread = body.current;
     if (model.focus.target === 'input') focusInside(field.current, null);
@@ -159,13 +199,19 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           <p>{model.title}</p>
         </div>
         <WideButton />
-        <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} onClick={close}>
+        {hasThread ? (
+          <button ref={clearButton} type="button" className="assistant-clear" aria-label={ASSISTANT_COPY.clearChat} data-tip={ASSISTANT_COPY.clearChat} disabled={pending} onClick={() => investigationId !== null && principalId !== undefined && setConfirming({ investigationId, principalId, epoch: session.store.getState().epoch })}>
+            <TrashIcon />
+          </button>
+        ) : null}
+        <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} data-tip={ASSISTANT_COPY.close} onClick={close}>
           ×
         </button>
       </header>
       <p className="visually-hidden" role="status" aria-live="polite">
-        {announced}
+        {clearedNote ? ASSISTANT_COPY.cleared : announced}
       </p>
+      {confirming === undefined ? null : <ClearChatDialog send={() => client.clearAssistantThread(confirming.investigationId)} onCleared={() => cleared(confirming)} onClose={closeConfirm} />}
       <div className="ask-body assistant-body" ref={body}>
         {unavailable ? <NotAvailable /> : showNewThread ? <NewThreadCard /> : null}
         {!unavailable && stored.kind === 'loading' ? <p className="ask-note" role="status">{ASSISTANT_COPY.storedLoading}</p> : null}

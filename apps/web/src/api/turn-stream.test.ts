@@ -119,6 +119,24 @@ describe('the assistant turn of the client, streamed', () => {
     expect(steps).toEqual([]);
   });
 
+  it('tells the count of the response header before it reads any line of a stream or the body of a JSON answer, and only a whole number', async () => {
+    const order: string[] = [];
+    const streamed = createApiClient(async () => new Response(bodyOf(line(STEP(1)), line(ANSWER)), { status: 200, headers: { 'content-type': 'application/x-ndjson', 'x-assistant-epoch': '7' } }));
+    await streamed.assistantTurn(request, undefined, () => order.push('step'), (epoch) => order.push(`epoch ${epoch}`));
+    expect(order).toEqual(['epoch 7', 'step']);
+    const plain = createApiClient(async () => new Response(JSON.stringify(REFUSAL), { status: 200, headers: { 'content-type': 'application/json', 'x-assistant-epoch': '0' } }));
+    const told: number[] = [];
+    expect(await plain.assistantTurn(request, undefined, undefined, (epoch) => told.push(epoch))).toEqual({ ok: true, value: REFUSAL });
+    expect(told).toEqual([0]);
+    for (const value of ['-1', '1.5', 'x', '', '12345678901234567890']) {
+      const odd = createApiClient(async () => new Response(JSON.stringify(REFUSAL), { status: 200, headers: { 'content-type': 'application/json', 'x-assistant-epoch': value } }));
+      await odd.assistantTurn(request, undefined, undefined, (epoch) => told.push(epoch));
+    }
+    const none = createApiClient(async () => new Response(JSON.stringify(REFUSAL), { status: 200, headers: { 'content-type': 'application/json' } }));
+    await none.assistantTurn(request, undefined, undefined, (epoch) => told.push(epoch));
+    expect(told).toEqual([0]);
+  });
+
   it('reads an error line as the failure of that code, and a refusal before any line as the HTTP error body', async () => {
     const streamed = createApiClient(async () => ndjson(line(STEP(1)), line({ event: 'error', code: 'INTERNAL_ERROR', message: ERROR_TABLE.INTERNAL_ERROR.message, retryable: ERROR_TABLE.INTERNAL_ERROR.retryable, traceId: 't-1' })));
     expect(await streamed.assistantTurn(request, undefined, () => undefined)).toMatchObject({ ok: false, failure: { code: 'INTERNAL_ERROR' } });

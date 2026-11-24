@@ -60,8 +60,12 @@ import {
   type AskQuestionRequest,
   askAnswerSchema,
   assistantTurnAnswerSchema,
+  ASSISTANT_EPOCH_HEADER,
+  assistantEpochHeaderSchema,
+  assistantThreadClearResponseSchema,
   assistantThreadResponseSchema,
   type AssistantTurnAnswer,
+  type AssistantThreadClearResponse,
   type AssistantThreadResponse,
   type AssistantTurnRequest,
   type SummaryRequest,
@@ -206,9 +210,12 @@ export interface ApiClient {
   /** Reads the next page of an answer that stopped as heavy, with the token that answer carried; the model is not called. */
   askContinue(request: AskContinueRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
   /** One turn of the assistant. With `onStep` the client asks for a streamed turn: each step the server reports is handed over in order, then the result is the answer exactly as the JSON route gives it; a server that does not stream answers as before, with no step. */
-  assistantTurn(request: AssistantTurnRequest, signal?: AbortSignal, onStep?: (step: TurnStep) => void): Promise<ApiResult<AssistantTurnAnswer>>;
+  /** `onEpoch` hears the count the turn read from its thread (the response header), as soon as the response starts and before any line of a stream. */
+  assistantTurn(request: AssistantTurnRequest, signal?: AbortSignal, onStep?: (step: TurnStep) => void, onEpoch?: (epoch: number) => void): Promise<ApiResult<AssistantTurnAnswer>>;
   /** The caller's own thread of an investigation as the kind and end of each turn (no text), and when their previous thread was cleared. */
   assistantThread(investigationId: string, mask: boolean, signal?: AbortSignal): Promise<ApiResult<AssistantThreadResponse>>;
+  /** Deletes the caller's own thread of the investigation and the text of the model calls of their runs of it. */
+  clearAssistantThread(investigationId: string, signal?: AbortSignal): Promise<ApiResult<AssistantThreadClearResponse>>;
   /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
   summarize(request: SummaryRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SummaryResponse>>;
   /** Copies the storable sentences of a summary into the AI notes of the investigation's draft, with the draft's version the caller holds. */
@@ -304,6 +311,13 @@ async function settledTurn(response: Response, onStep: (step: TurnStep) => void,
   return failed('UNREADABLE_RESPONSE');
 }
 
+/** The count of the response header of a turn, when it is a whole number. */
+function epochOfHeaders(headers: Headers, onEpoch: (epoch: number) => void): void {
+  const value = headers.get(ASSISTANT_EPOCH_HEADER);
+  const parsed = value === null ? undefined : assistantEpochHeaderSchema.safeParse(value);
+  if (parsed?.success === true) onEpoch(Number(parsed.data));
+}
+
 function parseJson(text: string): { readonly parsed: true; readonly value: unknown } | { readonly parsed: false } {
   try {
     return { parsed: true, value: JSON.parse(text) };
@@ -322,6 +336,8 @@ interface RequestExtras {
   readonly keepalive?: boolean;
   /** Reads the body of a response that is a stream, in place of reading it as one JSON text. */
   readonly readStream?: (response: Response) => Promise<unknown>;
+  /** Hears the headers of a response that came back, before its body is read. */
+  readonly onHeaders?: (headers: Headers) => void;
 }
 
 async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined, method?: 'POST' | 'PUT' | 'DELETE', body?: unknown, extras: RequestExtras = {}): Promise<ApiResult<T>> {
@@ -330,6 +346,7 @@ async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, 
   let response: Response;
   try {
     response = await fetcher(path, signal === undefined && method === undefined ? undefined : { ...(signal === undefined ? {} : { signal }), ...(method === undefined ? {} : { method }), ...(extras.keepalive === true ? { keepalive: true } : {}), ...(body === undefined ? (extras.headers === undefined ? {} : { headers: extras.headers }) : { headers: { 'content-type': 'application/json', ...extras.headers }, body: JSON.stringify(body) }) });
+    if (response.ok) extras.onHeaders?.(response.headers);
     if (extras.readStream !== undefined && response.ok && (response.headers.get('content-type') ?? '').toLowerCase().startsWith('application/x-ndjson')) return (await extras.readStream(response)) as ApiResult<T>;
     text = await response.text();
   } catch {
@@ -405,8 +422,12 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     copyPattern: (id, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/copy`, savedPatternSchema, signal, 'POST'),
     ask: (body, signal) => request(fetcher, '/v1/ask', askAnswerSchema, signal, 'POST', body),
     askContinue: (body, signal) => request(fetcher, '/v1/ask/continue', askAnswerSchema, signal, 'POST', body),
-    assistantTurn: (body, signal, onStep) =>
-      request(fetcher, '/v1/assistant/turns', assistantTurnAnswerSchema, signal, 'POST', body, onStep === undefined ? {} : { headers: { accept: 'application/x-ndjson' }, readStream: (response) => settledTurn(response, onStep, signal) }),
+    assistantTurn: (body, signal, onStep, onEpoch) =>
+      request(fetcher, '/v1/assistant/turns', assistantTurnAnswerSchema, signal, 'POST', body, {
+        ...(onStep === undefined ? {} : { headers: { accept: 'application/x-ndjson' }, readStream: (response: Response) => settledTurn(response, onStep, signal) }),
+        ...(onEpoch === undefined ? {} : { onHeaders: (headers: Headers) => epochOfHeaders(headers, onEpoch) }),
+      }),
+    clearAssistantThread: (investigationId, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread/clear`, assistantThreadClearResponseSchema, signal, 'POST', {}),
     assistantThread: (investigationId, mask, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread${mask ? '?mask=true' : ''}`, assistantThreadResponseSchema, signal),
     copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
     readAiNotes: (investigationId, mask, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes?mask=${mask ? 'true' : 'false'}`, aiNotesResponseSchema, signal),

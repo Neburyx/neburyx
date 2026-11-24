@@ -119,7 +119,7 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, request: Assistant
 export function useAssistant(): AssistantModel {
   const client = useApiClient();
   const state = useClientState();
-  const { store, open, clear } = useAssistantSession();
+  const { store, open, clear, requests, known } = useAssistantSession();
   const view = useStoreSelector(store, (held) => held);
   const mask = useSessionMask();
   const graph = useVisibleGraph();
@@ -134,7 +134,6 @@ export function useAssistant(): AssistantModel {
   const [focus, setFocusState] = useState<AssistantModel['focus']>({ target: 'input', tick: 0 });
   const setFocus = useCallback((target: AssistantModel['focus']['target']): void => setFocusState((held) => ({ target, tick: held.tick + 1 })), []);
   const keys = useMemo(() => [...drawnKeys(graph)], [graph]);
-  const requests = useRef(new Map<number, AbortController>());
   const keysRef = useRef(keys);
   keysRef.current = keys;
 
@@ -164,7 +163,7 @@ export function useAssistant(): AssistantModel {
       const epoch = store.getState().epoch;
       const controller = new AbortController();
       open.add(controller);
-      requests.current.set(turnId, controller);
+      requests.set(turnId, controller);
       const sentId = crypto.randomUUID();
       store.setState({ ...store.getState(), turns: store.getState().turns.map((turn) => (turn.id === turnId ? { ...turn, turnIds: [...(turn.turnIds ?? []), sentId] } : turn)) });
       // each step the server reports is added to the pending turn, which shows the finished reads and the one in progress; a step that arrives after the turn has settled is dropped
@@ -173,10 +172,26 @@ export function useAssistant(): AssistantModel {
         const turn = store.getState().turns.find((held) => held.id === turnId);
         if (turn?.outcome.kind === 'pending') setOutcome(turnId, { ...turn.outcome, steps: [...(turn.outcome.steps ?? []), step] });
       };
-      void client.assistantTurn({ ...request, turnId: sentId }, controller.signal, onStep).then((result: ApiResult<AssistantTurnAnswer>) => {
-        open.delete(controller);
-        if (requests.current.get(turnId) === controller) requests.current.delete(turnId);
+      // the count the server read for this turn: a turn that began before a clearing this session has heard of is not shown, and the others note it
+      const onEpoch = (header: number): void => {
         if (controller.signal.aborted || store.getState().epoch !== epoch) return;
+        if (known.seen !== undefined && header < known.seen) {
+          controller.abort();
+          store.setState({ ...store.getState(), turns: store.getState().turns.filter((turn) => turn.id !== turnId) });
+          return;
+        }
+        known.seen = Math.max(known.seen ?? header, header);
+        store.setState({ ...store.getState(), turns: store.getState().turns.map((turn) => (turn.id === turnId ? { ...turn, threadEpoch: header, unverified: undefined } : turn)) });
+      };
+      void client.assistantTurn({ ...request, turnId: sentId }, controller.signal, onStep, onEpoch).then((result: ApiResult<AssistantTurnAnswer>) => {
+        open.delete(controller);
+        if (requests.get(turnId) === controller) requests.delete(turnId);
+        if (controller.signal.aborted || store.getState().epoch !== epoch) return;
+        // a turn kept through a reconciliation with no count told for it is not shown as an answer: nothing says it is newer than the clearing
+        if (store.getState().turns.find((turn) => turn.id === turnId)?.unverified === true) {
+          store.setState({ ...store.getState(), turns: store.getState().turns.filter((turn) => turn.id !== turnId) });
+          return;
+        }
         if (!result.ok) {
           if (result.failure.code === 'ABORTED') {
             // nothing was sent: the guard that holds reads while the source has changed ended the request
@@ -210,7 +225,7 @@ export function useAssistant(): AssistantModel {
         setFocus(turnId);
       });
     },
-    [clear, client, open, patch, profile, restoreInput, setFocus, setOutcome, sourceId, state, store],
+    [clear, client, known, open, patch, profile, requests, restoreInput, setFocus, setOutcome, sourceId, state, store],
   );
 
   const base = useCallback((): Pick<AssistantTurnRequest, 'sourceId' | 'investigationId' | 'viewElementKeys' | 'mask'> | undefined => {
@@ -334,11 +349,11 @@ export function useAssistant(): AssistantModel {
     send: () => submit(store.getState().input, undefined),
     cancel: () => {
       const turn = store.getState().turns.find((held) => held.outcome.kind === 'pending');
-      const controller = turn === undefined ? undefined : requests.current.get(turn.id);
+      const controller = turn === undefined ? undefined : requests.get(turn.id);
       if (turn === undefined || controller === undefined) return;
       controller.abort();
       open.delete(controller);
-      requests.current.delete(turn.id);
+      requests.delete(turn.id);
       if (turn.outcome.kind === 'pending' && turn.outcome.call === 'continue') {
         setOutcome(turn.id, { kind: 'heavy', answer: turn.outcome.heavy, token: turn.outcome.token });
         setFocus(turn.id);
