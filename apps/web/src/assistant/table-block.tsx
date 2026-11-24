@@ -11,6 +11,10 @@ const TABLE_FOLD_HEAD = 3;
 const TIP_ROOM = 80;
 /** The gap between a cell and its tip, in pixels. */
 const TIP_GAP = 4;
+/** How much longer a text may be than its box before it counts as cut, in pixels: the rounding of layout. */
+const CUT_TOLERANCE = 0.01;
+/** What the title column keeps beside its widest value, in pixels: the text is measured by its fractional width, and a pixel more is room for what layout rounds up. */
+const TITLE_SLACK = 1;
 /** How long a tip stays after the pointer leaves its cell, so that the pointer can move onto it. */
 const TIP_LINGER_MS = 150;
 
@@ -44,10 +48,22 @@ interface CellTip {
   readonly byFocus: boolean;
 }
 
+/** The width a node's text needs on one line, with its fraction (scrollWidth and clientWidth are rounded, which hides a text that is a fraction of a pixel too long: the browser draws its ellipsis all the same). */
+function textWidthOf(node: Element): number {
+  const range = document.createRange();
+  // a window with no layout of ranges (a test one) has only the rounded width
+  if (typeof range.getBoundingClientRect !== "function") return node.scrollWidth;
+  range.selectNodeContents(node);
+  return range.getBoundingClientRect().width;
+}
+
+/** Whether a clip draws an ellipsis: its text needs more than its box has, by any fraction. */
+const cuts = (clip: Element): boolean => textWidthOf(clip) > clip.getBoundingClientRect().width + CUT_TOLERANCE;
+
 /** The tip of the cut cell inside a table cell, if the cell cuts its text. */
 function tipOf(cell: Element | null, byFocus = false): CellTip | undefined {
   const clip = cell?.querySelector<HTMLElement>(".assistant-table-clip");
-  if (cell === null || clip === null || clip === undefined || clip.scrollWidth <= clip.clientWidth) return undefined;
+  if (cell === null || clip === null || clip === undefined || !cuts(clip)) return undefined;
   const box = cell.getBoundingClientRect();
   const above = box.bottom + TIP_ROOM > window.innerHeight;
   return { text: clip.textContent ?? "", left: box.left, top: above ? box.top - TIP_GAP : box.bottom + TIP_GAP, above, byFocus };
@@ -103,10 +119,10 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         // the floor of the title column is a width of its text: that of its widest value or label, without the padding the column keeps besides
         const style = getComputedStyle(head);
         const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-        let widest = head.scrollWidth - padding;
-        for (const clip of element.querySelectorAll<HTMLElement>("td.assistant-table-title-cell .assistant-table-clip")) widest = Math.max(widest, clip.scrollWidth);
+        let widest = textWidthOf(head);
+        for (const clip of element.querySelectorAll<HTMLElement>("td.assistant-table-title-cell .assistant-table-clip")) widest = Math.max(widest, textWidthOf(clip));
         element.style.setProperty("--assistant-table-title-pad", `${padding}px`);
-        element.style.setProperty("--assistant-table-title-natural", `${Math.max(0, widest)}px`);
+        element.style.setProperty("--assistant-table-title-natural", `${Math.ceil(widest) + TITLE_SLACK}px`);
       }
       const naturalOverflow = element.scrollWidth > element.clientWidth;
       if (naturalOverflow) element.classList.add("assistant-table-squeezed");

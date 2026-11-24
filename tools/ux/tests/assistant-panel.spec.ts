@@ -721,8 +721,10 @@ test.describe('the Assistant panel', () => {
   test('keeps identifiers of 12 characters that share their first 9 whole in the 380 pixel panel with a table of five columns and 25 rows, folded: the table scrolls inside its frame, stamps and headers stay on one line, and a cut value shows its tip', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openWorkspace(page);
+    // ids whose last digits differ in width, in the rows that are drawn folded (the first three and the last)
+    const IDS = ['TX-004833841', 'TX-004833844', 'TX-004833978', ...Array.from({ length: 21 }, (_, index) => `TX-0048338${50 + index}`), 'TX-004833225'];
     const narratives = ['Transfer to supplier for invoice 2231', 'Deposit at the branch counter', 'Payment of the card statement'];
-    const rows = Array.from({ length: 25 }, (_, index) => ({ cells: [`TX-0048338${41 + index}`, narratives[index % 3] ?? '', ['Cash', 'Wire', 'Card'][index % 3] ?? '', `${(1664.72 - index * 11.3).toFixed(2)}`, `2022-09-09T22:${String(33 + (index % 20)).padStart(2, '0')}:00Z`], cites: ['n1'] }));
+    const rows = Array.from({ length: 25 }, (_, index) => ({ cells: [IDS[index] ?? `TX-0048338${41 + index}`, narratives[index % 3] ?? '', ['Cash', 'Wire', 'Card'][index % 3] ?? '', `${(1664.72 - index * 11.3).toFixed(2)}`, `2022-09-09T22:${String(33 + (index % 20)).padStart(2, '0')}:00Z`], cites: ['n1'] }));
     const answer: AssistantTurnAnswer = {
       status: 'answered',
       route: 'view',
@@ -745,7 +747,8 @@ test.describe('the Assistant panel', () => {
       const head = [...element.querySelectorAll('thead th')] as HTMLElement[];
       return {
         rows: body.length,
-        identifiers: body.map((row) => { const clip = row.querySelector('td .assistant-table-clip') as HTMLElement; return { text: clip.textContent, cut: clip.scrollWidth > clip.clientWidth }; }),
+        // no ellipsis is drawn: the text is measured with its fractional width against the box (scrollWidth and clientWidth are rounded)
+        identifiers: body.map((row) => { const clip = row.querySelector('td .assistant-table-clip') as HTMLElement; const range = document.createRange(); range.selectNodeContents(clip); return { text: clip.textContent, cut: range.getBoundingClientRect().width > clip.getBoundingClientRect().width + 0.01 }; }),
         stampsOneLine: body.map((row) => (row.children[4] as HTMLElement).getBoundingClientRect().height < 32),
         headersOneLine: head.map((cell) => cell.getBoundingClientRect().height < 32),
         pageScrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -782,6 +785,9 @@ test.describe('the Assistant panel', () => {
     await expect(scroller).not.toHaveClass(/assistant-table-scrolls/);
     expect(await centred()).toBeLessThanOrEqual(2);
     await table.getByRole('button', { name: /more rows/ }).click();
+    // unfolded, every id of the 25 rows is whole too: the table is measured again for the rows that are drawn
+    const cutIds = await table.evaluate((element) => [...element.querySelectorAll('tbody tr:not(.assistant-table-fold) td:first-child .assistant-table-clip')].filter((clip) => { const range = document.createRange(); range.selectNodeContents(clip); return range.getBoundingClientRect().width > clip.getBoundingClientRect().width + 0.01; }).map((clip) => clip.textContent));
+    expect(cutIds).toEqual([]);
     await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth / 2; });
     await expect(table.getByRole('button', { name: 'Fold the rows again' })).toBeVisible();
     expect(await centred()).toBeLessThanOrEqual(2);
