@@ -40,6 +40,22 @@ export interface AssistantThreadRead {
   readonly epoch: number;
 }
 
+/** Where a page of threads starts: after the thread whose last turn was at `key` (microsecond text) with this `id`. */
+export interface ThreadListPosition {
+  readonly key: string;
+  readonly id: string;
+}
+
+/** One thread of the chat list: its investigation, when its last turn was stored, how many turns it holds and the full text of its newest stored question. */
+export interface ThreadListRow {
+  readonly threadId: string;
+  readonly investigationId: string;
+  readonly lastTurnAt: string;
+  readonly key: string;
+  readonly turns: number;
+  readonly lastQuestion: string | null;
+}
+
 export interface AssistantThreadStore {
   /** How many times the investigation has been cleared plus how many times this person has cleared their own thread of it; 0 when neither. Both only grow, so the sum never repeats a value a turn holds. Read before a turn does any other work. */
   epoch(investigationId: string, userId: string): Promise<number>;
@@ -53,6 +69,8 @@ export interface AssistantThreadStore {
   readContext(investigationId: string, userId: string, limit: number): Promise<readonly AssistantContextTurn[]>;
   /** Deletes the caller's own thread of the investigation and blanks the text of the model calls of their runs of it, in one transaction; true when a thread was deleted, false when they had none. Another person's thread and another investigation are not touched. */
   clearOwn(investigationId: string, userId: string): Promise<boolean>;
+  /** The caller's own threads, newest last turn first (ties by thread id), `limit` of them after the position given: one statement over the application's tables, never the source. Nothing here says whether the investigation may be shown: the application's `chatInvestigations` decides that. */
+  listOwn(userId: string, after: ThreadListPosition | undefined, limit: number): Promise<readonly ThreadListRow[]>;
   close(): Promise<void>;
 }
 
@@ -91,6 +109,14 @@ const COUNT_TURNS = 'SELECT count(*)::int AS n FROM assistant_turns t JOIN assis
 const READ_CLEARED = 'SELECT cleared_at FROM assistant_thread_clears WHERE investigation_id = $1 AND user_id = $2';
 const DELETE_OWN_THREAD = 'DELETE FROM assistant_threads WHERE investigation_id = $1 AND user_id = $2';
 const BLANK_OWN_CALLS = "UPDATE assistant_run_calls SET values_text = '', reply_text = NULL WHERE run_id IN (SELECT id FROM assistant_runs WHERE actor_id = $2 AND investigation_id = $1)";
+const LIST_OWN_THREADS =
+  `SELECT h.id, h.investigation_id, h.last_turn_at, to_char(h.last_turn_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS key,
+          (SELECT count(*)::int FROM assistant_turns t WHERE t.thread_id = h.id) AS turns,
+          (SELECT t.question_text FROM assistant_turns t WHERE t.thread_id = h.id AND t.question_text IS NOT NULL ORDER BY t.seq DESC LIMIT 1) AS question
+   FROM assistant_threads h
+   WHERE h.user_id = $1 AND ($2::text IS NULL OR (h.last_turn_at, h.id) < ($2::timestamptz, $3::uuid))
+   ORDER BY h.last_turn_at DESC, h.id DESC
+   LIMIT $4`;
 const FORGET_OWN_CLEARING = 'DELETE FROM assistant_thread_clears WHERE investigation_id = $1 AND user_id = $2';
 const HAS_THREAD = 'SELECT 1 FROM assistant_threads WHERE investigation_id = $1 AND user_id = $2';
 
@@ -257,6 +283,18 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
           throw committing ? new AssistantThreadOutcomeUnknownError() : error;
         }
       }),
+    listOwn: (userId, after, limit) =>
+      withClient(async (client) => {
+        const result = await client.query(LIST_OWN_THREADS, [userId, after?.key ?? null, after?.id ?? null, limit]);
+        return result.rows.map((row) => ({
+          threadId: String(row['id']),
+          investigationId: String(row['investigation_id']),
+          lastTurnAt: (row['last_turn_at'] instanceof Date ? row['last_turn_at'] : new Date(String(row['last_turn_at']))).toISOString(),
+          key: String(row['key']),
+          turns: numberOf(row['turns']),
+          lastQuestion: typeof row['question'] === 'string' ? row['question'] : null,
+        }));
+      }),
     close: () => (closing ??= pool.end()),
   };
 }
@@ -385,6 +423,22 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
       // the commit's failure leaves the outcome unknown: the twin has applied the clearing, the worst case for a claim that nothing was deleted
       if (options.failOn === 'commit') throw new AssistantThreadOutcomeUnknownError();
       return had;
+    },
+    async listOwn(userId, after, limit) {
+      fail('read');
+      const keyOf = (at: string): string => `${at.slice(0, -1)}000Z`;
+      const rows: ThreadListRow[] = [];
+      for (const thread of threads.values()) {
+        const [first] = thread.turns;
+        if (first === undefined || first.userId.toLowerCase() !== userId.toLowerCase()) continue;
+        const last = thread.turns.reduce((newest, turn) => (turn.at.getTime() > newest.getTime() ? turn.at : newest), first.at).toISOString();
+        const question = [...thread.turns].reverse().find((turn) => turn.question !== undefined)?.question;
+        rows.push({ threadId: thread.id, investigationId: first.investigationId, lastTurnAt: last, key: keyOf(last), turns: thread.turns.length, lastQuestion: question ?? null });
+      }
+      return rows
+        .sort((left, right) => (left.key < right.key ? 1 : left.key > right.key ? -1 : left.threadId < right.threadId ? 1 : -1))
+        .filter((row) => after === undefined || row.key < after.key || (row.key === after.key && row.threadId < after.id))
+        .slice(0, limit);
     },
     async close() {},
   };

@@ -33,6 +33,7 @@ interface Script {
   readonly cleared?: Date;
   readonly hasThread?: boolean;
   readonly deleted?: number;
+  readonly listed?: readonly Record<string, unknown>[];
 }
 
 function pool(script: Script = {}) {
@@ -48,6 +49,7 @@ function pool(script: Script = {}) {
       if (/FOR SHARE/.test(text)) return { rows: script.status === 'none' ? [] : [{ status: script.status ?? 'open', deleted: false }] };
       if (/FROM assistant_investigation_epochs/.test(text)) return { rows: script.epoch === undefined ? [] : [{ epoch: script.epoch }] };
       if (/SELECT 1 FROM assistant_turns/.test(text)) return { rows: script.exists === true ? [{ '?column?': 1 }] : [] };
+      if (/^SELECT h\.id, h\.investigation_id/.test(text)) return { rows: script.listed ?? [] };
       if (/^DELETE FROM assistant_threads/.test(text)) return { rows: [], rowCount: script.deleted ?? 1 };
       if (/INSERT INTO assistant_threads/.test(text)) return { rows: [{ id: 'thread-1' }] };
       if (/MAX\(seq\)/.test(text)) return { rows: [{ seq: 3 }] };
@@ -405,5 +407,43 @@ describe('the clearing of the caller’s own thread by the memory store', () => 
     expect(seen).toEqual([`${INVESTIGATION}:${OWNER}`]);
     await expect(createMemoryAssistantThreadStore({ failOn: 'clear' }).clearOwn(INVESTIGATION, OWNER)).rejects.toBeInstanceOf(AssistantThreadStoreError);
     await expect(createMemoryAssistantThreadStore({ failOn: 'commit' }).clearOwn(INVESTIGATION, OWNER)).rejects.toBeInstanceOf(AssistantThreadOutcomeUnknownError);
+  });
+});
+
+describe('the listing of the caller’s own threads by the Postgres store', () => {
+  const listed = [
+    { id: 'thread-2', investigation_id: INVESTIGATION, last_turn_at: new Date('2026-11-18T12:00:00.123Z'), key: '2026-11-18T12:00:00.123456Z', turns: 3, question: 'the newest question' },
+    { id: 'thread-1', investigation_id: OTHER, last_turn_at: '2026-11-17T09:00:00Z', key: '2026-11-17T09:00:00.000000Z', turns: 1, question: null },
+  ];
+
+  it('reads the threads of the caller in one statement, newest last turn first, after the position given, and maps the rows without a value the statement did not select', async () => {
+    const { held, statements, parameters, released } = pool({ listed });
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    const rows = await store.listOwn(OWNER, { key: '2026-11-19T00:00:00.000000Z', id: 'thread-9' }, 200);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('WHERE h.user_id = $1');
+    expect(statements[0]).toContain('ORDER BY h.last_turn_at DESC, h.id DESC');
+    expect(statements[0]).toContain('LIMIT $4');
+    expect(parameters[0]).toEqual([OWNER, '2026-11-19T00:00:00.000000Z', 'thread-9', 200]);
+    expect(rows).toEqual([
+      { threadId: 'thread-2', investigationId: INVESTIGATION, lastTurnAt: '2026-11-18T12:00:00.123Z', key: '2026-11-18T12:00:00.123456Z', turns: 3, lastQuestion: 'the newest question' },
+      { threadId: 'thread-1', investigationId: OTHER, lastTurnAt: '2026-11-17T09:00:00.000Z', key: '2026-11-17T09:00:00.000000Z', turns: 1, lastQuestion: null },
+    ]);
+    expect(released.count).toBe(1);
+  });
+
+  it('starts at the first page with no position, and answers the fixed error with no driver text when the statement fails', async () => {
+    const first = pool({ listed: [] });
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => first.held }).listOwn(OWNER, undefined, 25)).toEqual([]);
+    expect(first.parameters[0]).toEqual([OWNER, null, null, 25]);
+    const failing = pool({ failAt: /^SELECT h\.id/ });
+    const error = await createPgAssistantThreadStore(CONTEXT, { createPool: () => failing.held }).listOwn(OWNER, undefined, 25).then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AssistantThreadStoreError);
+    expect(JSON.stringify([(error as Error).message])).not.toMatch(/DRIVER-TEXT|canary-secret-7f3/);
+    expect(failing.released.count).toBe(1);
+  });
+
+  it('lists nothing and fails as the fixed error from the memory store when it is made to fail', async () => {
+    await expect(createMemoryAssistantThreadStore({ failOn: 'read' }).listOwn(OWNER, undefined, 5)).rejects.toBeInstanceOf(AssistantThreadStoreError);
   });
 });

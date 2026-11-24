@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ASSISTANT_CLEAR_OUTCOME_HEADER, ASSISTANT_CLEAR_OUTCOME_UNKNOWN, ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { ASSISTANT_CLEAR_OUTCOME_HEADER, assistantThreadListResponseSchema, ASSISTANT_CLEAR_OUTCOME_UNKNOWN, ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
 import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantPendingStore, createMemoryAssistantThreadStore, sealToken } from '@neburyx/ee-ask';
 import fc from 'fast-check';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -1156,6 +1156,41 @@ describe('the thread of an investigation in the running application', () => {
     const read = assistantThreadResponseSchema.parse((await readThread(rig)).json());
     expect(read.turns).toEqual([]);
     expect(read.previousThreadClearedAt).toMatch(/^\d{4}-/);
+    await rig.stop();
+  });
+
+  it('lists the caller’s chat with the title and the source of its investigation and the last question, lists nothing for another person, and no longer lists it when the investigation is closed', async () => {
+    current = FIRST;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: ASK, threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    const list = (query = '') => rig.rig.app.inject({ method: 'GET', url: `/v1/assistant/threads${query}` });
+    await send(rig, 'Which accounts are shown?');
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    const listed = assistantThreadListResponseSchema.parse((await list()).json());
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]).toMatchObject({ investigationId: rig.body.investigationId, sourceId: 'demo', sourceState: 'available', turns: 1, lastQuestion: 'Which accounts are shown?' });
+    expect(assistantThreadListResponseSchema.parse((await list('?q=which accounts')).json()).items).toHaveLength(1);
+    expect(assistantThreadListResponseSchema.parse((await list('?q=nothing matches')).json()).items).toEqual([]);
+    const zero = await list('?limit=0');
+    expect(zero.statusCode).toBe(400);
+    expect((await list('?limit=101')).json().error).toMatchObject({ code: 'QUERY_BUDGET_EXCEEDED' });
+    expect((await list('?cursor=not.a.cursor')).json().error).toMatchObject({ code: 'CURSOR_INVALIDATED' });
+    current = SECOND;
+    expect(assistantThreadListResponseSchema.parse((await list()).json()).items).toEqual([]);
+    current = FIRST;
+    const detail = (await rig.rig.app.inject({ method: 'GET', url: `/v1/investigations/${rig.body.investigationId}` })).json() as { investigation: { version: number } };
+    const closed = await rig.rig.app.inject({ method: 'POST', url: `/v1/investigations/${rig.body.investigationId}/status`, payload: { status: 'closed', expectedVersion: detail.investigation.version } });
+    expect(closed.statusCode).toBe(200);
+    expect(assistantThreadListResponseSchema.parse((await list()).json()).items).toEqual([]);
+    await rig.stop();
+  });
+
+  it('answers 403 with the reason ai-off when the assistant is off for the list of chats too', async () => {
+    const rig = await assistantRig({ features: { ask: true, summary: false, assistant: false } });
+    const answer = await rig.rig.app.inject({ method: 'GET', url: '/v1/assistant/threads' });
+    expect(answer.statusCode).toBe(403);
+    expect(answer.json().error).toMatchObject({ code: 'ACCESS_DENIED', details: { reason: 'ai-off' } });
     await rig.stop();
   });
 

@@ -36,6 +36,10 @@ const READS_RAW = /(?:\?\.|\.)read(?:\?\.)?\(/u;
 const RAW_READERS = new Set(['ee/ask/src/assistant/thread-route.ts', 'ee/ask/src/assistant/turn-thread.ts', 'ee/ask/src/assistant/thread-store.ts']);
 const forbiddenRawReaders = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => HANDLES_STORE.test(file.text) && READS_RAW.test(file.text) && !RAW_READERS.has(file.path)).map((file) => file.path);
 
+/** The newest stored question of each thread reaches the list of chats through the store's `listOwn` and the route of the list: no other module calls it. */
+const LIST_READERS = new Set(['ee/ask/src/assistant/thread-store.ts', 'ee/ask/src/assistant/thread-list-route.ts']);
+const forbiddenListReaders = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => /\blistOwn\b/u.test(file.text) && !LIST_READERS.has(file.path)).map((file) => file.path);
+
 /** Whether the statement that gives the router its context selects any text of a stored turn. */
 const contextSelectsText = (statement: string): boolean => /question_text|\banswer\b|mask_on|sensitivity_version/u.test(statement);
 
@@ -46,6 +50,17 @@ describe('the text a thread keeps', () => {
 
   it('is read from its columns by the thread store alone: no route, query, export or log names a column of it or the table of the turns', () => {
     expect(forbiddenNamers(sources.map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf8') })))).toEqual([]);
+  });
+
+  it('reaches the list of chats through the list statement of the store and the list route alone', () => {
+    expect(forbiddenListReaders(sources.map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf8') })))).toEqual([]);
+    const store = readFileSync(join(ROOT, 'ee/ask/src/assistant/thread-store.ts'), 'utf8');
+    expect(/const LIST_OWN_THREADS =[^;]*question_text/u.test(store)).toBe(true);
+  });
+
+  it('canary: the same check fails a new module that calls the list read and passes the two that may', () => {
+    const calls = 'await store.listOwn(userId, undefined, 5);';
+    expect(forbiddenListReaders([{ path: 'services/api/src/graph/new-route.ts', text: calls }, { path: 'ee/ask/src/assistant/thread-list-route.ts', text: calls }, { path: 'ee/ask/src/assistant/thread-store.ts', text: calls }])).toEqual(['services/api/src/graph/new-route.ts']);
   });
 
   it('is not selected by the statement that gives the router its context', () => {
