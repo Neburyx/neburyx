@@ -629,6 +629,12 @@ describe('a table answer from the view call', () => {
     expect(answer.coverage.summary).toBe('2 of 2 widgets in view shown · exact');
   });
 
+  it('says the count of what is in view is not known, with no number, when two rows stand on one element', async () => {
+    const { answer } = await run(tableOf(['Element', 'Type'], [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-1 again', 'widget'], cites: ['n1'] }]));
+    if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error('not a table answer');
+    expect(answer.coverage.summary).toBe('2 widgets in view shown · the count is not known');
+  });
+
   it('writes the title with the plain-words label of the type when the mapping has one, and "Elements" for rows about several types', async () => {
     const mapping = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget' }], relationshipTypes: [] }) };
     const { answer } = await run(TWO, { mapping });

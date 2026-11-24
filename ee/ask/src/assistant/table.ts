@@ -157,3 +157,19 @@ export function tableFactsOf(subject: { readonly type: string; readonly text: st
     ...(units.length === 0 ? {} : { units: units.map(({ type, property }) => ({ type, property })) }),
   };
 }
+
+/**
+ * How many elements the rows of a table come from, when that can be said exactly: each row (the rows shown and the rows cut) stands on the first element it cites, no two rows on the same one, and every one of them is among `held`, the elements of the
+ * set that is counted (the elements of the type that a read listed, or that the reads or the view returned). Then the count of that set is a true count of what the rows were drawn from and is at least the rows shown and cut. Otherwise nothing: a count of
+ * a set the rows may not come from, or of fewer elements than there are rows, is a number the server has no ground for.
+ */
+export function exactSetCount(rows: readonly { readonly cites: readonly string[] }[], held: readonly string[]): number | undefined {
+  const firsts = rows.map((row) => row.cites[0]);
+  const distinct = new Set<string>();
+  for (const key of firsts) {
+    if (key === undefined || distinct.has(key)) return undefined;
+    distinct.add(key);
+  }
+  const members = new Set(held);
+  return distinct.size === rows.length && [...distinct].every((key) => members.has(key)) ? members.size : undefined;
+}

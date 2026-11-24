@@ -577,6 +577,50 @@ describe('the blocks of an agent answer', () => {
     return answerOf(r.route.handler(r.request(VIEW_BODY)));
   };
 
+  describe('the count in the coverage line of a table', () => {
+    const many = (count: number) => ['A-1', 'A-2', 'A-3', 'A-4', 'A-5', 'A-6', 'A-7', 'A-8', 'A-9', ...Array.from({ length: Math.max(0, count - 9) }, (_, index) => `B-${index + 1}`)].slice(0, count).map((id) => nodeOf(id, `${V.title} ${id}`));
+    const keysOf = (nodes: ReturnType<typeof nodeOf>[]) => nodes.map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId]));
+    const tableOver = (nodes: ReturnType<typeof nodeOf>[], rowOf: (index: number) => number, reads: string[] = []) => {
+      let model = fakeModel().respondWithTools([{ name: 'view', args: {} }]);
+      for (const read of reads) model = model.respondWithTools([{ name: read, args: { entityType: V.anchor, stableId: 'A-1' } }]);
+      model = model.respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'table', columns: ['Element'], rows: Array.from({ length: nodes.length }, (_, index) => ({ cells: [`${V.title} ${nodes[rowOf(index)]?.ref.stableId}`], cites: [`n${rowOf(index) + 1}`] })) }] } }]).respond(new AIMessage('Done.'));
+      return rig({ reply: TABLE, agent: { model, maxCalls: 8, maxInputTokens: 60_000 }, viewNodes: nodes, loopSteps: 3, run: () => ({ status: 'ok', result: degreeResult() }) }).then(async (r) => {
+        const answer = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: keysOf(nodes) })));
+        if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error(`not a table answer: ${JSON.stringify(answer).slice(0, 120)}`);
+        return answer;
+      });
+    };
+
+    it('says "n of m … exact" of the elements the reads returned when every row, shown and cut, stands on its own element of them', async () => {
+      const nodes = many(27);
+      const answer = await tableOver(nodes, (index) => index);
+      expect(answer.coverage.summary).toMatch(/^25 of 27 .* read shown · exact$/u);
+      expect(answer).toMatchObject({ blocks: [{ table: { moreNotShown: 2 } }] });
+    });
+
+    it('never says "of 1" when the only read with a result lists one element and the rows come from the view: it counts the elements the reads returned, or says the count is not known', async () => {
+      const nodes = many(27);
+      const answer = await tableOver(nodes, (index) => index, ['degree-preview']);
+      expect(answer.coverage.summary).not.toMatch(/ of 1 /u);
+      // the rows stand on 27 elements the reads returned (the view's), so that is the count, and it is exact
+      expect(answer.coverage.summary).toMatch(/^25 of 27 .* read shown · exact$/u);
+    });
+
+    it('counts the elements of every type together, and calls them Elements, when the rows are about more than one type', async () => {
+      const other = (id: string) => ({ ...nodeOf(id, `${V.title} ${id}`), ref: { ...nodeOf(id).ref, entityType: V.other } }) as unknown as ReturnType<typeof nodeOf>;
+      const nodes = [...many(5), ...Array.from({ length: 5 }, (_, index) => other(`B-${index + 1}`))];
+      const answer = await tableOver(nodes, (index) => index);
+      expect(answer.coverage.summary).toMatch(/^10 of 10 elements read shown · exact$/u);
+    });
+
+    it('says the count is not known, with no number, when two rows stand on one element', async () => {
+      const nodes = many(12);
+      const answer = await tableOver(nodes, (index) => (index < 2 ? 0 : index));
+      expect(answer.coverage.summary).toMatch(/read shown · the count is not known$/u);
+      expect(answer.coverage.summary).not.toMatch(/ of \d+ /u);
+    });
+  });
+
   it('keeps the order of the model: sentences then a table, and a table then sentences', async () => {
     const first = await answerWith(TABLE, [sentence(`${V.title} A-1 is in view.`), table(1)]);
     expect(first).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }, { kind: 'table' }] });

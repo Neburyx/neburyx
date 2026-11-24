@@ -5,7 +5,7 @@ import type { AssembledText } from '../case-summary/assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from '../case-summary/coverage.js';
 import { ASSISTANT_TABLE_ROWS_MAX, tableTitle } from '@neburyx/contracts';
 import { noteOfTable, unitsOfTable } from './blocks.js';
-import { judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE, tableFactsOf, typeOfKey } from './table.js';
+import { exactSetCount, judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE, tableFactsOf, typeOfKey } from './table.js';
 import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { MAX_SUMMARY_SENTENCES } from '../case-summary/instructions.js';
@@ -369,13 +369,14 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
           const elementCitations = [...citationsOf(shownSentences, assembled)];
           const subject = subjectTypeOf(shown, assembled);
           const plural = subjectPluralOf(subject, input.typeDescriptions);
-          const inView = subject === undefined ? assembled.keys.size : [...assembled.keys.keys()].filter((key) => typeOfKey(assembled, key)?.text === subject.text).length;
+          // the count of what is in view is said only of a set the rows (shown and cut) are known to come from
+          const inView = exactSetCount(rows, subject === undefined ? [...assembled.keys.keys()] : [...assembled.keys.keys()].filter((key) => typeOfKey(assembled, key)?.text === subject.text));
           const answer = {
             status: 'answered' as const,
             route: 'view' as const,
             blocks: [{ kind: 'table' as const, table: { title: tableTitle(plural, shown.length), columns: [...table.columns], rows: shown.map((row) => ({ cells: [...row.cells], cites: [...row.cites] })), note: noteOfTable({ columns: table.columns, rows: shown, lines: assembled.lines, elements: assembled.keys, descriptions: input.typeDescriptions }), ...tableFactsOf(subject, unitsOfTable({ columns: table.columns, rows: shown, lines: assembled.lines, elements: assembled.keys, descriptions: input.typeDescriptions })), ...(table.rows.length - rows.length + table.uncited > 0 ? { droppedRows: table.rows.length - rows.length + table.uncited } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) } }],
             citations: elementCitations,
-            coverage: { retrieval: retrievalLine(viewReading), summary: `${shown.length} of ${inView} ${plural.toLowerCase()} in view shown · exact` },
+            coverage: { retrieval: retrievalLine(viewReading), summary: inView === undefined ? `${shown.length} ${plural.toLowerCase()} in view shown · the count is not known` : `${shown.length} of ${inView} ${plural.toLowerCase()} in view shown · exact` },
             ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }),
             model: drafted.model,
             calls: progress.calls + input.callsUsed,

@@ -7,7 +7,7 @@ import { checkedTextOf } from '../case-summary/judge.js';
 import { provenanceOf, type Provenance } from './sensitive-items.js';
 import { listedElements } from '../summary/index.js';
 import { countOf, coverageOf, degreeCountsOf, inexactCountOf } from './coverage.js';
-import { rowsPhrase, subjectPluralOf, subjectTypeOf, tableFactsOf } from './table.js';
+import { exactSetCount, rowsPhrase, subjectPluralOf, subjectTypeOf, tableFactsOf } from './table.js';
 import { noteOfTable, unitsOfTable } from './blocks.js';
 import type { NoteSentence, StepScope } from './tool-step.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
@@ -311,14 +311,20 @@ export function outcomeOfDraft(context: DraftContext): ToolAnswerOutcome {
         }
         const title = tableTitle(plural, shown.length, anchorTitle);
         let shownOf: string;
-        const ofSubject = (key: string): boolean => subject !== undefined && subjectTypeOf([{ cites: [key] }], assembled)?.text === subject.text;
-        const inReads = subject === undefined ? (listed ?? [...assembled.keys.keys()]).length : (listed ?? [...assembled.keys.keys()]).filter(ofSubject).length;
-        if (only?.result !== undefined && listed !== undefined && subject !== undefined && listed.every(ofSubject)) {
-          // the read's own count is of the subject type only when the read listed nothing else
+        const ofSubject = (key: string): boolean => subject === undefined || subjectTypeOf([{ cites: [key] }], assembled)?.text === subject.text;
+        // the count of a set is said only of a set the rows (shown and cut) are known to come from: the elements the one read listed, else the elements the reads returned, of the type of the rows
+        // an expand lists its anchor first, and its count is of the neighbours: the rows are counted against the neighbours only
+        const counted = listed === undefined ? undefined : only?.result?.templateId === 'expand' ? listed.slice(1) : listed;
+        const fromListed = counted === undefined ? undefined : exactSetCount(rows, counted.filter(ofSubject));
+        const fromReads = fromListed !== undefined ? undefined : exactSetCount(rows, [...assembled.keys.keys()].filter(ofSubject));
+        if (only?.result !== undefined && listed !== undefined && subject !== undefined && fromListed !== undefined && listed.every(ofSubject)) {
+          // the read's own count is of the subject type only when the read listed nothing else, and it is no less than the rows it is said of
           const count = countOf(only.result);
-          shownOf = count.value === undefined ? `${shown.length} ${plural.toLowerCase()} read shown · the count is not known` : `${shown.length} of ${count.value} ${plural.toLowerCase()} read shown · ${count.quality === 'lowerBound' ? 'lower bound' : count.quality}`;
+          shownOf = count.value === undefined || count.value < rows.length ? `${shown.length} ${plural.toLowerCase()} read shown · the count is not known` : `${shown.length} of ${count.value} ${plural.toLowerCase()} read shown · ${count.quality === 'lowerBound' ? 'lower bound' : count.quality}`;
+        } else if (fromListed !== undefined || fromReads !== undefined) {
+          shownOf = `${shown.length} of ${fromListed ?? fromReads} ${plural.toLowerCase()} read shown · exact`;
         } else {
-          shownOf = `${shown.length} of ${inReads} ${plural.toLowerCase()} read shown · exact`;
+          shownOf = `${shown.length} ${plural.toLowerCase()} read shown · the count is not known`;
         }
         const droppedRows = draft.rows.length - rows.length + draft.uncited;
         const note = noteOfTable({ columns: draft.columns, rows: shown, lines: basis.checkedText.lines, elements: assembled.keys, descriptions: input.scope.request.typeDescriptions?.(input.scope.sourceId) });

@@ -2,7 +2,7 @@ import { pluralOf } from '@neburyx/contracts';
 import { createCheckRunner, removalNoteOf } from '@neburyx/ee-ai-runtime';
 import { describe, expect, it } from 'vitest';
 import { judgeCheck } from '../case-summary/judge.js';
-import { judgeTableRows, labelWordsOf, labelsHold, parseTable, rowSentenceOf } from './table.js';
+import { exactSetCount, judgeTableRows, labelWordsOf, labelsHold, parseTable, rowSentenceOf } from './table.js';
 
 const VIEW_TEXT = [
   'Entities:',
@@ -115,3 +115,20 @@ describe('the rows of a table judged against the count of the cited elements', (
     }
   });
 });
+
+describe('the count of the set the rows of a table come from', () => {
+  const rows = (...firsts: (string | undefined)[]) => firsts.map((first) => ({ cites: first === undefined ? [] : [first, 'n99'] }));
+  it('is the size of the set when every row stands on its own element of it', () => {
+    expect(exactSetCount(rows('n1', 'n2'), ['n1', 'n2', 'n3'])).toBe(3);
+    expect(exactSetCount(rows('n1', 'n2'), ['n1', 'n2'])).toBe(2);
+  });
+
+  it('is nothing when two rows stand on one element, a row cites nothing, a row stands outside the set, or the set holds fewer elements than there are rows', () => {
+    expect(exactSetCount(rows('n1', 'n1'), ['n1', 'n2'])).toBeUndefined();
+    expect(exactSetCount(rows('n1', undefined), ['n1', 'n2'])).toBeUndefined();
+    expect(exactSetCount(rows('n1', 'n9'), ['n1', 'n2'])).toBeUndefined();
+    expect(exactSetCount(rows('n1', 'n2', 'n3'), ['n1'])).toBeUndefined();
+    expect(exactSetCount([], ['n1'])).toBe(1);
+  });
+});
+
