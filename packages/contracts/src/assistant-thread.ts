@@ -177,7 +177,12 @@ export const THREAD_READ_TURNS_CEILING = 500;
  * `GET /v1/assistant/investigations/{id}/thread`: the caller's own thread (its most recent turns, at most `THREAD_READ_TURNS_CEILING`, and how many older ones there are), and when the caller's previous thread was cleared (the investigation was closed),
  * if it was and no thread has been started since.
  */
-export const assistantThreadResponseSchema = z.strictObject({ turns: z.array(assistantThreadTurnSchema).max(THREAD_READ_TURNS_CEILING), earlierTurns: wholeCount, previousThreadClearedAt: z.iso.datetime().nullable() });
+export const assistantThreadResponseSchema = z.strictObject({ turns: z.array(assistantThreadTurnSchema).max(THREAD_READ_TURNS_CEILING), earlierTurns: wholeCount, previousThreadClearedAt: z.iso.datetime().nullable(), /** The count a turn of this person reads before it starts: it rises when the person clears their thread and when the investigation is closed, so a window can tell that its turns are from before. */ epoch: wholeCount.optional() });
+
+/** `POST /v1/assistant/investigations/{id}/thread/clear`: no member in the body; the answer says whether a thread of the caller was deleted (false: they had none), and holds nothing else. */
+export const assistantThreadClearRequestSchema = z.strictObject({});
+export const assistantThreadClearResponseSchema = z.strictObject({ cleared: z.boolean() });
+export type AssistantThreadClearResponse = z.infer<typeof assistantThreadClearResponseSchema>;
 
 /** What the store gives a read of the thread: the turns with their stored text, before the mask and the version decide what is sent. */
 export type StoredTurnText = { readonly question?: string; readonly maskOn?: boolean; readonly answer?: StoredAnswer; readonly sensitivityVersion?: string };

@@ -36,6 +36,8 @@ export interface ExtensionRequest {
   readonly signal: AbortSignal;
   /** Sends an event to the client of a streamed request: the name of one of the route's `stream.events` and its members, checked against that event's schema. Absent unless the route declares a stream and the client asked for one. Nothing sent here is logged. */
   readonly emit?: (name: string, members: unknown) => void;
+  /** Sets a header of the response, before the first byte of the answer or of a stream is sent; a header set after that is not sent. Absent where the route does not take part in a response (a test). */
+  readonly setResponseHeader?: (name: string, value: string) => void;
   /** Signs a text: 64 lowercase hex characters, with a key that stays in the application. Absent, a route that needs it refuses. */
   readonly signText?: (canonical: string) => string;
   /**

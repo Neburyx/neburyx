@@ -182,6 +182,10 @@ export const assistantTurnAuditDetailSchema = z.strictObject({
 
 export type AssistantTurnAuditDetail = z.infer<typeof assistantTurnAuditDetailSchema>;
 
+/** That a person cleared their own thread, and whether they had one to delete; nothing else: no text, no count of turns, no hash, no run id. */
+const threadClearAuditDetailSchema = z.strictObject({ cleared: z.boolean() });
+type ThreadClearAuditDetail = z.infer<typeof threadClearAuditDetailSchema>;
+
 /** Why a call to an AI route was refused, as the event `ai.route_refused` records it: the feature is switched off, or the routes are mounted while no AI provider is configured. */
 const AI_ROUTE_REFUSAL_REASONS = ['ai-off', 'no-provider'] as const;
 
@@ -206,6 +210,7 @@ export const auditDetailSchema = z.union([
   z.strictObject({ summary: caseSummaryAuditDetailSchema }),
   z.strictObject({ notes: notesAuditDetailSchema }),
   z.strictObject({ turn: assistantTurnAuditDetailSchema }),
+  z.strictObject({ threadClear: threadClearAuditDetailSchema }),
   z.strictObject({ fileQuery: z.strictObject({ intent: z.string().regex(ASK_INTENT_NAME).optional(), queryHash: z.string().regex(/^[0-9a-f]{64}$/).optional() }), reason: z.enum(['cancelled', 'timeout']).optional() }),
 ]);
 
@@ -233,6 +238,8 @@ export type AuditDetail =
 
   /** How an assistant turn ended: the route, outcome, hashes and counts only. */
   | { readonly turn: AssistantTurnAuditDetail; readonly summary?: never; readonly notes?: never; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
+  /** That a person cleared their own thread. */
+  | { readonly threadClear: ThreadClearAuditDetail; readonly turn?: never; readonly summary?: never; readonly notes?: never; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** What a Copy to notes was: the run, and counts. */
   | { readonly notes: NotesAuditDetail; readonly summary?: never; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** What a click of the case summary was: counts, hashes, the model and prompt used and the outcome. */

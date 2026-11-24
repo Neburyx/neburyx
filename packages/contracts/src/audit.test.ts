@@ -256,3 +256,11 @@ describe('the run id of the Ask event of an assistant turn', () => {
     expect(auditDetailSchema.safeParse({ askRun: { ...ASKED, runId: 'run-1' } }).success).toBe(false);
   });
 });
+
+describe('the detail of a cleared thread', () => {
+  it('holds one boolean and nothing else', () => {
+    expect(parseAuditDetail({ threadClear: { cleared: true } })).toEqual({ threadClear: { cleared: true } });
+    expect(parseAuditDetail({ threadClear: { cleared: false } })).toEqual({ threadClear: { cleared: false } });
+    for (const detail of [{ threadClear: {} }, { threadClear: { cleared: 1 } }, { threadClear: { cleared: true, turns: 2 } }, { threadClear: { cleared: true, text: 'x' } }, { threadClear: { cleared: true }, turn: { route: 'ask' } }]) expect(auditDetailSchema.safeParse(detail).success).toBe(false);
+  });
+});

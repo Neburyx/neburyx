@@ -1,17 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MAX_INVESTIGATION_LIST_LIMIT } from './investigations.js';
+import { ASSISTANT_EPOCH_HEADER, assistantEpochHeaderSchema } from './assistant-turn.js';
 import { buildOpenApiDocument } from './openapi.js';
 import { patternRunHeavySchema } from './pattern-run.js';
+
+describe('the epoch header of the turn route of the document', () => {
+  it('is declared on the 200 answer as a whole number, under the name the contract exports', () => {
+    const post = (buildOpenApiDocument().paths['/v1/assistant/turns'] as { post: { responses: Record<string, { headers?: Record<string, { schema: unknown; description: string }> }> } }).post;
+    expect(ASSISTANT_EPOCH_HEADER).toBe('x-assistant-epoch');
+    for (const value of ['0', '7', '123456789012345']) expect(assistantEpochHeaderSchema.safeParse(value).success).toBe(true);
+    for (const value of ['', '-1', '1.5', 'x', '1e3', ' 1', '1234567890123456', 3]) expect(assistantEpochHeaderSchema.safeParse(value).success).toBe(false);
+    expect(post.responses['200']?.headers?.[ASSISTANT_EPOCH_HEADER]?.schema).toEqual({ type: 'integer', minimum: 0 });
+    expect(post.responses['200']?.headers?.[ASSISTANT_EPOCH_HEADER]?.description).toMatch(/before the first line of a stream/);
+    for (const status of ['400', '403', '404', '415', '429', '500']) expect(post.responses[status]?.headers).toBeUndefined();
+  });
+});
+
+describe('the clearing route of the document', () => {
+  it('is a POST with the strict empty body and the one-member answer, and says what it deletes and what it keeps', () => {
+    const post = (buildOpenApiDocument().paths['/v1/assistant/investigations/{id}/thread/clear'] as { post: { requestBody: unknown; responses: Record<string, unknown>; description: string } }).post;
+    expect(JSON.stringify(post.requestBody)).toContain('AssistantThreadClearRequest');
+    expect(Object.keys(post.responses)).toEqual(['200', '400', '403', '404', '415', '500']);
+    expect(post.description).toMatch(/blanks the text sent to the model/);
+    const schemas = buildOpenApiDocument().components.schemas as Record<string, { additionalProperties?: unknown; properties?: Record<string, unknown> }>;
+    expect(Object.keys(schemas['AssistantThreadClearResponse']?.properties ?? {})).toEqual(['cleared']);
+    expect(schemas['AssistantThreadClearRequest']?.additionalProperties).toBe(false);
+  });
+});
 
 describe('buildOpenApiDocument', () => {
   it('has info, the probes, the identity, source and source test paths and their components', () => {
     const document = buildOpenApiDocument();
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
-    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/me/preferences', '/v1/ai/status', '/v1/ask', '/v1/ask/continue', '/v1/assistant/turns', '/v1/assistant/investigations/{id}/thread', '/v1/summary', '/v1/investigations/{id}/draft/ai-notes',
+    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/me/preferences', '/v1/ai/status', '/v1/ask', '/v1/ask/continue', '/v1/assistant/turns', '/v1/assistant/investigations/{id}/thread', '/v1/assistant/investigations/{id}/thread/clear', '/v1/summary', '/v1/investigations/{id}/draft/ai-notes',
       '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/investigations/{id}/status', '/v1/investigations/{id}/exports', '/v1/exports/{id}', '/v1/exports/{id}/download', '/v1/investigations/{id}/restore', '/v1/investigations/{id}/draft', '/v1/views', '/v1/investigations/{id}/views', '/v1/investigations/{id}/views/{viewId}', '/v1/investigations/{id}/views/{viewId}/restore', '/v1/investigations/{id}/views/{viewId}/delete', '/v1/edges/{ref}', '/v1/source-links/{ref}', '/v1/search/entities', '/v1/search/entities/more', '/v1/graph/preview-expansion', '/v1/graph/derived-neighbors', '/v1/patterns/{id}', '/v1/patterns/{id}/copy', '/v1/patterns/validate', '/v1/patterns', '/v1/patterns/preview', '/v1/patterns/run', '/v1/patterns/{id}/run', '/v1/templates', '/v1/templates/{id}/run', '/v1/graph/coverage', '/v1/graph/paths', '/v1/graph/read-refs', '/v1/graph/expand', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['AiStatusResponse', 'PreferencesResponse', 'PreferencesWriteRequest', 'AskQuestionRequest', 'AskContinueRequest', 'AskAnswer', 'AssistantTurnRequest', 'AssistantTurnAnswer', 'AssistantTurnStreamEvent', 'AssistantThreadResponse', 'SummaryRequest', 'SummaryResponse', 'CopyToNotesRequest', 'CopyToNotesResponse', 'AiNotesResponse', 'DerivedEdgeDetail', 'FileQueryResult', 'SavedPatternRunRequest', 'SavedPatternRunResponse', 'PatternRunRequest', 'PatternRunResponse', 'PatternValidateRequest', 'PatternValidateResponse', 'PatternPreviewRequest', 'PatternPreviewResponse', 'SavedPattern', 'PatternListResponse', 'ChangePatternRequest', 'DeletePatternResponse', 'SavePatternRequest', 'CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'DerivedNeighborsRequest', 'DerivedNeighborsResponse', 'TemplateListResponse', 'TemplateRunRequest', 'TemplateRunResponse', 'DraftWriteRequest', 'DraftWriteResponse', 'EdgeDetail', 'EntityLookupRequest', 'ErrorResponse', 'Export', 'PngExport', 'ExportFile', 'ExportRequest', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'NamedView', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'PathsRequest', 'PathsResponse', 'ReadRefsRequest', 'ReadRefsResponse', 'ReadyResponse', 'RenameRequest', 'RenameResponse', 'RenameViewRequest', 'RestoreViewResponse', 'SaveViewRequest', 'SaveViewResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse', 'DeleteInvestigationResponse', 'DeleteViewRequest', 'DeleteViewResponse', 'RestoreInvestigationRequest', 'StatusChangeRequest', 'StatusChangeResponse', 'OwnedViewListResponse', 'ViewListResponse']);
+    expect(Object.keys(document.components.schemas)).toEqual(['AiStatusResponse', 'PreferencesResponse', 'PreferencesWriteRequest', 'AskQuestionRequest', 'AskContinueRequest', 'AskAnswer', 'AssistantTurnRequest', 'AssistantTurnAnswer', 'AssistantTurnStreamEvent', 'AssistantThreadResponse', 'AssistantThreadClearRequest', 'AssistantThreadClearResponse', 'SummaryRequest', 'SummaryResponse', 'CopyToNotesRequest', 'CopyToNotesResponse', 'AiNotesResponse', 'DerivedEdgeDetail', 'FileQueryResult', 'SavedPatternRunRequest', 'SavedPatternRunResponse', 'PatternRunRequest', 'PatternRunResponse', 'PatternValidateRequest', 'PatternValidateResponse', 'PatternPreviewRequest', 'PatternPreviewResponse', 'SavedPattern', 'PatternListResponse', 'ChangePatternRequest', 'DeletePatternResponse', 'SavePatternRequest', 'CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'DerivedNeighborsRequest', 'DerivedNeighborsResponse', 'TemplateListResponse', 'TemplateRunRequest', 'TemplateRunResponse', 'DraftWriteRequest', 'DraftWriteResponse', 'EdgeDetail', 'EntityLookupRequest', 'ErrorResponse', 'Export', 'PngExport', 'ExportFile', 'ExportRequest', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'NamedView', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'PathsRequest', 'PathsResponse', 'ReadRefsRequest', 'ReadRefsResponse', 'ReadyResponse', 'RenameRequest', 'RenameResponse', 'RenameViewRequest', 'RestoreViewResponse', 'SaveViewRequest', 'SaveViewResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse', 'DeleteInvestigationResponse', 'DeleteViewRequest', 'DeleteViewResponse', 'RestoreInvestigationRequest', 'StatusChangeRequest', 'StatusChangeResponse', 'OwnedViewListResponse', 'ViewListResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });

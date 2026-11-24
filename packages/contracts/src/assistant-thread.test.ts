@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ASK_FOLDER_LIMITS } from './ask-folder.js';
 import { ASK_SUMMARY_MAX_CITATIONS } from './ask.js';
 import { ASSISTANT_VIEW_KEYS_MAX, assistantTurnRequestSchema } from './assistant-turn.js';
-import { THREAD_READ_TURNS_CEILING, assistantThreadResponseSchema, assistantThreadTurnWriteSchema, threadEntitySchema, type AssistantThreadTurnWrite } from './assistant-thread.js';
+import { THREAD_READ_TURNS_CEILING, assistantThreadClearRequestSchema, assistantThreadClearResponseSchema, assistantThreadResponseSchema, assistantThreadTurnWriteSchema, threadEntitySchema, type AssistantThreadTurnWrite } from './assistant-thread.js';
 
 const HASH = 'a'.repeat(64);
 const REF = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
@@ -99,5 +99,25 @@ describe('the id of a turn', () => {
     expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'hello' }).success).toBe(true);
     expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'hello', turnId: 'x' }).success).toBe(false);
     expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'hello', turnId: 5 }).success).toBe(false);
+  });
+});
+
+describe('the clearing of a thread', () => {
+  it('takes the empty object and nothing else, and answers one boolean', () => {
+    expect(assistantThreadClearRequestSchema.safeParse({}).success).toBe(true);
+    for (const body of [undefined, null, [], 'x', 1, { cleared: true }, { text: 'a question' }]) expect(assistantThreadClearRequestSchema.safeParse(body).success).toBe(false);
+    expect(assistantThreadClearResponseSchema.parse({ cleared: false })).toEqual({ cleared: false });
+    for (const body of [{}, { cleared: 'yes' }, { cleared: true, turns: 3 }, { cleared: true, runId: 'x' }]) expect(assistantThreadClearResponseSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('the count a thread read tells', () => {
+  const base = { turns: [], earlierTurns: 0, previousThreadClearedAt: null };
+
+  it('is a whole number that may be absent, and nothing else', () => {
+    expect(assistantThreadResponseSchema.safeParse(base).success).toBe(true);
+    expect(assistantThreadResponseSchema.safeParse({ ...base, epoch: 0 }).success).toBe(true);
+    expect(assistantThreadResponseSchema.safeParse({ ...base, epoch: 7 }).success).toBe(true);
+    for (const epoch of [-1, 1.5, '2', null]) expect(assistantThreadResponseSchema.safeParse({ ...base, epoch }).success).toBe(false);
   });
 });

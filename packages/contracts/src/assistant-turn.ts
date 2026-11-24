@@ -9,6 +9,12 @@ const text = z.string().min(1);
 /** The most keys of the elements in view that one turn carries: the summary's cap. */
 export const ASSISTANT_VIEW_KEYS_MAX = SUMMARY_DEFAULTS.maxElements;
 
+/** The response header of `POST /v1/assistant/turns` that holds the count the turn read from its thread before it did any work (a whole number): the one the store compares, so a window can tell a turn that began before a clearing from one that began after. Sent with the answer and before the first line of a stream; not sent when the turn is refused before it started, nor when the count could not be read. */
+export const ASSISTANT_EPOCH_HEADER = 'x-assistant-epoch';
+
+/** The value of that header as it travels: a whole number written in digits, at most 15 of them. */
+export const assistantEpochHeaderSchema = z.string().regex(/^\d{1,15}$/u);
+
 /** `POST /v1/assistant/turns`: a message as typed, and the keys of the elements in view, never their content. */
 /** The id the person's panel gives a request, so that the turn the server writes for it carries that id and the panel can tell the stored turn from the turns it sent itself. */
 const turnBase = { sourceId: text, investigationId: text, turnId: z.uuid().optional(), mask: z.boolean().optional(), viewElementKeys: z.array(text).max(ASSISTANT_VIEW_KEYS_MAX) };

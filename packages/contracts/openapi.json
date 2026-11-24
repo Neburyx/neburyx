@@ -420,6 +420,15 @@
         },
         "responses": {
           "200": {
+            "headers": {
+              "x-assistant-epoch": {
+                "description": "The count the turn read from its thread before it did any work: it rises when the caller clears their thread and when the investigation is closed, archived or deleted. Sent with the answer and before the first line of a stream; absent when the turn was refused before it started or the count could not be read.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
             "description": "The turn: a refusal with its cause and fixed sentence; the not-answered turn of the view route; the answer of the ask route (Ask's answer, with a step and a coverage line for a result that was read); unavailable, too-large, too-long or continue-invalid, each with nothing sent or read as it says",
             "content": {
               "application/json": {
@@ -501,7 +510,7 @@
       "get": {
         "operationId": "readAssistantThread",
         "summary": "The caller's own thread of an investigation: each turn with its question and answer, as the mask allows",
-        "description": "With no AI provider, with every AI feature off or with the assistant off this path answers 403 with the reason ai-off. Answers the caller's own thread of one of their investigations: for each turn its order, time, route, outcome, cause, intent, the number of things it cited and the number of reads. It holds the question as the person typed it and the answer item by item (the text, segments that name an element and a property in place of a value the mask may hide, or a marker that the item is withheld), and no hash, token or run id; the query mask says whether the mask is on for the caller, and under it an item that may hold a sensitive value is withheld; a thread is cleared when the investigation is closed, archived or deleted, and is never used for training. The answer holds the most recent turns of the thread (100 by default, a setting) and earlierTurns, how many older ones there are (nothing stored is trimmed; the bound only limits what one answer and the panel hold). previousThreadClearedAt says when the caller's previous thread was cleared, when they have no thread since; it is null otherwise.",
+        "description": "With no AI provider, with every AI feature off or with the assistant off this path answers 403 with the reason ai-off. Answers the caller's own thread of one of their investigations: for each turn its order, time, route, outcome, cause, intent, the number of things it cited and the number of reads. It holds the question as the person typed it and the answer item by item (the text, segments that name an element and a property in place of a value the mask may hide, or a marker that the item is withheld), and no hash, token or run id; the query mask says whether the mask is on for the caller, and under it an item that may hold a sensitive value is withheld; a thread is cleared when the investigation is closed, archived or deleted, and is never used for training. The answer holds the most recent turns of the thread (100 by default, a setting) and earlierTurns, how many older ones there are (nothing stored is trimmed; the bound only limits what one answer and the panel hold). previousThreadClearedAt says when the caller's previous thread was cleared, when they have no thread since; it is null otherwise. epoch is the count a turn of the caller reads before it starts: it rises when the caller clears their thread and when the investigation is closed, archived or deleted, so a window can tell that a turn it holds began before one of them.",
         "parameters": [
           {
             "name": "id",
@@ -557,6 +566,95 @@
           },
           "500": {
             "description": "INTERNAL_ERROR, also when the thread cannot be read (no text of the failure)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/assistant/investigations/{id}/thread/clear": {
+      "post": {
+        "operationId": "clearAssistantThread",
+        "summary": "Clear the caller's own thread of an investigation",
+        "description": "With no AI provider, with every AI feature off or with the assistant off this path answers 403 with the reason ai-off. Takes no member in its body (the body is `{}`; an absent body, a body that is not an object or an object with a member is INVALID_REQUEST and nothing is deleted). Checks that the investigation is the caller's, then in one transaction deletes the caller's own thread of it with every turn, and blanks the text sent to the model and the reply of every model call of the caller's runs of that investigation (the rows, counts, tokens and statuses stay); no other person's thread and no other investigation is touched, and nothing is read from or written to the source, the graph, the notes or the views. `cleared` is true when a thread was deleted and false when the caller had none; both are success, so the call is safe to repeat. The answer holds no text and no count of turns.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantThreadClearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether a thread of the caller was deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantThreadClearResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is absent, is not an object or holds a member: INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The assistant is switched off or no AI provider is configured (ACCESS_DENIED with the reason ai-off)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The investigation does not exist or is not the caller's: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not JSON: UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR, also when the thread cannot be cleared (no text of the failure; nothing is deleted)",
             "content": {
               "application/json": {
                 "schema": {
@@ -14109,12 +14207,34 @@
                 "type": "null"
               }
             ]
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [
           "turns",
           "earlierTurns",
           "previousThreadClearedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AssistantThreadClearRequest": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "AssistantThreadClearResponse": {
+        "type": "object",
+        "properties": {
+          "cleared": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cleared"
         ],
         "additionalProperties": false
       },
