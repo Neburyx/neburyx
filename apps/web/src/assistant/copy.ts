@@ -11,6 +11,7 @@ export const ASSISTANT_COPY = {
   clearWarning: 'This cannot be undone.',
   clearing: 'Clearing…',
   clearFailed: 'Clearing the chat could not be confirmed. It may or may not have been cleared. Try again.',
+  clearRefused: 'The chat could not be cleared. Nothing was deleted. Try again.',
   cleared: 'The chat was cleared.',
   introTitle: 'Ask about this investigation',
   intro: 'Describe what is on screen, or ask the source a question. Answers cite the elements they rest on.',

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import type { AssistantThreadResponse } from '@neburyx/contracts';
 import { canvasOf } from './support/workspace.ts';
 
@@ -99,17 +99,27 @@ test.describe('Clear chat in the Assistant panel', () => {
     expect(await tipOf('Close')).toBe('"Close"');
   });
 
-  test('stays open with a fixed line when the call fails and clears when it is pressed again', async ({ page }) => {
+  const failsOnce = (answer: (route: Route) => Promise<void>) => async (target: Page): Promise<void> => {
     let fail = true;
-    await openWithThread(page, async (target) => {
-      await target.route((url) => /\/thread\/clear$/.test(url.pathname), async (route) => {
-        if (fail) {
-          fail = false;
-          return route.fulfill({ status: 500, json: { error: { code: 'INTERNAL_ERROR', message: 'x', retryable: false, traceId: 't' } } });
-        }
-        return route.fallback();
-      });
+    await target.route((url) => /\/thread\/clear$/.test(url.pathname), async (route) => {
+      if (!fail) return route.fallback();
+      fail = false;
+      return answer(route);
     });
+  };
+
+  test('says nothing was deleted when the server answers with an error, stays open, and clears when it is pressed again', async ({ page }) => {
+    await openWithThread(page, failsOnce((route) => route.fulfill({ status: 500, json: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong. Quote the trace ID if you contact support.', retryable: false, traceId: 't' } } })));
+    await panel(page).getByRole('button', { name: 'Clear chat' }).click();
+    await dialog(page).getByRole('button', { name: 'Clear chat' }).click();
+    await expect(dialog(page).getByText('The chat could not be cleared. Nothing was deleted. Try again.')).toBeVisible();
+    await expect(panel(page).locator('.assistant-stored')).toBeVisible();
+    await dialog(page).getByRole('button', { name: 'Clear chat' }).click();
+    await expect(dialog(page)).toBeHidden();
+  });
+
+  test('says it could not be confirmed when the network fails, stays open, and clears when it is pressed again', async ({ page }) => {
+    await openWithThread(page, failsOnce((route) => route.abort()));
     await panel(page).getByRole('button', { name: 'Clear chat' }).click();
     await dialog(page).getByRole('button', { name: 'Clear chat' }).click();
     await expect(dialog(page).getByText('Clearing the chat could not be confirmed. It may or may not have been cleared. Try again.')).toBeVisible();

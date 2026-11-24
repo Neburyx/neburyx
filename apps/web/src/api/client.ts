@@ -152,6 +152,11 @@ export interface ClientFailure {
 
 export type ApiFailure = ClientFailure | ServerFailure;
 
+const CLIENT_FAILURE_CODES: ReadonlySet<string> = new Set<ClientFailure['code']>(['NETWORK_UNAVAILABLE', 'UNREADABLE_RESPONSE', 'SCHEMA_MISMATCH', 'ABORTED', 'UNEXPECTED_FAILURE']);
+
+/** Whether the failure is an answer of the server, which says what it did, and not a failure of the client or the network, after which what the server did is not known. */
+export const isServerFailure = (failure: ApiFailure): failure is ServerFailure => !CLIENT_FAILURE_CODES.has(failure.code);
+
 export interface DownloadedFile {
   readonly blob: Blob;
   readonly filename: string;

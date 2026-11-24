@@ -9,7 +9,7 @@ const REF = { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' };
 const OTHER = { sourceId: 'elsewhere', entityType: 'widget', stableId: 'Z-9' };
 const VERSION = 'sv1:a';
 const turn = (stored: StoredTurnText | undefined, seq = 1) => ({ id: `0192f000-0000-7000-8000-0000000000${String(seq).padStart(2, '0')}`, seq, at: '2026-11-18T10:00:00.000Z', route: 'view' as const, outcome: 'answered' as const, citedElements: 1, steps: 0, ...(stored === undefined ? {} : { stored }) });
-const readOf = (...turns: ReturnType<typeof turn>[]): AssistantThreadRead => ({ turns, earlierTurns: 0, previousThreadClearedAt: null });
+const readOf = (...turns: ReturnType<typeof turn>[]): AssistantThreadRead => ({ turns, earlierTurns: 0, previousThreadClearedAt: null, epoch: 0 });
 const stored = (answer: StoredAnswer, over: Partial<StoredTurnText> = {}): StoredTurnText => ({ question: 'Who holds the item?', maskOn: false, answer, sensitivityVersion: VERSION, ...over });
 const sentences = (...items: object[]): StoredAnswer => ({ blocks: [{ kind: 'sentences', items }] }) as unknown as StoredAnswer;
 const frozen = (text: string) => ({ form: 'frozen', text, cites: [REF] });

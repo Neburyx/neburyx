@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { AssistantThreadClearResponse } from '@neburyx/contracts';
-import type { ApiResult } from '../api/client.js';
+import { isServerFailure, type ApiResult } from '../api/client.js';
 import { ConfirmDialog } from '../lifecycle/confirm-dialog.js';
 import { ASSISTANT_COPY } from './copy.js';
 
@@ -15,16 +15,17 @@ export interface ClearChatDialogProps {
 /** The confirmation that asks before a chat is cleared. Nothing on screen changes on a failure: the dialog stays with a fixed line, and while the call is out nothing dismisses it. */
 export function ClearChatDialog({ send, onCleared, onClose }: ClearChatDialogProps) {
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<'refused' | 'unconfirmed' | undefined>(undefined);
 
   const confirm = async (): Promise<void> => {
     if (busy) return;
     setBusy(true);
-    setFailed(false);
+    setFailed(undefined);
     const result = await send();
     if (!result.ok) {
       setBusy(false);
-      setFailed(true);
+      // an answer of the server says nothing was deleted (the clearing is one transaction); a lost response, a timeout or a failure of the client leaves what the server did unknown
+      setFailed(isServerFailure(result.failure) ? 'refused' : 'unconfirmed');
       return;
     }
     onCleared();
@@ -43,7 +44,7 @@ export function ClearChatDialog({ send, onCleared, onClose }: ClearChatDialogPro
       hideClose
       scrimClassName="clear-chat-scrim"
       dialogClassName="clear-chat-dialog confirm-dialog"
-      message={failed ? ASSISTANT_COPY.clearFailed : undefined}
+      message={failed === 'refused' ? ASSISTANT_COPY.clearRefused : failed === 'unconfirmed' ? ASSISTANT_COPY.clearFailed : undefined}
       onConfirm={() => void confirm()}
       onClose={onClose}
     >

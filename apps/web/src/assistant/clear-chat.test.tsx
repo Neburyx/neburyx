@@ -146,12 +146,12 @@ describe('the confirmation of Clear chat', () => {
     expect(screen.getByText(ASSISTANT_COPY.introTitle)).toBeTruthy();
   });
 
-  it('stays open with a fixed line when the call fails, changes nothing on screen, and can be confirmed again', async () => {
+  it('stays open with a fixed line when the server refuses the call, changes nothing on screen, and can be confirmed again', async () => {
     let calls = 0;
     const h = await withStoredThread(async () => (++calls === 1 ? failure() : ok({ cleared: true })));
     await open();
     await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
-    expect(within(openDialog()).getByText(ASSISTANT_COPY.clearFailed)).toBeTruthy();
+    expect(within(openDialog()).getByText(ASSISTANT_COPY.clearRefused)).toBeTruthy();
     expect(within(openDialog()).getByRole('button', { name: 'Cancel' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('heading', { name: ASSISTANT_COPY.storedHeading, hidden: true })).toBeTruthy();
     await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
@@ -159,7 +159,7 @@ describe('the confirmation of Clear chat', () => {
     expect(h.clears).toEqual(['inv-1', 'inv-1']);
   });
 
-  it('shows a network failure the same way', async () => {
+  it('says it could not be confirmed on a network failure', async () => {
     await withStoredThread(async () => ({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE', message: 'x', retryable: true, traceId: 'tr' } }));
     await open();
     await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
@@ -218,5 +218,25 @@ describe('the confirmation of Clear chat', () => {
     await waitFor(() => expect(dialog()).toBeNull());
     expect(h.clears).toEqual(['inv-1', 'inv-1']);
     expect(screen.getByText(ASSISTANT_COPY.introTitle)).toBeTruthy();
+  });
+  it.each(['NETWORK_UNAVAILABLE', 'UNREADABLE_RESPONSE', 'SCHEMA_MISMATCH', 'ABORTED', 'UNEXPECTED_FAILURE'] as const)('does not say nothing was deleted when the outcome is not known (%s)', async (code) => {
+    await withStoredThread(async () => ({ ok: false, failure: { code } }));
+    await open();
+    await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
+    const shown = await within(openDialog()).findByText(ASSISTANT_COPY.clearFailed);
+    expect(shown.textContent).not.toMatch(/nothing was deleted/i);
+  });
+
+  it.each([['INTERNAL_ERROR', 'Something went wrong. Quote the trace ID if you contact support.'], ['NOT_FOUND', 'Not found.'], ['RATE_LIMITED', 'Too many requests. Try again shortly.']] as const)('says nothing was deleted when the server answers with %s, keeps the thread on screen, and lets the clearing be asked again', async (code, message) => {
+    let calls = 0;
+    const h = await withStoredThread(async () => (++calls === 1 ? { ok: false, failure: { code, message, retryable: false, traceId: 't' } } : ok({ cleared: true })));
+    await open();
+    await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
+    const shown = await within(openDialog()).findByText(ASSISTANT_COPY.clearRefused);
+    expect(shown.textContent).toBe('The chat could not be cleared. Nothing was deleted. Try again.');
+    expect(screen.getByRole('heading', { name: ASSISTANT_COPY.storedHeading, hidden: true })).toBeTruthy();
+    await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(h.clears).toEqual(['inv-1', 'inv-1']);
   });
 });
