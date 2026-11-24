@@ -197,7 +197,7 @@ describe('the stored text of the thread given to the loop, by the real route', (
     const golden = `Earlier turns of this thread, oldest first:\n1. ask "shared"; ran for id = c1; cited c1\n\nElements of those turns, by key | title | type:\nc1 | "Live title" | "${V.anchor}"\nIdentifiers of those elements, to give a tool as values:\nc1 = ${V.anchor} A-1`;
     expect(off.given[0]?.context).toBe(golden);
     expect(on.given[0]?.context?.startsWith(`${golden}\n\n${THREAD_TEXT_INTRO}\n`)).toBe(true);
-        expect(on.rig.elementReads.length).toBe(off.rig.elementReads.length + 1);
+    expect(on.rig.elementReads.length).toBe(off.rig.elementReads.length + 1);
   });
 
   it('gives no text when the older turn has it and the turns of the window, which is all the store limits, have none', async () => {
