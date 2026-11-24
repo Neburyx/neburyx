@@ -63,7 +63,7 @@ const calibration = z.strictObject({
 const approval = z.strictObject({ exceptionConfirmed: z.literal(true), invocations: position, by: z.string().min(1), at: z.string().min(1) });
 const ledger = z.strictObject({ used: whole });
 
-const settings = z.strictObject({ model: z.string(), callLimit: position, configured: z.record(z.string(), z.union([z.string(), z.number()])), effort: z.string().optional(), effortSource: z.string().optional(), modelSource: z.string().optional() });
+const settings = z.strictObject({ model: z.string(), callLimit: position, configured: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])), effort: z.string().optional(), effortSource: z.string().optional(), modelSource: z.string().optional() });
 const turn = z.strictObject({
   n: position,
   message: z.string(),

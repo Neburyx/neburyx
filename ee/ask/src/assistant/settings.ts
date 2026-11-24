@@ -58,7 +58,7 @@ export interface AssistantSettings {
   /** Rows read a turn, lowered by the operator; absent, the bound is the source's own `max_page` times the steps. */
   readonly maxRows?: number;
   readonly contextTurns: number;
-  /** Whether the loop is also given the earlier turns' question and answer text, as the thread read presents it under this message's mask. Off unless the operator turns it on. */
+  /** Whether the loop is also given the earlier turns' question and answer text, as the thread read presents it under this message's mask. On unless the operator sets it to `false`. */
   readonly contextText: boolean;
   readonly maxMessageWords: number;
   readonly maxInputTokens: number;

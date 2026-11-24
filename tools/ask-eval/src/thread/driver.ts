@@ -17,7 +17,7 @@ export interface RepeatSettings {
   readonly effortSource?: string | undefined;
   readonly modelSource?: string | undefined;
   /** The settings the file sets, by the name the run record holds them under: each is checked against the record of the first turn. */
-  readonly configured: Readonly<Record<string, string | number>>;
+  readonly configured: Readonly<Record<string, string | number | boolean>>;
 }
 
 export interface RepeatOptions {

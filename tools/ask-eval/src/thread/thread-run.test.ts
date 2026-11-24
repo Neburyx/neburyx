@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -264,7 +264,7 @@ describe('the settings seen in the first turn', () => {
 
 describe('the production check of the first turn', () => {
   const runDb = (settings: Record<string, unknown> | undefined, fail = false): { database: () => Promise<{ db: { query: () => Promise<{ rows: Record<string, unknown>[] }> }; close: () => Promise<void> }> } => ({
-    database: () => Promise.resolve({ db: { query: () => (fail ? Promise.reject(new Error('connection lost postgres://u:SECRET@h/db')) : Promise.resolve({ rows: settings === undefined ? [] : [{ id: 'run-1', outcome: 'ok', finished_at: new Date(), calls: 0, settings }] })) }, close: () => Promise.resolve() }),
+    database: () => Promise.resolve({ db: { query: () => (fail ? Promise.reject(new Error('connection lost postgres://u:SECRET@h/db')) : Promise.resolve({ rows: settings === undefined ? [] : [{ id: 'run-1', outcome: 'ok', finished_at: new Date(), calls: 0, settings: { contextText: true, ...settings } }] })) }, close: () => Promise.resolve() }),
   });
   const withSettings = (extra: string): ReturnType<typeof files> => {
     const f = files();
@@ -275,7 +275,7 @@ describe('the production check of the first turn', () => {
     const s = standIn();
     const r = io();
     const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: s.http, ...deps });
-    const written = readdirSync(f.out).length === 0 ? undefined : (runFile(join(f.out, 'thread-refs-r1.json')));
+    const written = !existsSync(f.out) || readdirSync(f.out).length === 0 ? undefined : (runFile(join(f.out, 'thread-refs-r1.json')));
     return { code, r, s, written };
   };
 
@@ -288,6 +288,18 @@ describe('the production check of the first turn', () => {
     expect(other.code).toBe(1);
     expect(other.written).toMatchObject({ ended: 'failed', stoppedBecause: 'the run record of the first turn shows another maxSteps than the settings file' });
     expect(other.written?.turns).toHaveLength(1);
+  });
+
+  it('treats an absent text setting as on, as the product does, so a run record that shows it off stops the run, and refuses a value that is not true or false', async () => {
+    const absent = await go(withSettings(''), runDb({ model: 'model-a', maxCalls: 7, contextText: false }));
+    expect(absent.code).toBe(1);
+    expect(absent.written).toMatchObject({ stoppedBecause: 'the run record of the first turn shows another contextText than the settings file' });
+    const off = await go(withSettings('NEBURYX_ASSISTANT_CONTEXT_TEXT=false'), runDb({ model: 'model-a', maxCalls: 7, contextText: false }));
+    expect(off.code).toBe(0);
+    const on = await go(withSettings(''), runDb({ model: 'model-a', maxCalls: 7, contextText: true }));
+    expect(on.code).toBe(0);
+    const bad = await go(withSettings('NEBURYX_ASSISTANT_CONTEXT_TEXT=yes'), runDb({ model: 'model-a', maxCalls: 7, contextText: true }));
+    expect(bad.code).toBe(2);
   });
 
   it('treats a blank setting as the product default, as the product does, and does not compare it', async () => {
@@ -338,7 +350,7 @@ describe('the documented command', () => {
     const fill: Record<string, string> = { '--manifest': f.manifest, '--base': 'http://127.0.0.1:8000', '--settings-file': f.settings, '--head': 'abc1234', '--arm': 'refs', '--budget': '100', '--out': f.out, '--database-env-file': f.settings };
     const argv = ['thread', 'run', ...[...(line ?? '').matchAll(/(--[a-z-]+)(?: (<[^>]*>|\S+))?/gu)].flatMap((match) => [match[1] ?? '', ...(match[2] === undefined ? [] : [fill[match[1] ?? ''] ?? match[2]])])];
     expect(argv.some((token) => token.startsWith('<'))).toBe(false);
-    const db = { query: () => Promise.resolve({ rows: [{ id: 'run-1', outcome: 'ok', finished_at: new Date(), calls: 0, settings: { model: 'model-a', maxCalls: 7 } }] }) };
+    const db = { query: () => Promise.resolve({ rows: [{ id: 'run-1', outcome: 'ok', finished_at: new Date(), calls: 0, settings: { model: 'model-a', maxCalls: 7, contextText: true } }] }) };
     const s = standIn();
     expect(await runCli(argv, io().io, noHooks, { http: s.http, database: () => Promise.resolve({ db, close: () => Promise.resolve() }) })).toBe(0);
   });

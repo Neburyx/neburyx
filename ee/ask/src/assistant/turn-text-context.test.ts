@@ -193,14 +193,11 @@ describe('the stored text of the thread given to the loop, by the real route', (
   it('leaves the loop\'s context, the identifiers and the gate reads as they were with the setting off, and the text read adds one read of the bound elements', async () => {
     const seed = [stored({ route: 'ask', intent: 'shared', entities: [{ role: 'id', ref: A1 }], citationRefs: [A1] })];
     const off = await run({ seed, env: OFF });
-    const absent = await run({ seed, env: OFF });
     const on = await run({ seed, env: { NEBURYX_ASSISTANT_CONTEXT_TEXT: 'true' } });
     const golden = `Earlier turns of this thread, oldest first:\n1. ask "shared"; ran for id = c1; cited c1\n\nElements of those turns, by key | title | type:\nc1 | "Live title" | "${V.anchor}"\nIdentifiers of those elements, to give a tool as values:\nc1 = ${V.anchor} A-1`;
     expect(off.given[0]?.context).toBe(golden);
-    expect(absent.given[0]?.context).toBe(golden);
     expect(on.given[0]?.context?.startsWith(`${golden}\n\n${THREAD_TEXT_INTRO}\n`)).toBe(true);
-    expect(absent.rig.elementReads.length).toBe(off.rig.elementReads.length);
-    expect(on.rig.elementReads.length).toBe(off.rig.elementReads.length + 1);
+        expect(on.rig.elementReads.length).toBe(off.rig.elementReads.length + 1);
   });
 
   it('gives no text when the older turn has it and the turns of the window, which is all the store limits, have none', async () => {

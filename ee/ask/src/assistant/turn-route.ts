@@ -90,7 +90,7 @@ export interface TurnRouteOptions {
   readonly records?: () => RecordQueue | undefined;
   /** How many of the person's last turns of the thread the router is shown; absent, it is shown none. */
   readonly contextTurns?: () => number | undefined;
-  /** The most estimated tokens of the earlier turns' stored text the loop is given as context, or absent when the operator has not turned the text on: then it is not read at all. */
+  /** The most estimated tokens of the earlier turns' stored text the loop is given as context, or absent when the operator has turned the text off (`false`): then it is not read at all. */
   readonly contextTextTokens?: () => number | undefined;
   /** The lines of the typology the loop may offer as a tool; none, and it is not offered. */
   readonly typology?: (sourceId: string) => readonly string[] | undefined;
@@ -270,7 +270,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
   }
 
   /**
-   * The text of the person's last turns for the loop, when the operator has turned it on: the thread as a read of it presents it under this message's mask, each bound value read again through the gate under that mask. Absent when it is off (nothing is read),
+   * The text of the person's last turns for the loop, unless the operator has turned it off: the thread as a read of it presents it under this message's mask, each bound value read again through the gate under that mask. Absent when it is off (nothing is read),
    * when there is none, or when the thread cannot be read; a failure of the gate's read is the caller's to answer.
    */
   async function storedTextOf(request: ExtensionRequest, body: Extract<AssistantTurnRequest, { message: string }>, signal: AbortSignal): Promise<string | undefined> {

@@ -164,11 +164,14 @@ function settingsOf(values: Map<string, string>, defaults: { readonly maxCalls: 
   const model = file['NEBURYX_ASSISTANT_MODEL'] ?? SUMMARY_DEFAULTS.model;
   if (flagModel !== undefined && flagModel !== model) throw new UsageError('--model disagrees with the settings the product will use');
   const fileEffort = file['NEBURYX_ASK_EFFORT'];
-  const configured: Record<string, string | number> = {};
+  const configured: Record<string, string | number | boolean> = {};
   for (const [name, key] of NUMERIC_SETTINGS) {
     const value = wholeNumber(file[name], `the settings file value of ${name}`, 1, 10_000_000);
     if (value !== undefined) configured[key] = value;
   }
+  const text = file['NEBURYX_ASSISTANT_CONTEXT_TEXT'];
+  if (text !== undefined && text !== '' && text !== 'true' && text !== 'false') throw new UsageError('the settings file value of NEBURYX_ASSISTANT_CONTEXT_TEXT must be true or false');
+  configured['contextText'] = text !== 'false';
   if (file['NEBURYX_ASSISTANT_MODEL'] !== undefined) configured['model'] = model;
   if (fileLimit !== undefined) configured['maxCalls'] = callLimit;
   return { model, callLimit, configured, effort: fileEffort ?? AI_DEFAULTS.effort, effortSource: fileEffort === undefined ? 'the product default' : 'the settings file', modelSource: file['NEBURYX_ASSISTANT_MODEL'] === undefined ? 'the product default' : 'the settings file' };
