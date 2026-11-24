@@ -476,12 +476,12 @@ describe('the text of a turn (0013)', () => {
   });
 });
 
-describe('the enterprise migrations 0010 to 0014 in order', () => {
-  it('applies 0010, 0011, 0012, 0013 and 0014 one after another on a fresh database, records them in that order, and a second run has nothing to apply', async () => {
+describe('the enterprise migrations 0010 to 0015 in order', () => {
+  it('applies 0010, 0011, 0012, 0013, 0014 and 0015 one after another on a fresh database, records them in that order, and a second run has nothing to apply', async () => {
     const database = await postgres.newDatabase();
     const env = { DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole, NEBURYX_CONFIG: PREVIEW_FILE, NEBURYX_PROFILE: 'enterprise' };
     const files = readdirSync(PREVIEW_MIGRATIONS).filter((name) => name.endsWith('.sql')).sort();
-    expect(files.slice(-5).map((name) => name.slice(0, 4))).toEqual(['0010', '0011', '0012', '0013', '0014']);
+    expect(files.slice(-6).map((name) => name.slice(0, 4))).toEqual(['0010', '0011', '0012', '0013', '0014', '0015']);
     const first = await runInProcess(env, SHIPPED, { extensionLoader: loader });
     expect([first.code, first.stderr]).toEqual([0, '']);
     const history = await rows(database.ownerUrl, 'SELECT name FROM kysely_migration_ee ORDER BY name');
@@ -755,5 +755,49 @@ describe('the notice of an earlier closing and the rollback of the person’s co
     expect(await rows(database.ownerUrl, "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'assistant_runs' AND column_name = 'thread_epoch'")).toEqual([{ n: 0 }]);
     expect(await Promise.all(tables.map((table) => count(database, table)))).toEqual(before);
     expect((await columnsOf(database, 'assistant_runs')).join()).toBe('id,actor_id,investigation_id,source_id,trace_id,started_at,finished_at,outcome,calls,settings');
+  });
+});
+
+describe('the list of a person’s threads and its index', () => {
+  const MORE = Array.from({ length: 5 }, (_, index) => `0192f000-0000-7000-8000-0000000000${String(30 + index)}`);
+
+  it('creates the index on the person, the last turn and the thread id in that order, and its rollback instruction drops it and nothing else', async () => {
+    const database = await seeded();
+    const index = await rows(database.ownerUrl, "SELECT indexdef FROM pg_indexes WHERE indexname = 'assistant_threads_by_person_recent'");
+    expect(String(index[0]?.['indexdef'])).toMatch(/\(user_id, last_turn_at DESC, id DESC\)/u);
+    const file = readFileSync(join(PREVIEW_MIGRATIONS, '0015-assistant-thread-list-index.sql'), 'utf8');
+    expect(/^-- Rollback \(by hand[^)]*\): (.*)$/mu.exec(file)?.[1]).toBe('DROP INDEX assistant_threads_by_person_recent; no other object is touched.');
+    const before = await count(database, 'pg_indexes', "tablename = 'assistant_threads'");
+    await rows(database.ownerUrl, 'DROP INDEX assistant_threads_by_person_recent');
+    expect(await count(database, 'pg_indexes', "tablename = 'assistant_threads'")).toBe(before - 1);
+  });
+
+  it('lists the person’s own threads newest last turn first with the count of turns and the newest stored question, and pages through threads of one timestamp', async () => {
+    const database = await seeded();
+    for (const id of MORE) await rows(database.ownerUrl, `INSERT INTO investigations (id, source_id, source_identity_hash, owner_id, title) VALUES ('${id}', 'alpha', 'i', '${OWNER}', 'Account')`);
+    await withStore(database, async (store) => {
+      await store.append(turn({ investigationId: FIRST, question: 'older question', maskOn: false, at: new Date('2026-11-18T09:00:00Z') }), 0);
+      await store.append(turn({ investigationId: FIRST, question: 'newest question', maskOn: false, at: new Date('2026-11-18T11:00:00Z') }), 0);
+      await store.append(turn({ investigationId: FIRST, question: undefined, answer: undefined, maskOn: undefined, outcome: 'waiting', at: new Date('2026-11-18T12:00:00Z') }), 0);
+      await store.append(turn({ investigationId: SECOND, userId: OWNER, question: undefined, answer: undefined, maskOn: undefined, at: new Date('2026-11-18T08:00:00Z') }), 0);
+      for (const id of MORE) await store.append(turn({ investigationId: id, at: new Date('2026-11-17T10:00:00Z') }), 0);
+      await store.append(turn({ investigationId: FIRST, userId: OTHER, question: 'not mine', maskOn: false, at: new Date('2026-11-18T13:00:00Z') }), 0);
+      const first = await store.listOwn(OWNER, undefined, 3);
+      expect(first.map((row) => row.investigationId)).toEqual([FIRST, SECOND, expect.any(String)]);
+      expect(first[0]).toMatchObject({ turns: 3, lastQuestion: 'newest question', lastTurnAt: '2026-11-18T12:00:00.000Z' });
+      expect(first[1]).toMatchObject({ turns: 1, lastQuestion: null });
+      const seen: string[] = [];
+      let after: { key: string; id: string } | undefined;
+      for (;;) {
+        const page = await store.listOwn(OWNER, after, 2);
+        seen.push(...page.map((row) => row.investigationId));
+        const last = page.at(-1);
+        if (page.length < 2 || last === undefined) break;
+        after = { key: last.key, id: last.threadId };
+      }
+      expect(seen).toHaveLength(2 + MORE.length);
+      expect(new Set(seen).size).toBe(2 + MORE.length);
+      expect(seen).not.toContain(undefined);
+    });
   });
 });
