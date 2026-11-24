@@ -397,7 +397,8 @@ function comparedElementsHold(sentence: SummarySentence, assembled: CheckedText)
     const shown = (key: string): readonly string[] => assembled.propertyKeys?.get(key) ?? [];
     if (keys.length >= 2 && !keys.every((key) => sameKeys(shown(key), shown(first)))) return false;
     if (!superlative && keys.length !== 1) continue;
-    const others = [...types].filter(([key, other]) => ELEMENT_KEY.test(key) && other === type && !keys.includes(key));
+    const scope = scopeOf(sentence, assembled, type);
+    const others = [...types].filter(([key, other]) => ELEMENT_KEY.test(key) && other === type && !keys.includes(key) && (scope === undefined || scope.keys.includes(key)));
     const excused = reads.some((read) => keys.every((key) => assembled.readElements?.get(read)?.includes(key) === true));
     if (others.length > 0 && !excused) return false;
   }
@@ -421,7 +422,7 @@ const clauseAt = (text: string, at: number): string => {
 const clausesOf = (text: string): string[] => text.split(/[.;:!?,]+|(?<![\p{L}\p{N}_-])(?:but|and yet|although)(?![\p{L}\p{N}_-])/iu).filter((clause) => clause.trim() !== '');
 
 const NEGATION = /(?<![\p{L}\p{N}_-])(?:no|none|not|never|without|cannot|nothing)(?![\p{L}\p{N}_-])|n['\u2019]t(?![\p{L}])/iu;
-const PRESENCE_WORDS = '(?:in view|in the view|on screen|shown|show|shows|listed|lists?|appears?|named|visible|present|holds?|held|loaded|read|returned|returns?)';
+const PRESENCE_WORDS = '(?:in view|in the view|on screen|shown|show|shows|listed|lists?|appears?|named|visible|present|holds?|held|loaded|read|returned|returns?|given|provided|stated|reported|recorded|found|available|included)';
 /** A negation followed within a few words by a word of presence: the sentence says something is absent or not shown. Words of the language, never of a domain. */
 const BETWEEN = '(?:\\s+(?!(?:and|or|but)(?![\\p{L}\\p{N}_-]))\\S+){0,4}?';
 const ABSENT_CLAUSE = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:no|none|not|never|without|cannot|nothing)(?![\\p{L}\\p{N}_-])${BETWEEN}\\s+${PRESENCE_WORDS}(?![\\p{L}\\p{N}_-])|n['\\u2019]t${BETWEEN}\\s+${PRESENCE_WORDS}(?![\\p{L}\\p{N}_-])|(?<![\\p{L}\\p{N}_-])(?:shows?|lists?|holds?|contains?|has|have|names?)\\s+(?:\\S+\\s+){0,2}?(?:no|none)(?![\\p{L}\\p{N}_-])`, 'iu');
@@ -432,6 +433,8 @@ const KIND_FORMS: readonly (readonly [string, RegExp])[] = [
   ['entity', /entit(?:y|ies)/iu],
   ['element', /elements?/iu],
 ];
+
+const PLACE_PREPOSITION = '(?:between|among|amongst|across|within)';
 
 /** What a line of the server states about a kind: the number shown, from `<n> relationships shown`, and `no relationship listed`. */
 function statedOfKind(line: string, forms: RegExp, kind: string): number | undefined {
@@ -475,8 +478,11 @@ function absenceHolds(sentence: SummarySentence, assembled: CheckedText): boolea
   if (served.length === 0) return false;
   for (const clause of absent) {
     const negation = Math.max(0, clause.search(NEGATION));
+    // a clause that names no kind but after a place word (`nothing is shown among the relationships`) denies that kind
+    const placeOnly = !KIND_FORMS.some(([, forms]) => new RegExp(`(?<![\\p{L}\\p{N}_-])(?<!${PLACE_PREPOSITION}\\s+(?:(?:the|these|those|its|their)\\s+)?)(?:${forms.source})(?![\\p{L}\\p{N}_-])`, 'iu').test(clause.slice(negation)));
     for (const [kind, forms] of KIND_FORMS) {
-      const named = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${forms.source})(?![\\p{L}\\p{N}_-])`, 'iu').test(clause.slice(negation));
+      // a kind after a preposition is the place of what is denied (`no relationship is given between the elements`), not what is denied
+      const named = new RegExp(`(?<![\\p{L}\\p{N}_-])${placeOnly ? '' : `(?<!${PLACE_PREPOSITION}\\s+(?:(?:the|these|those|its|their)\\s+)?)`}(?:${forms.source})(?![\\p{L}\\p{N}_-])`, 'iu').test(clause.slice(negation));
       // a kind that is the subject of the negation (`relationships are not shown`) is what is denied; one before a verb (`the elements do not show`) only looks
       const subject = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${forms.source})\\s+(?:(?:are|is)\\s+)?$`, 'iu').test(clause.slice(0, negation));
       if (!named && !subject) continue;
@@ -499,7 +505,126 @@ function citedElements(sentence: SummarySentence, assembled: CheckedText): strin
   return [...new Set(sentence.cites)].filter((key) => !lines.has(key) && assembled.elementTypes?.has(key) === true);
 }
 
+/** The elements of one type that a sentence limits itself to, as the checks of a ranking and of a comparison can verify: the set, and the sentence with the names of an enumerated list blanked. */
+interface Scope {
+  readonly type: string;
+  readonly keys: readonly string[];
+  readonly outside?: string;
+}
+
+const LIST_INTRO = '(?:of|among|amongst|between|out of)\\s+(?:(?:the|these|those)\\s+)?(?:[\\p{L}\\p{N}_-]+\\s+){0,2}?';
+
+/** The words between two positions of a text, nothing when a mark of the end of a clause, or a word that joins another clause (`and`, `but`, `while`, `whereas`, `or`), stands between them. */
+function wordsBetween(text: string, from: number, to: number): number | undefined {
+  const between = text.slice(from, to);
+  if (/[.;:!?]/u.test(between) || /(?<![\p{L}\p{N}_-])(?:and|but|while|whereas|or)(?![\p{L}\p{N}_-])/iu.test(between)) return undefined;
+  return (between.match(/[\p{L}\p{N}_-]+/gu) ?? []).length;
+}
+
+/** Whether a stretch of a sentence (a list of names, a phrase of a read) stands at a ranking word: after it with at most `after` words between, or before it with at most `before`, in the same clause. A stretch elsewhere (`the sender of A and B`) limits nothing the ranking says. */
+function standsAtRanking(unnamed: string, start: number, end: number, after: number, before: number): boolean {
+  return rankingWordsIn(unnamed).some((claim) => {
+    const following = wordsBetween(unnamed, claim.end, start);
+    const preceding = wordsBetween(unnamed, end, claim.index);
+    return (claim.end <= start && following !== undefined && following <= after) || (claim.index >= end && preceding !== undefined && preceding <= before);
+  });
+}
+
+/** What may follow a set a ranking is limited to (a list, a read): the end of a clause, the figure claimed, or the verb that names the holder. Another noun phrase, `and the rest`, `or any widget in the view` widens the set. */
+const CLOSES_A_SET = /^\s*(?:$|[,.;]|[-+]?\d|(?:is|are|was|were|has|have|had|belongs|goes)(?![\p{L}\p{N}_-]))/iu;
+
+/** Words after a scope that open or add another set (`and of the rest`, `as in the view`, `more than any`, `elsewhere`): the set the sentence limited itself to is then widened. What follows a scope is the figure, a name and linking words. */
+const WIDENS_AFTER = /(?<![\p{L}\p{N}_-])(?:and|or|as|also|too|plus|elsewhere|rest|others|remaining|than|more|whole|entire|everywhere|any|all|every|each|throughout|including|of|among|across|within|in|from)(?![\p{L}\p{N}_-])/iu;
+
+/** A list at the ranking, in one of two fixed forms: after the ranking word (`the latest of A, B and C`, a property between, at most three words) and closed as a set; or opening the sentence (`Among A, B and C, C has the largest`), closed by a comma, with nothing after the ranking that opens another set. */
+const attachedToRanking = (unnamed: string, listStart: number, listEnd: number): boolean => {
+  const opening = unnamed.slice(0, listStart).trim() === '';
+  const closed = /^\s*,/u.test(unnamed.slice(listEnd));
+  const after = rankingWordsIn(unnamed).some((claim) => claim.end <= listStart && (wordsBetween(unnamed, claim.end, listStart) ?? Infinity) <= 3);
+  if (after) return CLOSES_A_SET.test(unnamed.slice(listEnd)) && !WIDENS_AFTER.test(unnamed.slice(listEnd));
+  return opening && closed && standsAtRanking(unnamed, listStart, listEnd, 0, 5) && !WIDENS_AFTER.test(unnamed.slice(listEnd));
+};
+
+/**
+ * A sentence that names the set it ranks or compares in full (`the latest of A, B and C is B`) is about that set and says nothing of the other elements of the type. The set is the elements named in a list that follows `of`, `among`
+ * or `between`, when each name of the list is of a cited element of one type, and there are two or more.
+ */
+function enumeratedScope(sentence: SummarySentence, assembled: CheckedText): Scope | undefined {
+  const types = assembled.elementTypes;
+  const names = namesOfElements(assembled);
+  if (types === undefined || names.length === 0) return undefined;
+  const text = sentence.text.normalize('NFC');
+  const name = `(?<![\\p{L}\\p{N}_-])(?:${names.map(ESCAPED).join('|')})(?![\\p{L}\\p{N}_-])`;
+  const found = new RegExp(`(?<![\\p{L}\\p{N}_-])${LIST_INTRO}(${name}(?:${BETWEEN_NAMES}${name})+)`, 'iu').exec(text);
+  const whole = found?.[1];
+  if (found === null || whole === undefined) return undefined;
+  const first = found.index + found[0].length - whole.length;
+  // a list names each element once: a name that comes again is the subject of what follows (`Among A, B and C, C has the largest`), not a member
+  const seen = new Set<string>();
+  const repeat = [...whole.matchAll(new RegExp(name, 'giu'))].find((mention) => seen.size === seen.add(mention[0].toLowerCase()).size);
+  const list = repeat === undefined ? whole : whole.slice(0, repeat.index).replace(/[\s,;&()]*(?:(?:and|to|through)\s*)?$/iu, '');
+  if (!attachedToRanking(text.replace(new RegExp(name, 'giu'), (mention) => ' '.repeat(mention.length)), found.index, first + list.length)) return undefined;
+  const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
+  const cited = [...new Set(sentence.cites)].filter((key) => ELEMENT_KEY.test(key) && !lines.has(key) && types.has(key));
+  const listed = cited.filter((key) => namesOfKey(key, assembled).some((own) => own !== '' && occursWhole(own, list)));
+  const kinds = new Set(listed.map((key) => types.get(key)));
+  const [type] = kinds;
+  if (type === undefined || kinds.size !== 1 || listed.length < 2) return undefined;
+  const everyNameIsOfOne = [...list.matchAll(new RegExp(name, 'giu'))].every((mention) => listed.some((key) => namesOfKey(key, assembled).some((own) => own.toLowerCase() === mention[0].toLowerCase())));
+  if (!everyNameIsOfOne) return undefined;
+  return { type, keys: listed, outside: `${text.slice(0, first)}${' '.repeat(list.length)}${text.slice(first + list.length)}` };
+}
+
+const NOUN_RUN = String.raw`(?:(?!(?:not|besides|except|excluding|excluded|apart|other|others|without|outside|beyond|but)(?![\p{L}\p{N}_-]))[\p{L}\p{N}_-]+\s+){0,3}?`;
+const READ_END = String.raw`(?:read|reads|result|results)(?![\p{L}\p{N}_-])`;
+const READ_SET = String.raw`(?:the|these|those)\s+${NOUN_RUN}(?:(?:shown|listed|found|returned)\s+)?in\s+the\s+${READ_END}`;
+const READ_SET_SHOWN = String.raw`(?:the|these|those)\s+${NOUN_RUN}the\s+(?:read|reads|result|results)\s+(?:shows?|lists?|listed|returned|returns?|found)(?![\p{L}\p{N}_-])`;
+
+/**
+ * Whether a sentence limits its ranking to what a read listed, in one of two fixed forms: `the largest <property> among the <nouns> in the read` (the ranking word, then `of`, `among` or `out of` and the set the read listed), or an opening
+ * `Among the <nouns> the read shows, <the ranking clause>`. A read phrase anywhere else (after the figure, in an earlier clause, describing the element) limits nothing, and the ranking is over every element of the type.
+ */
+function readLimited(spoken: string): boolean {
+  const after = new RegExp(String.raw`(?<![\p{L}\p{N}_-])(?:of|among|out of)\s+${READ_SET}`, 'iu').exec(spoken);
+  if (after !== null && standsAtRanking(spoken, after.index, after.index + after[0].length, 3, -1) && CLOSES_A_SET.test(spoken.slice(after.index + after[0].length)) && !WIDENS_AFTER.test(spoken.slice(after.index + after[0].length))) return true;
+  const property = new RegExp(String.raw`(?<![\p{L}\p{N}_-])in\s+the\s+${READ_END}`, 'iu').exec(spoken);
+  if (property !== null && standsAtRanking(spoken, property.index, property.index + property[0].length, 1, -1) && CLOSES_A_SET.test(spoken.slice(property.index + property[0].length)) && !WIDENS_AFTER.test(spoken.slice(property.index + property[0].length))) return true;
+  const opening = new RegExp(String.raw`^\s*(?:(?:of|among)\s+(?:${READ_SET}|${READ_SET_SHOWN})|in\s+the\s+${READ_END})\s*,`, 'iu').exec(spoken);
+  return opening !== null && standsAtRanking(spoken, 0, opening[0].length, -1, 5) && !WIDENS_AFTER.test(spoken.slice(opening[0].length));
+}
+
+/**
+ * A sentence that limits itself to a read (`in the read`, `the read shows`) and cites every element of the type that the read listed is about what that read listed: a ranking or a comparison of it is judged over those elements,
+ * not over the elements of the type that other reads and the view hold. Only when one read does so: with two, the read the sentence means is not known.
+ */
+function readScope(sentence: SummarySentence, assembled: CheckedText, type: string): Scope | undefined {
+  const types = assembled.elementTypes;
+  if (types === undefined) return undefined;
+  const cited = new Set(sentence.cites);
+  // an element's own title may hold the word `read`: what names an element is no mention of a read
+  const unnamed = namesOfElements(assembled).reduce((text, name) => text.replace(new RegExp(`${WB}${ESCAPED(name)}${WE}`, 'giu'), (found) => ' '.repeat(found.length)), sentence.text.normalize('NFC'));
+  const spoken = withoutQuoted(unnamed);
+  const limited = readLimited(spoken);
+  const matching = [...(assembled.readElements ?? [])].flatMap(([read, listed]) => {
+    const members = listed.filter((key) => types.get(key) === type);
+    return /^s\d+$/u.test(read) && members.length > 0 && members.every((key) => cited.has(key)) && limited ? [members] : [];
+  });
+  const [only] = matching;
+  return matching.length === 1 && only !== undefined ? { type, keys: only } : undefined;
+}
+
+/** The set a sentence limits a ranking or a comparison of the elements of a type to, when it does so in a way that can be checked. */
+const scopeOf = (sentence: SummarySentence, assembled: CheckedText, type: string): Scope | undefined => {
+  const listed = enumeratedScope(sentence, assembled);
+  return listed?.type === type ? listed : readScope(sentence, assembled, type);
+};
+
 const QUANTIFIER_BEFORE = /(?<![\p{L}\p{N}_-])(?:all|every|each|none)(?:\s+of)?(?:\s+(?:the|these|those))?\s+(?:\S+\s+)?(?:(?:,\s*(?:(?:and|or)\s+)?|(?:and|or)\s+)(?:the\s+)?(?:\S+\s+)?)*$/iu;
+/** `only <type>` before a place or a verb of showing (`only widgets are shown`, `the only widget in view`) says what the elements of a type are; `only` that a relation restricts (`sent only to`, `the only widget linked to it`) is relative and says nothing of the whole type. */
+const ONLY_BEFORE = /(?<![\p{L}\p{N}_-])only\s+(?:\S+\s+)?$/iu;
+const ONLY_PLACE_AFTER = /^\s+(?:\S+\s+){0,2}?(?:shown|in view|on screen|in the view|on the screen|listed|read|returned|here|present|visible|available|given|held|loaded)(?![\p{L}\p{N}_-])/iu;
+/** `the only <type>` says there is one: it is checked against the set as `all` is, and the set must hold one element. */
+const ONLY_ONE_BEFORE = /(?<![\p{L}\p{N}_-])the\s+only\s+(?:\S+\s+)?$/iu;
 const DEFINITE_BEFORE = /(?<![\p{L}\p{N}_-])the\s+(?:\S+\s+)?$/iu;
 /** A quantifier that stands right after the noun it speaks of (`transactions are each shown`, `transactions all carry`, `transactions in view, all with …`): what follows the noun is a place, a verb of being or having, and the quantifier, nothing else. */
 const FLOATING_AFTER = /^(?:\s+(?:in view|on screen|in the view|on the screen))?(?:\s+(?:are|were|is|have|has|had|share|shares|carry|carries|hold|holds|show|shows))?(?:\s*,)?\s+(?:all|each)(?![\p{L}\p{N}_-])/iu;
@@ -531,9 +656,10 @@ function universalHolds(sentence: SummarySentence, assembled: CheckedText): bool
       const subject = SUBJECT_BEFORE.test(before);
       const onScreen = DEFINITE_BEFORE.test(before) && PLACE_AFTER.test(after);
       const inRead = !onScreen && READ_DESCRIPTION.test(clauseAt(text, found.index));
-      if (!QUANTIFIER_BEFORE.test(before) && !onScreen && !(subject && FLOATING_AFTER.test(after))) continue;
+      if (!QUANTIFIER_BEFORE.test(before) && !(ONLY_BEFORE.test(before) && ONLY_PLACE_AFTER.test(after)) && !onScreen && !(subject && FLOATING_AFTER.test(after))) continue;
       const population = [...types].filter(([key, held]) => of(held) && assembled.readKeys?.has(key) !== true && assembled.descriptionKeys?.has(key) !== true && (!inRead || reads.length === 0 || reads.some((cite) => assembled.readElements?.get(cite)?.includes(key) === true)) && (!onScreen || /^[ne]\d+$/u.test(key)));
       if (population.some(([key]) => !cited.has(key))) return false;
+      if (ONLY_ONE_BEFORE.test(before) && found[0] === word && population.length > 1) return false;
       spoken.push(...population.map(([key]) => key));
     }
   }
@@ -731,6 +857,20 @@ function propertyAfter(text: string, from: number, keys: readonly string[]): { r
   return { key: only.key, end: following[lastToken]?.end ?? first.end };
 }
 
+/** The property a sentence names before its ranking word (`has amountValue 12, the largest of them`): the one key of the cited elements that is written there whole, nothing when none or several are. */
+function propertyBefore(text: string, until: number, keys: readonly string[]): { readonly key: string; readonly end: number } | undefined {
+  const before = text.slice(0, until);
+  const written = keys.flatMap((key) => {
+    const pieces = subwordsOf(key);
+    if (pieces.length === 0) return [];
+    const ends = [...before.matchAll(new RegExp(`${WB}${pieces.map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s_-]*')}${WE}`, 'giu'))].map((found) => found.index + found[0].length);
+    const end = ends[ends.length - 1];
+    return end === undefined ? [] : [{ key, end }];
+  });
+  const [only] = written;
+  return written.length === 1 ? only : undefined;
+}
+
 const NUMBER_LITERAL = /[-+]?(?:\d(?:[\d,]*\d)?(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?/u;
 const TEMPORAL_LITERAL: Readonly<Record<string, RegExp>> = {
   dateTime: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})(?:\[[^\]]*\])?/u,
@@ -792,20 +932,23 @@ function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolea
   if (MORE_THAN_READ.test(text)) return false;
   const carriers = cited.filter((key) => carries(key).length > 0);
   const keys = [...new Set(carriers.flatMap((key) => carries(key).map((property) => property.key)))];
-  const property = propertyAfter(text, claim.end, keys);
+  const property = propertyAfter(text, claim.end, keys) ?? propertyBefore(text, claim.index, keys);
   if (property === undefined) return false;
   const typeOf = (key: string): string | undefined => assembled.elementTypes?.get(key);
   const holders = carriers.filter((key) => carries(key).some((entry) => entry.key === property.key));
-  const sentence_ = sentence.text.normalize('NFC');
+  const listed = enumeratedScope(sentence, assembled);
+  const sentence_ = listed?.outside ?? sentence.text.normalize('NFC');
   const named = (key: string): boolean => namesOfKey(key, assembled).some((name) => name !== '' && occursWhole(name, sentence_));
   let types = [...new Set(holders.map((key) => typeOf(key)).filter((type): type is string => type !== undefined))];
-  if (types.length > 1) types = [...new Set(holders.filter(named).map((key) => typeOf(key)).filter((type): type is string => type !== undefined))];
+  if (listed !== undefined && listed.keys.every((key) => holders.includes(key))) types = [listed.type];
+  else if (types.length > 1) types = [...new Set(holders.filter(named).map((key) => typeOf(key)).filter((type): type is string => type !== undefined))];
   const [rankedType] = types;
   if (rankedType === undefined || types.length !== 1) return false;
   const candidates = holders.filter((key) => typeOf(key) === rankedType && named(key));
   if (candidates.length > 1) return false;
   const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
-  const population = [...(assembled.elementTypes ?? [])].filter(([key, type]) => type === rankedType && !lines.has(key)).map(([key]) => key);
+  const scope = scopeOf(sentence, assembled, rankedType);
+  const population = scope?.keys ?? [...(assembled.elementTypes ?? [])].filter(([key, type]) => type === rankedType && !lines.has(key)).map(([key]) => key);
   const values = new Map<string, { readonly dataClass: string; readonly value: string }>();
   for (const key of population) {
     const entry = carries(key).find((candidate) => candidate.key === property.key);
@@ -1024,6 +1167,15 @@ function removalReasonOf(sentence: SummarySentence, assembled: CheckedText, coun
   return 'name';
 }
 
+/** A sentence that opens on what is left of a set an earlier sentence spoke of (`the other four`, `the rest`, `the remaining`), with no set of its own to rest on. */
+const LEFT_OF_A_SET = /^\s*(?:(?:all|both|of)\s+)?(?:the\s+)?(?:other|others|rest|remaining|remainder)(?![\p{L}\p{N}_-])/iu;
+
+/** The reason the sentence before this one was removed, when this one says what is left of a set that sentence spoke of (it cites an element that sentence cites): it is removed with it, since its set is no longer in the answer. */
+function dependsOnRemoved(sentence: SummarySentence, previous: { readonly cites: ReadonlySet<string>; readonly reason: RemovalReason } | undefined): RemovalReason | undefined {
+  if (previous === undefined || !LEFT_OF_A_SET.test(sentence.text) || !sentence.cites.some((key) => previous.cites.has(key))) return undefined;
+  return previous.reason === 'verdict' || previous.reason === 'key' ? 'citation' : previous.reason;
+}
+
 /** Keeps the sentences that cite real elements, hold only the numbers of the elements they cite and the ids, quoted texts and capitalised words the text sent holds, and state no verdict, with the keys of the elements taken out of their text; counts each removed sentence once. */
 export function judgeSentences(sentences: readonly SummarySentence[], input: CheckedText, options: { readonly tableRows?: boolean } = {}): Judged {
   const assembled = options.tableRows === true ? { ...input, readWordNumbers: false } : input;
@@ -1033,11 +1185,13 @@ export function judgeSentences(sentences: readonly SummarySentence[], input: Che
   let verdictFound = false;
   let keysStripped = 0;
   let keysRemoved = 0;
+  let previous: { readonly cites: ReadonlySet<string>; readonly reason: RemovalReason } | undefined;
   for (const original of sentences) {
     if (holdsVerdict(original, assembled)) {
       verdictFound = true;
       removed += 1;
       rejected.push({ text: original.text, reason: 'verdict' });
+      previous = { cites: new Set(original.cites), reason: 'verdict' };
       continue;
     }
     const clean = withoutKeys(original.text, assembled);
@@ -1045,14 +1199,20 @@ export function judgeSentences(sentences: readonly SummarySentence[], input: Che
       removed += 1;
       keysRemoved += 1;
       rejected.push({ text: original.text, reason: 'key' });
+      previous = { cites: new Set(original.cites), reason: 'key' };
       continue;
     }
     const sentence = clean.stripped ? { ...original, text: clean.text } : original;
-    if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled, options.tableRows !== true) || !comparisonHolds(sentence, assembled) || !namesHold(sentence, namesScopeOf(sentence, assembled))) {
+    const failing = !citationsHold(sentence, assembled) || !numbersHold(sentence, assembled, options.tableRows !== true) || !comparisonHolds(sentence, assembled) || !namesHold(sentence, namesScopeOf(sentence, assembled));
+    const dependent = failing ? undefined : dependsOnRemoved(sentence, previous);
+    if (failing || dependent !== undefined) {
       removed += 1;
-      rejected.push({ text: original.text, reason: removalReasonOf(sentence, assembled, options.tableRows !== true) });
+      const reason = dependent ?? removalReasonOf(sentence, assembled, options.tableRows !== true);
+      rejected.push({ text: original.text, reason });
+      previous = { cites: new Set(original.cites), reason };
     } else {
       kept.push(sentence);
+      previous = undefined;
       if (clean.stripped) keysStripped += 1;
     }
   }
