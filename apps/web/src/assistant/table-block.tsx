@@ -52,31 +52,45 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollsOn, setScrollsOn] = useState(false);
   const [tight, setTight] = useState(false);
+  const [squeezed, setSqueezed] = useState(false);
   useEffect(() => {
     const element = scroller.current;
     if (element === null) return undefined;
-    const measure = (): void => {
-      setScrollsOn(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
-      // a table is tight when it overflows with its time stamps kept whole: measured without the breaks, so that a wider panel lets them go
-      const wasTight = element.classList.contains("assistant-table-tight");
-      element.classList.remove("assistant-table-tight");
-      const overflows = element.scrollWidth > element.clientWidth;
-      if (wasTight) element.classList.add("assistant-table-tight");
-      setTight(overflows);
-      // the full title of a row is drawn over its cell up to the Source column: how far that is from the cell
+    // the full title of a row is drawn over its cell up to the Source column: how far that is from the cell
+    const placeRoom = (): void => {
       const title = element.querySelector<HTMLElement>("th.assistant-table-title-cell");
       const source = element.querySelector<HTMLElement>("th:last-child");
       if (title !== null && source !== null) element.style.setProperty("--assistant-table-room", `${Math.max(0, element.clientWidth - source.offsetWidth - (title.offsetLeft - element.scrollLeft))}px`);
     };
+    const measure = (probe = true): void => {
+      setScrollsOn(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
+      // scrolling changes none of the widths: only a change of size or of rows probes the layout again
+      if (!probe) {
+        placeRoom();
+        return;
+      }
+      // the title column keeps its content width until the table overflows with every cell at its cap: only then does it give way (with its ellipsis); measured without the squeeze, so that a wider panel lets it go
+      const wasTight = element.classList.contains("assistant-table-tight");
+      element.classList.remove("assistant-table-tight", "assistant-table-squeezed");
+      const naturalOverflow = element.scrollWidth > element.clientWidth;
+      if (naturalOverflow) element.classList.add("assistant-table-squeezed");
+      // a table is tight when it overflows with its time stamps kept whole, even squeezed: measured without the breaks, so that a wider panel lets them go
+      const overflows = element.scrollWidth > element.clientWidth;
+      if (wasTight) element.classList.add("assistant-table-tight");
+      setSqueezed(naturalOverflow);
+      setTight(overflows);
+      placeRoom();
+    };
     measure();
-    element.addEventListener("scroll", measure);
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    const onScroll = (): void => measure(false);
+    element.addEventListener("scroll", onScroll);
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => measure());
     observer?.observe(element);
     return () => {
-      element.removeEventListener("scroll", measure);
+      element.removeEventListener("scroll", onScroll);
       observer?.disconnect();
     };
-  }, [table.rows.length, unfolded, tight]);
+  }, [table.rows.length, unfolded, tight, squeezed]);
   const longTable = table.rows.length > TABLE_FOLD_ABOVE;
   const folds = longTable && !unfolded;
   const rows = table.rows.map((row, index) => ({ row, index }));
@@ -115,7 +129,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
               <span className="assistant-table-title-clip">{cell}</span>
             </td>
           ) : (
-            <td key={column} className={classOf(column)}>{stampOf(cellOf(cell, kinds[column] ?? "text", table.rows, column), kinds[column])}</td>
+            <td key={column} className={classOf(column)} title={kinds[column] === "text" ? cell : undefined}>{stampOf(cellOf(cell, kinds[column] ?? "text", table.rows, column), kinds[column])}</td>
           )
         ))}
         <td className="assistant-table-cite">
@@ -138,19 +152,18 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
       <div className="assistant-table-head">
         {table.title === "" ? <span /> : <p className="assistant-table-title">{table.title}</p>}
         <button type="button" className="assistant-table-copy" onClick={copyTable} onBlur={() => setCopy("idle")}>
-          <span aria-hidden="true" className="icon icon-copy" />
           <span>{copy === "copied" ? ASSISTANT_COPY.tableCopied : ASSISTANT_COPY.copyTable}</span>
         </button>
         <span className="visually-hidden" role="status">{copy === "copied" ? ASSISTANT_COPY.tableCopied : copy === "failed" ? ASSISTANT_COPY.tableCopyFailed : ""}</span>
       </div>
       {copy === "failed" ? <p className="assistant-table-notice" role="note">{ASSISTANT_COPY.tableCopyFailed}</p> : null}
-      <div ref={scroller} className={`assistant-table-scroll${scrollsOn ? " assistant-table-scrolls" : ""}${tight ? " assistant-table-tight" : ""}`}>
+      <div ref={scroller} className={`assistant-table-scroll${scrollsOn ? " assistant-table-scrolls" : ""}${tight ? " assistant-table-tight" : ""}${squeezed ? " assistant-table-squeezed" : ""}`}>
         <table className="assistant-table">
           <caption className="visually-hidden">{table.title}</caption>
           <thead>
             <tr>
               {table.columns.map((column, index) => (
-                <th key={index} scope="col" className={classOf(index)}>{headerOf(column, kinds[index] ?? "text", table.rows, index)}</th>
+                <th key={index} scope="col" className={classOf(index)} title={headerOf(column, kinds[index] ?? "text", table.rows, index)}>{headerOf(column, kinds[index] ?? "text", table.rows, index)}</th>
               ))}
               <th scope="col">{ASSISTANT_COPY.citeColumn}</th>
             </tr>

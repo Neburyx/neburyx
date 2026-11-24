@@ -57,6 +57,34 @@ test.describe('The Assistant page', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
+  test('draws the table as the frame does: cells on one line sized to their content, a header with no fill, rows of about 24 px, Copy table as a link', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await routes(page, TABLE);
+    await openPage(page);
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    const table = page.getByRole('table', { name: 'Accounts · 6 rows' });
+    await expect(table).toBeVisible();
+    const measured = await table.evaluate((element) => {
+      const rows = [...element.querySelectorAll('tbody tr')] as HTMLElement[];
+      const head = element.querySelector('thead th') as HTMLElement;
+      const cells = [...element.querySelectorAll('tbody td')] as HTMLElement[];
+      const copy = element.closest('.assistant-table-block')?.querySelector('.assistant-table-copy') as HTMLElement;
+      return {
+        rowHeights: rows.map((row) => Math.round(row.getBoundingClientRect().height)),
+        headFill: getComputedStyle(head).backgroundColor,
+        oneLine: cells.every((cell) => cell.getBoundingClientRect().height < 32),
+        copyBorder: getComputedStyle(copy).borderTopWidth,
+        copyIcon: copy.querySelector('.icon') === null,
+      };
+    });
+    for (const height of measured.rowHeights) expect(height).toBeLessThanOrEqual(30);
+    expect(measured.headFill).toBe('rgba(0, 0, 0, 0)');
+    expect(measured.oneLine).toBe(true);
+    expect(measured.copyBorder).toBe('0px');
+    expect(measured.copyIcon).toBe(true);
+  });
+
   test('reaches Open graph, the thread controls and the composer by keyboard in reading order, and Enter in the composer sends', async ({ page }) => {
     await routes(page, TABLE);
     await openPage(page);

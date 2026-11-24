@@ -868,9 +868,9 @@
 
 .assistant-table-title {
   margin: 0;
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
-  font-weight: 500;
+  font-weight: 400;
   line-height: var(--line-height-pill);
 }
 
@@ -878,19 +878,24 @@
   line-height: var(--line-height-pill);
 }
 
-.assistant-table thead {
-  background: var(--color-surface-muted);
-}
-
 .assistant-table th {
   font-weight: 400;
   color: var(--color-text-muted);
 }
 
+/* a cell is one line sized to its content; one that is longer than the cap is cut with an ellipsis and carries its full text as a tooltip */
+.assistant-table th:not(:last-child),
+.assistant-table td:not(.assistant-table-cite, .assistant-table-title-cell) {
+  max-width: var(--assistant-table-cell-max);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .assistant-table th,
 .assistant-table td {
   text-align: left;
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-4);
   border-bottom: var(--border-width) solid var(--color-border);
   overflow-wrap: break-word;
 }
@@ -901,7 +906,7 @@
   overflow-wrap: normal;
 }
 
-/* a table that is too wide even with its title column at its floor lets a time stamp break between its date and its time, before it scrolls */
+/* a table that is too wide even with every cell at its cap lets a time stamp break between its date and its time, before it scrolls */
 .assistant-table-tight .assistant-table .assistant-table-stamp {
   white-space: normal;
 }
@@ -912,8 +917,13 @@
 
 .assistant-table td.assistant-table-title-cell,
 .assistant-table th.assistant-table-title-cell {
+  min-width: var(--assistant-table-title-min);
+}
+
+/* a table too wide with every cell at its cap lets its title column take what the others leave and give way with its ellipsis, before it scrolls */
+.assistant-table-squeezed .assistant-table td.assistant-table-title-cell,
+.assistant-table-squeezed .assistant-table th.assistant-table-title-cell {
   width: 100%;
-  min-width: 8ch;
   max-width: 0;
 }
 
@@ -931,6 +941,7 @@
 
 .assistant-table td.assistant-table-title-cell {
   position: relative;
+  max-width: var(--assistant-table-cell-max);
 }
 
 /* the full title is drawn over its cell while the row is pointed at or has focus: nothing in the table changes size */
@@ -941,11 +952,11 @@
   top: 0;
   left: 0;
   z-index: 1;
-  padding: var(--space-8) var(--space-4) var(--space-8) var(--space-8);
+  padding: var(--space-4);
   max-width: var(--assistant-table-room, 20ch);
   overflow: hidden;
   text-overflow: ellipsis;
-  background: var(--color-badge-surface);
+  background: var(--color-surface-muted);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -967,7 +978,6 @@
   right: 0;
   z-index: 2;
   background: var(--color-surface);
-  box-shadow: calc(-1 * var(--border-width)) 0 0 var(--color-border);
 }
 
 .assistant-table-scrolls th:last-child,
@@ -989,24 +999,10 @@
   pointer-events: none;
 }
 
-.assistant-table-scrolls th:last-child::before {
-  background: linear-gradient(to right, transparent, var(--color-surface-muted));
-}
-
-.assistant-table th:last-child {
-  background: var(--color-surface-muted);
-}
-
 .assistant-table-cite .assistant-marker {
-  background: var(--color-badge-surface);
-  padding: var(--space-3) var(--space-6);
+  background: transparent;
+  padding: 0;
   line-height: var(--line-height-pill);
-}
-
-.assistant-table-cite .assistant-table-source-link .icon {
-  width: var(--space-10);
-  height: var(--space-10);
-  background: var(--color-accent);
 }
 
 .assistant-table-cite .summary-chips {
@@ -1021,17 +1017,13 @@
 
 .assistant-table-row:hover td,
 .assistant-table-row:hover td.assistant-table-cite {
-  background: var(--color-badge-surface);
+  background: var(--color-surface-muted);
 }
 
 .assistant-table-cite .summary-chip {
   white-space: nowrap;
 }
 
-.assistant-table td {
-  padding-top: var(--space-8);
-  padding-bottom: var(--space-8);
-}
 
 .assistant-table th:first-child,
 .assistant-table td:first-child {
@@ -1096,17 +1088,10 @@
 }
 
 .assistant-table-copy {
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius);
-  padding: var(--space-3) var(--space-8);
-  color: var(--color-text);
+  padding: 0;
+  color: var(--color-accent);
   font-size: var(--font-size-small);
   line-height: var(--line-height-pill);
-}
-
-.assistant-table-copy .icon {
-  width: var(--space-10);
-  height: var(--space-10);
 }
 
 .assistant-table-row {
@@ -1139,6 +1124,23 @@
   margin: 0;
   clip: auto;
   overflow: visible;
+}
+
+/* the arrow to a row's source is drawn as the select button is: off the layout until it has the focus, so the Source cell shows only the marker as the frame does */
+.assistant-table-cite .assistant-table-source-link:not(:focus-visible) {
+  position: absolute;
+  width: var(--border-width);
+  height: var(--border-width);
+  margin: calc(-1 * var(--border-width));
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.assistant-table-cite .assistant-table-source-link .icon {
+  width: var(--space-10);
+  height: var(--space-10);
+  background: var(--color-accent);
 }
 
 /* the overview beside a refusal of a verdict */
