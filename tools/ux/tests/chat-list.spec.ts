@@ -52,7 +52,7 @@ test.describe('The chat list column of the Assistant page', () => {
   test('is drawn as the frame draws it: a 288 px column beside the sidebar with New chat, the search, the groups, the rows and the footnote', async ({ page }) => {
     await routes(page);
     await openPage(page);
-    await expect(page.getByRole('region', { name: 'Today' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Today' })).toBeVisible();
     const sidebar = await box(page, '.sidebar');
     const column = await box(page, '.chat-list');
     expect(column.x).toBe(sidebar.x + sidebar.width);
@@ -121,5 +121,107 @@ test.describe('The chat list column of the Assistant page', () => {
     await expect(page.locator('.chat-list-group h2')).toHaveText(['Today', 'Previous 7 days', 'Older']);
     expect(asked.some((search) => search.includes('cursor=1'))).toBe(true);
     await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+  });
+
+  test('reads the list again when the pointer enters the column after a chat was cleared in another tab, with no click and with no window event (a browser tab switch may send none)', async ({ context }) => {
+    let chats = [...CHATS];
+    const wire = async (page: Page): Promise<void> => {
+      await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
+      await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: EMPTY }));
+      await page.route((url) => url.pathname === '/v1/assistant/threads', (route) => route.fulfill({ json: { items: chats, nextCursor: null } }));
+    };
+    const first = await context.newPage();
+    await wire(first);
+    await openPage(first);
+    await expect(first.getByRole('link', { name: /Chat title 3/ })).toBeVisible();
+    const second = await context.newPage();
+    await wire(second);
+    await openPage(second);
+    await second.bringToFront();
+    chats = chats.filter((chat) => !chat.title.endsWith('3'));
+    await first.bringToFront();
+    await first.waitForTimeout(3200);
+    await first.locator('.chat-list').hover();
+    await expect(first.getByRole('link', { name: /Chat title 3/ })).toHaveCount(0);
+  });
+
+  test('names a list for each group, so the rows are announced as list items', async ({ page }) => {
+    await routes(page);
+    await openPage(page);
+    await expect(page.getByRole('list', { name: 'Today' }).getByRole('listitem')).toHaveCount(2);
+    await expect(page.getByRole('list', { name: 'Previous 7 days' }).getByRole('listitem')).toHaveCount(2);
+    await expect(page.getByRole('list', { name: 'Older' }).getByRole('listitem')).toHaveCount(2);
+  });
+
+  test('moves the focus to the first new row after Show more by the keyboard, and does not scroll a pointer away', async ({ page }) => {
+    await routes(page, [{ items: CHATS.slice(0, 2), nextCursor: '1' }, { items: CHATS.slice(2), nextCursor: null }]);
+    await openPage(page);
+    await page.getByRole('button', { name: 'Show more' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('link', { name: /Chat title 3/ })).toBeFocused();
+  });
+
+  test('keeps the pages that were loaded when a search is cleared', async ({ page }) => {
+    await routes(page, [{ items: CHATS.slice(0, 2), nextCursor: '1' }, { items: CHATS.slice(2), nextCursor: null }]);
+    await openPage(page);
+    await page.getByRole('button', { name: 'Show more' }).click();
+    await expect(page.getByRole('link', { name: /Chat title 6/ })).toBeVisible();
+    const field = page.getByRole('searchbox', { name: 'Search chats' });
+    await field.fill('title 5');
+    await expect(page.getByRole('link', { name: /Chat title 6/ })).toHaveCount(0);
+    await field.fill('');
+    await expect(page.getByRole('link', { name: /Chat title 6/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+  });
+
+  test('says "Loading chats…" while the list is read, then shows it', async ({ page }) => {
+    await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
+    await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: EMPTY }));
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route((url) => url.pathname === '/v1/assistant/threads', async (route) => {
+      await held;
+      await route.fulfill({ json: { items: CHATS, nextCursor: null } });
+    });
+    await openPage(page);
+    await expect(page.getByRole('status').filter({ hasText: 'Loading chats…' })).toBeVisible();
+    release();
+    await expect(page.getByRole('link', { name: /Chat title 1/ })).toBeVisible();
+    await expect(page.getByText('Loading chats…')).toHaveCount(0);
+  });
+
+  test('says the server could not be reached in a sentence, and Try again brings the list back', async ({ page }) => {
+    await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
+    await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: EMPTY }));
+    let down = true;
+    await page.route((url) => url.pathname === '/v1/assistant/threads', (route) => (down ? route.abort('connectionrefused') : route.fulfill({ json: { items: CHATS, nextCursor: null } })));
+    await openPage(page);
+    await expect(page.locator('.chat-list-failure').getByRole('alert')).toHaveText('The server could not be reached.');
+    await expect(page.getByText('NETWORK_UNAVAILABLE')).toHaveCount(0);
+    down = false;
+    await page.getByRole('button', { name: 'Try again to load the chats' }).click();
+    await expect(page.getByRole('link', { name: /Chat title 1/ })).toBeVisible();
+    await expect(page.locator('.chat-list-failure')).toHaveCount(0);
+  });
+
+  test('shows the full title and question of a row whose text is cut, on hover and on focus, and no tip on a row that fits', async ({ page }) => {
+    const long = 'A question that is long enough to be cut by the ellipsis of the row because it has far more words than the column has room for';
+    const chats = [row(1, 0, { lastQuestion: long }), row(2, 0, { lastQuestion: 'Short one' })];
+    await routes(page, [{ items: chats, nextCursor: null }]);
+    await openPage(page);
+    const tip = page.locator('.assistant-table-tip');
+    await page.getByRole('link', { name: /Chat title 2/ }).hover();
+    await expect(tip).toHaveCount(0);
+    await page.getByRole('link', { name: /Chat title 1/ }).hover();
+    await expect(tip).toContainText(long);
+    await expect(tip).toContainText('Chat title 1');
+    await page.mouse.move(700, 400);
+    await expect(tip).toHaveCount(0);
+    await page.getByRole('link', { name: /Chat title 2/ }).focus();
+    await expect(tip).toHaveCount(0);
+    await page.keyboard.press('ArrowUp');
+    await expect(tip).toContainText(long);
+    await page.keyboard.press('Escape');
+    await expect(tip).toHaveCount(0);
   });
 });

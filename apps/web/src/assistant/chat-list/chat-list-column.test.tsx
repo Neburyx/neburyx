@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantThreadListResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
 import { fakeClient } from '../../api/fake-client.js';
@@ -57,13 +57,20 @@ function setup(list: (query: Query, signal: AbortSignal | undefined) => Promise<
   return { asked, session, state };
 }
 
+type Session = ReturnType<typeof createAssistantSession>;
+/** A turn this page sent: pending, then settled. */
+async function answerATurn(session: Session): Promise<void> {
+  await act(async () => session.store.setState({ ...session.store.getState(), turns: [{ id: 1, message: 'x', outcome: { kind: 'pending', call: 'message' } }] }));
+  await act(async () => session.store.setState({ ...session.store.getState(), turns: [{ id: 1, message: 'x', outcome: { kind: 'cancelled' } }] }));
+}
+
 const rowsShown = (): string[] => screen.queryAllByRole('link').map((link) => link.textContent ?? '');
 
 describe('the chat list column', () => {
   it('lists the chats under their groups, each with the title and the last question, selects the one shown and ends with the footnote', async () => {
     setup(async () => page([chat(1), chat(2, { lastQuestionAt: '2026-11-20T09:00:00.000Z' }), chat(3, { lastQuestionAt: '2026-10-01T09:00:00.000Z' })]), { shown: idOf(2) });
-    const groups = await screen.findAllByRole('region');
-    expect(groups.map((group) => group.getAttribute('aria-label'))).toEqual(['Today', 'Previous 7 days', 'Older']);
+    const groups = await screen.findAllByRole('list');
+    expect(groups.map((group) => group.getAttribute('aria-labelledby')).map((id) => document.getElementById(id ?? '')?.textContent)).toEqual(['Today', 'Previous 7 days', 'Older']);
     expect(within(groups[0] as HTMLElement).getByText('Chat title 1')).toBeTruthy();
     expect(within(groups[1] as HTMLElement).getByText('Question 2')).toBeTruthy();
     const current = screen.getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'true');
@@ -298,9 +305,44 @@ describe('the chat list column follows the thread', () => {
     const { session } = setup(async () => page([chat(1, { lastQuestion: question })]));
     await screen.findByText('First question');
     question = 'Second question';
-    await act(async () => session.store.setState({ ...session.store.getState(), turns: [{ id: 1, message: 'x', outcome: { kind: 'cancelled' } }] }));
+    await answerATurn(session);
     await screen.findByText('Second question');
   });
+
+  it('reads again until the chat shows the new question when the server stores the turn a moment after it answered', async () => {
+    let reads = 0;
+    const { session } = setup(
+      async () => {
+        reads += 1;
+        // the first read after the answer still finds the old turn, as when the server commits the turn after it has answered
+        return page([reads >= 3 ? chat(1, { turns: 2, lastQuestion: 'Second question' }) : chat(1, { turns: 1, lastQuestion: 'First question' })]);
+      },
+      { shown: idOf(1) },
+    );
+    await screen.findByText('First question');
+    await answerATurn(session);
+    await screen.findByText('Second question', undefined, { timeout: 4000 });
+    expect(reads).toBe(3);
+    await new Promise((resolve) => setTimeout(resolve, 1700));
+    expect(reads).toBe(3);
+  });
+
+  it('stops reading again after a few tries when the chat never shows a new turn, and keeps the list', async () => {
+    let reads = 0;
+    const { session } = setup(
+      async () => {
+        reads += 1;
+        return page([chat(1, { turns: 1, lastQuestion: 'First question' })]);
+      },
+      { shown: idOf(1) },
+    );
+    await screen.findByText('First question');
+    await answerATurn(session);
+    await waitFor(() => expect(reads).toBe(5), { timeout: 8000 });
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(reads).toBe(5);
+    expect(screen.getByText('First question')).toBeTruthy();
+  }, 15000);
 
   it('reads the list again when Clear chat is confirmed, and the chat leaves the column', async () => {
     let rows: Row[] = [chat(1)];
@@ -334,5 +376,162 @@ describe('the chat list column follows the thread', () => {
     rows = [chat(1)];
     await act(async () => void window.dispatchEvent(new Event('focus')));
     await waitFor(() => expect(screen.queryByText('Chat title 2')).toBeNull());
+  });
+});
+
+describe('the chat list column: sentences, waiting, focus, lists and the search', () => {
+  it('gives each group a named list of its rows, so a screen reader hears the group and the count', async () => {
+    setup(async () => page([chat(1), chat(2), chat(3, { lastQuestionAt: '2026-11-20T09:00:00.000Z' })]));
+    const lists = await screen.findAllByRole('list', { name: /Today|Previous 7 days/ });
+    expect(lists.map((list) => list.getAttribute('aria-labelledby'))).toEqual(['chat-list-heading-today', 'chat-list-heading-previous7']);
+    expect(within(lists[0] as HTMLElement).getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByRole('list', { name: 'Previous 7 days' })).toBeTruthy();
+  });
+
+  it('says what went wrong in the product sentence, never the code, and offers Try again for a failure that can be tried again', async () => {
+    setup(async () => ({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('The server could not be reached.');
+    expect(screen.queryByText(/NETWORK_UNAVAILABLE/)).toBeNull();
+    expect(screen.getByRole('button', { name: CHAT_LIST_COPY.retryLabel })).toBeTruthy();
+  });
+
+  it('gives up a read that is not answered in time: the failure with Try again, and the late answer is dropped', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let late: (value: ApiResult<AssistantThreadListResponse>) => void = () => undefined;
+      let hang = true;
+      setup((query, signal) => (hang ? new Promise((resolve) => { late = resolve; signal?.addEventListener('abort', () => undefined); }) : Promise.resolve(page([chat(2)]))));
+      expect(screen.getByRole('status').textContent).toBe(CHAT_LIST_COPY.loading);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(15_100)));
+      expect(screen.getByRole('alert').textContent).toBe('The server could not be reached.');
+      await act(async () => late(page([chat(1)])));
+      expect(screen.queryByText('Chat title 1')).toBeNull();
+      hang = false;
+      await act(async () => void screen.getByRole('button', { name: CHAT_LIST_COPY.retryLabel }).click());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+      expect(screen.getByText('Chat title 2')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('moves the focus to the first new row after Show more, for the keyboard and for the pointer', async () => {
+    setup(async (query) => (query.cursor === undefined ? page([chat(1), chat(2)], 'c1') : page([chat(3, { lastQuestionAt: '2026-11-20T09:00:00.000Z' }), chat(4, { lastQuestionAt: '2026-11-19T09:00:00.000Z' })])));
+    const button = await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore });
+    button.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: /Chat title 3/ })));
+  });
+
+  it('moves the focus to the first new row after a click on Show more too', async () => {
+    setup(async (query) => (query.cursor === undefined ? page([chat(1)], 'c1') : page([chat(2, { lastQuestionAt: '2026-11-20T09:00:00.000Z' })])));
+    await userEvent.click(await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: /Chat title 2/ })));
+  });
+
+  it('keeps the chats that were loaded by Show more when a search is cleared', async () => {
+    const { asked } = setup(async (query) => (query.q !== undefined ? page([chat(1)]) : query.cursor === undefined ? page([chat(1), chat(2)], 'c1') : page([chat(3, { lastQuestionAt: '2026-11-20T09:00:00.000Z' })])));
+    await userEvent.click(await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore }));
+    await screen.findByText('Chat title 3');
+    await userEvent.type(screen.getByRole('searchbox'), 'ab');
+    await waitFor(() => expect(rowsShown()).toHaveLength(1));
+    await userEvent.clear(screen.getByRole('searchbox'));
+    await waitFor(() => expect(rowsShown()).toHaveLength(3));
+    expect(screen.queryByRole('button', { name: CHAT_LIST_COPY.showMore })).toBeNull();
+    expect(asked.some((query) => query.q === undefined && query.cursor === 'c1')).toBe(true);
+  });
+
+  it('reads the list again when the pointer enters it a while after the last read, with no window event', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      let rows: Row[] = [chat(1)];
+      setup(async () => page(rows));
+      await screen.findByText('Chat title 1');
+      rows = [chat(1), chat(2)];
+      await userEvent.hover(screen.getByRole('link', { name: /Chat title 1/ }));
+      expect(screen.queryByText('Chat title 2')).toBeNull();
+      vi.setSystemTime(Date.now() + 4000);
+      await userEvent.unhover(screen.getByRole('link', { name: /Chat title 1/ }));
+      await userEvent.hover(screen.getByRole('link', { name: /Chat title 1/ }));
+      await screen.findByText('Chat title 2');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('the chat list column: no read that nobody asked for', () => {
+  it('reads the list once for a chat that is opened with turns already settled in the session', async () => {
+    let reads = 0;
+    const { session } = setup(async () => (reads += 1, page([chat(1)])), { shown: idOf(1) });
+    await screen.findByText('Chat title 1');
+    await act(async () => session.store.setState({ ...session.store.getState(), turns: [1, 2, 3].map((id) => ({ id, message: 'x', outcome: { kind: 'cancelled' as const } })) }));
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    expect(reads).toBe(1);
+  });
+
+  it('reads no more when the focus moves between rows, and reads again when the focus comes in from outside', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { asked } = setup(async () => page([chat(1), chat(2)]));
+      await screen.findByText('Chat title 2');
+      vi.setSystemTime(Date.now() + 4000);
+      screen.getByRole('link', { name: /Chat title 1/ }).focus();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const afterEntry = asked.length;
+      expect(afterEntry).toBe(2);
+      vi.setSystemTime(Date.now() + 4000);
+      await userEvent.keyboard('{ArrowDown}');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(asked.length).toBe(afterEntry);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not read again by itself while the list is in the failed state, and Try again is the way back', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { asked } = setup(async () => ({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }));
+      await screen.findByRole('alert');
+      const before = asked.length;
+      vi.setSystemTime(Date.now() + 4000);
+      await userEvent.hover(screen.getByRole('button', { name: CHAT_LIST_COPY.retryLabel }));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(asked.length).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('moves no focus after a failed Show more and a later read', async () => {
+    let failMore = true;
+    setup(async (query) => (query.cursor === undefined ? page([chat(1)], 'c1') : failMore ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : page([chat(2, { lastQuestionAt: '2026-11-20T09:00:00.000Z' })])));
+    await userEvent.click(await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore }));
+    await screen.findByRole('alert');
+    failMore = false;
+    (document.activeElement as HTMLElement | null)?.blur();
+    await act(async () => void window.dispatchEvent(new Event('focus')));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect((document.activeElement as HTMLElement | null)?.classList.contains('chat-list-row') ?? false).toBe(false);
+  });
+
+  it('cannot give up a read after a newer read has started, and drops the older read when a newer one answers', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let calls = 0;
+      setup((query, signal) => (++calls === 1 ? new Promise(() => signal?.addEventListener('abort', () => undefined)) : Promise.resolve(page([chat(1)]))));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+      await act(async () => void window.dispatchEvent(new Event('focus')));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
+      expect(screen.getByText('Chat title 1')).toBeTruthy();
+      await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.getByText('Chat title 1')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

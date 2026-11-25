@@ -1,15 +1,17 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
-import { canRetry, FailureNotice } from '../../failure-notice.js';
 import { REMOVED_CHIP, REPOINTED_CHIP } from '../../lifecycle/copy.js';
+import { failureWords } from '../../patterns/failure-words.js';
 import { SEARCH_DEBOUNCE_MS } from '../../patterns/start-entity.js';
 import { ASSISTANT_PATH } from '../../shell/navigation.js';
 import { useClientState } from '../../state/context.js';
 import { useStoreSelector } from '../../state/store.js';
+import { cuts } from '../cut-text.js';
 import { useAssistantSession } from '../assistant-session.js';
 import { groupChats } from './chat-groups.js';
 import { CHAT_LIST_COPY } from './copy.js';
-import { useChatList, type ChatRow } from './use-chat-list.js';
+import { useChatList, type ChatListState, type ChatRow } from './use-chat-list.js';
 
 /** The window in which a second sign that the window was shown does not read the list again. */
 const SHOWN_COALESCE_MS = 400;
@@ -26,12 +28,48 @@ export interface ChatListColumnProps {
   readonly now?: (() => Date) | undefined;
 }
 
-function Row({ row, selected }: { readonly row: ChatRow; readonly selected: boolean }) {
+/** The full title and question of a row whose text is cut, drawn under it while the pointer is on it or it has the keyboard focus. */
+interface RowTip {
+  readonly text: string;
+  readonly left: number;
+  readonly top: number;
+  readonly above: boolean;
+  readonly byFocus: boolean;
+  /** The address of the row it belongs to: the tip goes when that row does. */
+  readonly href: string | null;
+}
+
+/** The room a tip needs under a row, in pixels, before it is drawn above the row. */
+const TIP_ROOM = 120;
+/** The gap between a row and its tip, in pixels. */
+const TIP_GAP = 4;
+
+/** The tip of a row, if its title or its question is cut: both texts in full. */
+function tipOf(link: HTMLElement, byFocus: boolean): RowTip | undefined {
+  const name = link.querySelector('.chat-list-row-name');
+  const question = link.querySelector('.chat-list-row-question');
+  const cut = [name, question].some((clip) => clip !== null && cuts(clip));
+  if (!cut) return undefined;
+  const box = link.getBoundingClientRect();
+  const above = box.bottom + TIP_ROOM > window.innerHeight;
+  const text = [name?.textContent ?? '', question?.textContent ?? ''].filter((part) => part !== '').join('\n');
+  return { text, left: box.left, top: above ? box.top - TIP_GAP : box.bottom + TIP_GAP, above, byFocus, href: link.getAttribute('href') };
+}
+
+function Row({ row, selected, onTip }: { readonly row: ChatRow; readonly selected: boolean; readonly onTip: (tip: RowTip | undefined) => void }) {
   const chip = row.sourceState === 'removed' ? REMOVED_CHIP : row.sourceState === 'repointed' ? REPOINTED_CHIP : undefined;
   const second = row.turns === 0 ? CHAT_LIST_COPY.noQuestions : (row.lastQuestion ?? '');
   return (
     <li>
-      <Link className={selected ? 'chat-list-row chat-list-row-selected' : 'chat-list-row'} to={`${ASSISTANT_PATH}/${encodeURIComponent(row.investigationId)}`} aria-current={selected ? 'true' : undefined}>
+      <Link
+        className={selected ? 'chat-list-row chat-list-row-selected' : 'chat-list-row'}
+        to={`${ASSISTANT_PATH}/${encodeURIComponent(row.investigationId)}`}
+        aria-current={selected ? 'true' : undefined}
+        onMouseEnter={(event) => onTip(tipOf(event.currentTarget, false))}
+        onMouseLeave={() => onTip(undefined)}
+        onFocus={(event) => onTip(tipOf(event.currentTarget, true))}
+        onBlur={() => onTip(undefined)}
+      >
         <span className="chat-list-row-title">
           <span className="chat-list-row-name">{row.title}</span>
           {chip === undefined ? null : <span className="chat-list-chip">{chip}</span>}
@@ -42,17 +80,47 @@ function Row({ row, selected }: { readonly row: ChatRow; readonly selected: bool
   );
 }
 
+/** A failure of the list in the product's words, with Try again when trying again can help. */
+function ListFailure({ failure, onRetry }: { readonly failure: NonNullable<ChatListState['firstFailure']>; readonly onRetry?: (() => void) | undefined }) {
+  const words = failureWords(failure, '');
+  return (
+    <div role="group" className="chat-list-failure">
+      <p role="alert">
+        {words.text}
+        {'traceId' in failure ? ` · trace ${failure.traceId}` : ''}
+      </p>
+      {onRetry !== undefined && words.action === 'try-again' ? (
+        <button type="button" className="chat-list-link" aria-label={CHAT_LIST_COPY.retryLabel} onClick={onRetry}>
+          {CHAT_LIST_COPY.retry}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /** The column of the chats of the person on the Assistant page: New chat, the search, the chats by the date of their last question, and the footnote. */
 export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }: ChatListColumnProps) {
   const state = useClientState();
   const session = useAssistantSession();
   const shownId = useStoreSelector(state.investigation, (investigation) => investigation.id);
-  const settled = useStoreSelector(session.store, (held) => held.turns.filter((turn) => turn.outcome.kind !== 'pending').length);
   const epoch = useStoreSelector(session.store, (held) => held.epoch);
   const [text, setText] = useState('');
   const [query, setQuery] = useState<string | undefined>(undefined);
   const body = useRef<HTMLDivElement | null>(null);
-  const { state: chats, reload, loadMore } = useChatList(query, `${settled}:${epoch}`);
+  const { state: chats, reload, turnAnswered, refreshIfOld, loadMore } = useChatList(query, epoch);
+  const [tip, setTip] = useState<RowTip | undefined>(undefined);
+  const added = useRef<{ readonly before: ReadonlySet<string>; readonly byKeyboard: boolean } | undefined>(undefined);
+  // a turn this page sent that goes from pending to settled: the chat has a new question the list must show (a thread that is opened or loaded settles no turn of its own)
+  const progress = useStoreSelector(session.store, (held) => held.turns.map((turn) => `${turn.id}:${turn.outcome.kind === 'pending' ? 'p' : 's'}`).join(','));
+  const pendingBefore = useRef<{ readonly shown: string | null; readonly pending: ReadonlySet<string> }>({ shown: shownId, pending: new Set() });
+  useEffect(() => {
+    const entries = progress === '' ? [] : progress.split(',');
+    const pending = new Set(entries.filter((entry) => entry.endsWith(':p')).map((entry) => entry.slice(0, -2)));
+    const before = pendingBefore.current;
+    const answered = before.shown === shownId && entries.some((entry) => entry.endsWith(':s') && before.pending.has(entry.slice(0, -2)));
+    pendingBefore.current = { shown: shownId, pending };
+    if (answered) turnAnswered(shownId);
+  }, [progress, shownId, turnAnswered]);
 
   useEffect(() => {
     const trimmed = text.trim();
@@ -79,6 +147,48 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
     };
   }, [reload]);
 
+  // a tip of a row that is no longer in the list (a search narrowed it, a read dropped the chat) goes with it
+  useEffect(() => {
+    if (tip === undefined) return;
+    const links = [...(body.current?.querySelectorAll<HTMLAnchorElement>('.chat-list-row') ?? [])];
+    if (!links.some((link) => link.getAttribute('href') === tip.href)) setTip(undefined);
+  }, [tip, chats.rows, query]);
+
+  useEffect(() => {
+    if (tip === undefined) return undefined;
+    const hide = (): void => setTip(undefined);
+    // Esc takes the tip away and goes no further when the keyboard opened it
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      if (tip.byFocus) event.stopPropagation();
+      hide();
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', hide);
+    window.addEventListener('scroll', hide, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', hide);
+      window.removeEventListener('scroll', hide, true);
+    };
+  }, [tip]);
+
+  // after Show more the button is gone: focus goes to the first row that was not there before (the page stays where it is for a pointer)
+  useLayoutEffect(() => {
+    const wait = added.current;
+    if (chats.more === 'failed' || chats.first === 'loading') added.current = undefined;
+    if (wait === undefined || chats.more !== 'idle' || chats.first === 'loading') return;
+    added.current = undefined;
+    const fresh = chats.rows.find((row) => !wait.before.has(row.investigationId));
+    if (fresh === undefined) return;
+    const link = [...(body.current?.querySelectorAll<HTMLAnchorElement>('.chat-list-row') ?? [])].find((candidate) => candidate.getAttribute('href') === `${ASSISTANT_PATH}/${encodeURIComponent(fresh.investigationId)}`);
+    link?.focus({ preventScroll: !wait.byKeyboard });
+  }, [chats.rows, chats.more, chats.first]);
+  const showMore = (event: MouseEvent<HTMLButtonElement>): void => {
+    added.current = { before: new Set(chats.rows.map((row) => row.investigationId)), byKeyboard: event.detail === 0 };
+    loadMore();
+  };
+
   const groups = groupChats(chats.rows, now());
   const arrows = (event: KeyboardEvent<HTMLElement>): void => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
@@ -94,7 +204,7 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
   const empty = chats.first === 'ready' && chats.rows.length === 0;
 
   return (
-    <aside className="chat-list" aria-label={CHAT_LIST_COPY.label}>
+    <aside className="chat-list" aria-label={CHAT_LIST_COPY.label} onPointerEnter={refreshIfOld} onFocusCapture={(event) => (event.currentTarget.contains(event.relatedTarget as Node | null) ? undefined : refreshIfOld())}>
       <button ref={newChatRef} type="button" className="assistant-page-button chat-list-new" disabled={onNewChat === undefined} onClick={onNewChat}>
         <span className="icon icon-plus" aria-hidden="true" />
         {CHAT_LIST_COPY.newChat}
@@ -121,25 +231,16 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
             {CHAT_LIST_COPY.loading}
           </p>
         ) : null}
-        {chats.first === 'failed' ? (
-          <div role="group" className="chat-list-failure">
-            <FailureNotice failure={chats.firstFailure ?? { code: 'UNEXPECTED_FAILURE' }} />
-            {chats.firstFailure === undefined || canRetry(chats.firstFailure) ? (
-              <button type="button" className="chat-list-link" aria-label={CHAT_LIST_COPY.retryLabel} onClick={reload}>
-                {CHAT_LIST_COPY.retry}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+        {chats.first === 'failed' ? <ListFailure failure={chats.firstFailure ?? { code: 'UNEXPECTED_FAILURE' }} onRetry={reload} /> : null}
         {groups.map((grouped) => (
-          <section key={grouped.group} className="chat-list-group" aria-label={CHAT_LIST_COPY.groups[grouped.group]}>
-            <h2>{CHAT_LIST_COPY.groups[grouped.group]}</h2>
-            <ul>
+          <div key={grouped.group} className="chat-list-group">
+            <h2 id={`chat-list-heading-${grouped.group}`}>{CHAT_LIST_COPY.groups[grouped.group]}</h2>
+            <ul role="list" aria-labelledby={`chat-list-heading-${grouped.group}`}>
               {grouped.rows.map((row) => (
-                <Row key={row.investigationId} row={row} selected={row.investigationId === shownId} />
+                <Row key={row.investigationId} row={row} selected={row.investigationId === shownId} onTip={setTip} />
               ))}
             </ul>
-          </section>
+          </div>
         ))}
         {empty && chats.nextCursor === null ? (
           <p className="chat-list-note">{searching ? CHAT_LIST_COPY.noMatch : CHAT_LIST_COPY.empty}</p>
@@ -147,14 +248,22 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
         {chats.nextCursor !== null && chats.first !== 'loading' ? (
           <div className="chat-list-more">
             {chats.rows.length === 0 ? <p className="chat-list-note">{CHAT_LIST_COPY.moreMayExist}</p> : null}
-            {chats.more === 'failed' && chats.moreFailure !== undefined ? <FailureNotice failure={chats.moreFailure} /> : null}
-            <button type="button" className="chat-list-link" disabled={chats.more === 'loading'} onClick={loadMore}>
+            {chats.more === 'failed' && chats.moreFailure !== undefined ? <ListFailure failure={chats.moreFailure} /> : null}
+            <button type="button" className="chat-list-link" disabled={chats.more === 'loading'} onClick={showMore}>
               {chats.more === 'loading' ? CHAT_LIST_COPY.loadingMore : CHAT_LIST_COPY.showMore}
             </button>
           </div>
         ) : null}
       </div>
       <p className="chat-list-note chat-list-foot">{CHAT_LIST_COPY.note}</p>
+      {tip === undefined
+        ? null
+        : createPortal(
+            <div className={`assistant-table-tip${tip.above ? ' assistant-table-tip-above' : ''}`} style={{ left: tip.left, top: tip.top }} aria-hidden="true">
+              {tip.text}
+            </div>,
+            document.body,
+          )}
     </aside>
   );
 }
