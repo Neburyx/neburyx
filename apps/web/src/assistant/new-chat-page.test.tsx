@@ -78,6 +78,19 @@ describe('the picker of a new chat on the Assistant page', () => {
     expect(screen.getByRole('button', { name: CHAT_LIST_COPY.newChat })).toBe(document.activeElement);
   });
 
+  it('marks the button as the opener of a dialog, closed, as soon as the page is ready, and again for the column of the next investigation', async () => {
+    const h = setup([]);
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    const button = screen.getByRole('button', { name: CHAT_LIST_COPY.newChat });
+    expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    await h.router.navigate(`/assistant/${INVESTIGATION_B}`);
+    await screen.findByText(ASSISTANT_COPY.sourceChanged);
+    const next = screen.getByRole('button', { name: CHAT_LIST_COPY.newChat });
+    expect(next.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(next.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('closes when New chat is pressed again, and when the page goes to another investigation', async () => {
     setup([]);
     await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });

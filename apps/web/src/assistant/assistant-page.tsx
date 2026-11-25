@@ -62,7 +62,7 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
   const [picking, setPicking] = useState(false);
   // the picker belongs to the investigation the page is on: another one closes it
   useEffect(() => setPicking(false), [investigationId]);
-  // the button is the column's: the picker says on it that it is open (the frame draws the open state), without a change of the column
+  // the button is the column's: the picker says on it whether it is open (the frame draws the open state), without a change of the column. It is drawn only once the page is ready, and again with each investigation, so this runs after every render.
   useEffect(() => {
     const button = newChat.current;
     if (button === null) return undefined;
@@ -72,7 +72,7 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
       button.removeAttribute('aria-expanded');
       button.removeAttribute('aria-haspopup');
     };
-  }, [picking]);
+  });
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT}>{status.sourceId === undefined ? null : <AttemptedSource sourceId={status.sourceId} />}</Message>;
   const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
   if (failure !== undefined) {
