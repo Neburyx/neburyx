@@ -63,3 +63,20 @@ export async function rereadThread(session: AssistantSession, read: (signal: Abo
   const taken = takeRead(session, result.value);
   if (taken.show && taken.replaces) session.stored.setState({ kind: 'ready', thread: taken.thread });
 }
+
+/**
+ * Reads the thread again for a panel that comes back after the page of the chat was open in another window, and shows what the server holds: the turns made there are in it, which `rereadThread` does not show when no clearing has happened. The live turns of this window stay as they are and are not listed twice. A read that fails, or is from before a clearing this session has heard of, changes nothing.
+ */
+export async function reloadThread(session: AssistantSession, read: (signal: AbortSignal) => Promise<{ readonly ok: true; readonly value: AssistantThreadResponse } | { readonly ok: false }>): Promise<void> {
+  const controller = new AbortController();
+  const epoch = session.store.getState().epoch;
+  session.open.add(controller);
+  const result = await read(controller.signal);
+  session.open.delete(controller);
+  if (controller.signal.aborted || session.store.getState().epoch !== epoch || !result.ok) return;
+  const taken = takeRead(session, result.value);
+  if (!taken.show) return;
+  const live = new Set(session.store.getState().turns.flatMap((turn) => turn.turnIds ?? []));
+  session.stored.setState({ kind: 'ready', thread: { ...taken.thread, turns: taken.thread.turns.filter((turn) => !live.has(turn.id)) } });
+}
+

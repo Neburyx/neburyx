@@ -19,22 +19,22 @@ export interface WindowChannel {
   /** Sends the keys of the selected elements to the other windows of the scope: keys, never content. Returns the id of the request, which an answer carries back; `undefined` where the channel is unavailable or the keys are not valid (1 to 100 keys, each non-empty text of at most 200 characters), when nothing is sent. */
   sendSelection(keys: readonly string[]): string | undefined;
   /** Hears the selections of other windows of the scope; the returned function stops listening. */
-  onSelection(listener: (request: SelectionRequest) => void): () => void;
+  onSelection(listener: (request: WindowSelection) => void): () => void;
   /** Answers a selection: which of its keys the window has on its canvas (0 to 100 keys). Nothing is sent where the request id or a key is not valid. */
   sendSelectionResult(requestId: string, onCanvas: readonly string[]): void;
   /** Hears the answers to the selections this window sent, each of a window that answered within `ANSWER_WAIT_MS` of the selection: one answer of a window to a request counts, a late, repeated or unknown answer is dropped, and `onCanvas` holds only keys that were selected. With several answering windows the listener is called once for each; the keys on the canvas are the union of what they report, so a window that does not have a key never hides another's. A selection nobody answers in that time is never answered: no highlight is to be claimed. */
-  onSelectionResult(listener: (result: SelectionResult) => void): () => void;
+  onSelectionResult(listener: (result: WindowSelectionResult) => void): () => void;
   close(): void;
 }
 
 /** @public: the selection across windows builds on it. */
-export interface SelectionRequest {
+export interface WindowSelection {
   readonly requestId: string;
   readonly keys: readonly string[];
 }
 
 /** @public: the selection across windows builds on it. */
-export interface SelectionResult {
+export interface WindowSelectionResult {
   readonly requestId: string;
   readonly onCanvas: readonly string[];
 }
@@ -141,8 +141,8 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
   const others = createStore<ReadonlySet<WindowRole>>(NO_ROLES);
   const heard = new Map<string, Map<WindowRole, number>>();
   const mine = new Map<WindowRole, number>();
-  const listeners = new Set<(request: SelectionRequest) => void>();
-  const resultListeners = new Set<(result: SelectionResult) => void>();
+  const listeners = new Set<(request: WindowSelection) => void>();
+  const resultListeners = new Set<(result: WindowSelectionResult) => void>();
   let closed = false;
   let requests = 0;
   const pending = new Map<string, { readonly keys: readonly string[]; readonly until: number; readonly answered: Set<string> }>();

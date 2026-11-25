@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApiClient } from '../api/client-context.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
@@ -10,6 +10,8 @@ import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, word
 import { MaskingCard, NewThreadCard, StandingNote } from './thread-notices.js';
 import { StoredTurns } from './stored-turns.js';
 import { useAssistantSession } from './assistant-session.js';
+import { reloadThread } from './thread-reconcile.js';
+import { PoppedOutNote } from './popped-out-note.js';
 import { NO_STORED_THREAD } from './stored-thread-state.js';
 import { boundElementsOf } from './stored-answer.js';
 import { useOpenAtEnd } from './open-at-end.js';
@@ -133,6 +135,10 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const [popOutRefused, setPopOutRefused] = useState(false);
   const otherWindows = useOtherWindowRoles();
   const pageElsewhere = otherWindows.has('assistant');
+  const [showHere, setShowHere] = useState(false);
+  const collapsed = !page && pageElsewhere && !showHere;
+  const wasCollapsed = useRef(false);
+  const focusLost = useRef(false);
   const clearButton = useRef<HTMLButtonElement>(null);
   const off = stored.kind === 'off';
   const available = availability === 'available' && !off;
@@ -169,6 +175,26 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
     if (investigationId === null) return;
     setPopOutRefused(popOut(investigationId, { open: (url, name) => window.open(url, name), pageOpenElsewhere: () => pageElsewhere }) === 'refused');
   };
+  const noteLostFocus = useCallback(() => {
+    focusLost.current = true;
+  }, []);
+  useEffect(() => {
+    if (!pageElsewhere) setShowHere(false);
+  }, [pageElsewhere]);
+  // the thread is read again when the body comes back, so that the turns made in the other window are in it
+  useEffect(() => {
+    if (collapsed) {
+      wasCollapsed.current = true;
+      return;
+    }
+    if (!wasCollapsed.current) return;
+    wasCollapsed.current = false;
+    if (investigationId !== null && session.stored.getState().kind === 'ready') void reloadThread(session, (signal) => client.assistantThread(investigationId, session.store.getState().mask, signal));
+    if (focusLost.current) {
+      focusLost.current = false;
+      focusInside(field.current, null);
+    }
+  }, [client, collapsed, investigationId, session]);
   const askToClear = (): void => {
     if (investigationId !== null && principalId !== undefined) setConfirming({ investigationId, principalId, epoch: session.store.getState().epoch });
   };
@@ -216,6 +242,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   return (
     <div
       className={page ? 'ask-panel assistant-panel assistant-surface-page' : 'ask-panel assistant-panel'}
+      data-popped-out={collapsed ? 'true' : undefined}
       onKeyDown={(event) => {
         if (page || event.key !== 'Escape') return;
         event.preventDefault();
@@ -232,7 +259,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
           </div>
           <WideButton />
           <PopOutButton pressed={pageElsewhere} onPress={pressPopOut} />
-          {hasThread ? (
+          {hasThread && !collapsed ? (
             <button ref={clearButton} type="button" className="assistant-clear" aria-label={ASSISTANT_COPY.clearChat} data-tip={ASSISTANT_COPY.clearChat} disabled={pending} onClick={askToClear}>
               <TrashIcon />
             </button>
@@ -247,7 +274,8 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
         {clearedNote ? ASSISTANT_COPY.cleared : announced}
       </p>
       {confirming === undefined ? null : <ClearChatDialog send={() => client.clearAssistantThread(confirming.investigationId)} onCleared={() => cleared(confirming)} onClose={closeConfirm} />}
-      <div className="ask-body assistant-body" ref={body}>
+      {collapsed ? <PoppedOutNote onShow={() => setShowHere(true)} onFocusLost={noteLostFocus} /> : null}
+      <div className="ask-body assistant-body" ref={body} hidden={collapsed}>
         {unavailable ? <NotAvailable /> : showNewThread ? <NewThreadCard /> : null}
         {!unavailable && stored.kind === 'loading' ? <p className="ask-note" role="status">{ASSISTANT_COPY.storedLoading}</p> : null}
         {!unavailable && stored.kind === 'failed' ? (
@@ -273,6 +301,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
         {model.viewTooLarge || notice?.kind === 'view-too-large' ? <p className="ask-note" role="alert">{ASSISTANT_COPY.viewTooLarge}</p> : null}
       </div>
       <form
+        hidden={collapsed}
         className="ask-form"
         onSubmit={(event) => {
           event.preventDefault();

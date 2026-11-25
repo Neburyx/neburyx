@@ -272,6 +272,8 @@
   --color-tooltip-dark-text: #dfe3ee;
   --shadow-tooltip-dark: 0 4px 12px rgba(0, 0, 0, 0.18);
   --assistant-popout-tip-top: 47px;
+  --color-assistant-note-border: #cad0da;
+  --line-height-note: 17px;
   --color-clear-note: #646d80;
   --color-danger-action: #b82626;
   --shadow-dialog: 0 12px 16px rgba(0, 0, 0, 0.2);

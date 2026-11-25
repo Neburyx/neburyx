@@ -5,7 +5,7 @@ import type { ApiResult } from '../api/client.js';
 import { createAssistantSession, type Turn } from './assistant-session.js';
 import { harness, REFUSE, typeAndSend } from './assistant-kit.js';
 import { ASSISTANT_COPY } from './copy.js';
-import { takeRead, turnsAfterRead } from './thread-reconcile.js';
+import { reloadThread, takeRead, turnsAfterRead } from './thread-reconcile.js';
 
 afterEach(cleanup);
 
@@ -259,5 +259,35 @@ describe('the counts across a change of person, a first read and a header', () =
     await waitFor(() => expect(h.session.store.getState().turns[0]?.unverified).toBe(true));
     await act(async () => gate.resolve(ok(REFUSE)));
     await waitFor(() => expect(h.session.store.getState().turns).toEqual([]));
+  });
+});
+
+describe('the thread read again for a panel that comes back', () => {
+  const two = (epoch: number): AssistantThreadResponse => ({ ...stored(epoch), turns: [...stored(epoch).turns, { ...(stored(epoch).turns[0] as AssistantThreadResponse['turns'][number]), id: '0192f000-0000-7000-8000-0000000000bb', seq: 2 }] });
+
+  it('shows the turns the server holds, at the same count, without listing a live turn of this window twice', async () => {
+    const session = createAssistantSession(null);
+    session.known.epoch = 0;
+    session.known.seen = 0;
+    session.stored.setState({ kind: 'ready', thread: stored(0) });
+    session.store.setState({ ...session.store.getState(), turns: [{ ...turnOf(1, { outcome: { kind: 'cancelled' } }), turnIds: [ID] }] });
+    await reloadThread(session, async () => ok(two(0)));
+    const held = session.stored.getState();
+    expect(held.kind === 'ready' ? held.thread.turns.map((turn) => turn.seq) : []).toEqual([2]);
+  });
+
+  it('changes nothing when the read fails, when it is from before a clearing this session has heard of, or when the session moved on while it was out', async () => {
+    const session = createAssistantSession(null);
+    session.known.epoch = 2;
+    session.known.seen = 2;
+    session.stored.setState({ kind: 'ready', thread: stored(2) });
+    const before = session.stored.getState();
+    await reloadThread(session, async () => ({ ok: false }));
+    await reloadThread(session, async () => ok(two(1)));
+    await reloadThread(session, async () => {
+      session.store.setState({ ...session.store.getState(), epoch: session.store.getState().epoch + 1 });
+      return ok(two(2));
+    });
+    expect(session.stored.getState()).toBe(before);
   });
 });
