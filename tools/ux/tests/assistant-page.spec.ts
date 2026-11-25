@@ -148,4 +148,92 @@ test.describe('The Assistant page', () => {
     await expect(page.getByRole('heading', { name: 'Open an investigation first' })).toBeVisible();
     await expect(page.getByLabel('Your message')).toHaveCount(0);
   });
+
+  test('draws the composer where frames 5a, 5a-ii and 5b-2 draw it: a box of 85 px, the note 8 px under it, 20 px above the window bottom, with the thread filling the rest', async ({ page }) => {
+    await routes(page, TABLE);
+    await openPage(page);
+    const height = page.viewportSize()?.height ?? 0;
+    const box = async (selector: string) => {
+      const found = await page.locator(selector).first().boundingBox();
+      if (found === null) throw new Error(`${selector} is not drawn`);
+      return found;
+    };
+    const check = async (): Promise<void> => {
+      const area = await box('.assistant-page-thread');
+      const form = await box('.assistant-surface-page .ask-form');
+      const compose = await box('.assistant-compose');
+      const note = await box('.assistant-page-note');
+      const input = await box('.assistant-compose textarea');
+      const send = await box('.assistant-compose .ask-send');
+      const body = await box('.assistant-surface-page .assistant-body');
+      expect(area.y + area.height).toBe(height);
+      expect(form.y).toBeCloseTo(height - 136, 0);
+      expect(compose.height).toBeCloseTo(85, 0);
+      expect(compose.y).toBeCloseTo(height - 128, 0);
+      expect(compose.width).toBe(720);
+      expect(compose.x - area.x).toBeCloseTo((area.width - 720) / 2, 0);
+      expect(input.height).toBeCloseTo(17, 0);
+      expect(send.height).toBeCloseTo(34, 0);
+      expect(note.y - (compose.y + compose.height)).toBeCloseTo(8, 0);
+      expect(note.height).toBeCloseTo(15, 0);
+      expect(height - (note.y + note.height)).toBeCloseTo(20, 0);
+      expect(body.y + body.height).toBeLessThanOrEqual(form.y + 0.5);
+    };
+    await check();
+    const look = await page.evaluate(() => {
+      const style = (selector: string) => getComputedStyle(document.querySelector(selector) as Element);
+      return {
+        border: style('.assistant-compose').borderTopColor,
+        input: style('.assistant-compose textarea').fontSize,
+        counter: style('.assistant-compose .ask-counter').color,
+        note: style('.assistant-page-note').color,
+        send: [style('.assistant-compose .ask-send').backgroundColor, style('.assistant-compose .ask-send').borderTopColor, style('.assistant-compose .ask-send').color],
+      };
+    });
+    expect(look).toEqual({ border: 'rgb(202, 208, 218)', input: '14px', counter: 'rgb(100, 109, 128)', note: 'rgb(100, 109, 128)', send: ['rgb(247, 248, 250)', 'rgb(227, 230, 236)', 'rgb(100, 109, 128)'] });
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
+    await check();
+  });
+
+  test('keeps the composer where the frame puts it when the message grows, when Send is enabled, and while a turn runs with Cancel', async ({ page }) => {
+    await routes(page);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route((url) => url.pathname === '/v1/assistant/turns', async (route) => {
+      await held;
+      await route.fulfill({ json: TABLE });
+    });
+    await openPage(page);
+    const height = page.viewportSize()?.height ?? 0;
+    const box = async (selector: string) => {
+      const found = await page.locator(selector).first().boundingBox();
+      if (found === null) throw new Error(`${selector} is not drawn`);
+      return found;
+    };
+    const field = page.getByLabel('Your message');
+    await field.fill(Array.from({ length: 9 }, (_, line) => `line ${line + 1} of a long message`).join('\n'));
+    const grown = await box('.assistant-compose');
+    const input = await box('.assistant-compose textarea');
+    const note = await box('.assistant-page-note');
+    const form = await box('.assistant-surface-page .ask-form');
+    const body = await box('.assistant-surface-page .assistant-body');
+    expect(input.height).toBeLessThanOrEqual(120.5);
+    expect(grown.height).toBeGreaterThan(85);
+    expect(note.y - (grown.y + grown.height)).toBeCloseTo(8, 0);
+    expect(height - (note.y + note.height)).toBeCloseTo(20, 0);
+    expect(body.y + body.height).toBeLessThanOrEqual(form.y + 0.5);
+    const send = page.locator('.assistant-compose .ask-send');
+    expect((await box('.assistant-compose .ask-send')).height).toBeCloseTo(34, 0);
+    expect(await send.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(82, 100, 167)');
+    await field.fill('show them as a table');
+    await page.keyboard.press('Enter');
+    const cancel = page.getByRole('button', { name: 'Cancel' });
+    await expect(cancel).toBeVisible();
+    expect((await box('.assistant-compose .ask-send')).height).toBeCloseTo(34, 0);
+    expect((await box('.assistant-compose')).height).toBeCloseTo(85, 0);
+    release();
+    await expect(page.getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
+  });
 });

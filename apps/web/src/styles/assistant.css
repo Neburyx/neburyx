@@ -1279,6 +1279,7 @@
 
 .assistant-page .assistant-surface-page {
   height: 100%;
+  max-height: none;
   overflow: hidden;
 }
 
@@ -1550,33 +1551,55 @@
   width: 100%;
   max-width: calc(var(--assistant-page-column) + 2 * var(--space-32));
   margin: 0 auto;
-  padding: var(--space-8) var(--space-32) var(--space-16);
+  padding: var(--space-8) var(--space-32) var(--space-20);
   border-top: 0;
+  gap: 0;
 }
 
 .assistant-compose {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-10);
   box-sizing: border-box;
-  padding: var(--space-8) var(--space-16);
-  border: var(--border-width) solid var(--color-control-border);
+  padding: var(--space-12) var(--space-14) var(--space-10);
+  border: var(--border-width) solid var(--assistant-page-compose-border);
   border-radius: var(--radius-panel);
   background: var(--color-surface);
 }
 
 .assistant-surface-page .assistant-compose textarea {
   min-height: var(--assistant-page-input-height);
-  padding: var(--space-4) 0;
+  padding: 0;
+  font-size: var(--assistant-page-input-font);
+  line-height: var(--assistant-page-input-height);
   border: 0;
   background: transparent;
   box-shadow: none;
   resize: none;
 }
 
+.assistant-compose textarea::placeholder,
+.assistant-compose .ask-counter {
+  color: var(--assistant-page-muted);
+}
+
+.assistant-compose .ask-send:disabled {
+  border-color: var(--assistant-page-send-border);
+  background: var(--assistant-page-send-surface);
+  color: var(--assistant-page-muted);
+}
+
+.assistant-compose .ask-send {
+  min-height: var(--assistant-page-send-height);
+  padding: 0 var(--space-12);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+}
+
 .assistant-page-note {
   margin: var(--space-8) 0 0;
-  color: var(--color-text-muted);
+  color: var(--assistant-page-muted);
+  line-height: var(--assistant-page-note-height);
   font-size: var(--font-size-small);
   text-align: center;
 }

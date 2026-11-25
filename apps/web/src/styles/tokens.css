@@ -70,7 +70,14 @@
   --assistant-page-head-height: 64px;
   --assistant-page-column: 720px;
   --assistant-page-button-height: 32px;
-  --assistant-page-input-height: 44px;
+  --assistant-page-input-height: 17px;
+  --assistant-page-send-height: 34px;
+  --assistant-page-note-height: 15px;
+  --assistant-page-input-font: 14px;
+  --assistant-page-muted: var(--chat-list-muted);
+  --assistant-page-compose-border: var(--color-tooltip-border);
+  --assistant-page-send-surface: var(--color-surface-muted);
+  --assistant-page-send-border: var(--chat-list-rule);
   --chat-list-width: 288px;
   --chat-list-surface: #fafbfc;
   --chat-list-rule: #e3e6ec;
