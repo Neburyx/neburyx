@@ -180,7 +180,31 @@ describe('the picker of a new chat: the lookup of the chats that hangs or fails'
     await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.lookupTryAgain }));
     await waitFor(() => expect(within(dialog).getAllByText(NEW_CHAT_COPY.hasChat)).toHaveLength(1));
     expect(within(dialog).queryByText(NEW_CHAT_COPY.lookupFailed)).toBeNull();
+    expect(document.activeElement).toBe(within(dialog).getByRole('combobox'));
     expect(asked).toHaveLength(2);
+  });
+
+  it('drops the late answer of a lookup that was given up: no chip comes from it, the note stays, and the answer of Try again is the one drawn', async () => {
+    const calls: { ids: readonly string[]; resolve: (result: { ok: true; value: { withChat: string[] } }) => void }[] = [];
+    setup(
+      pagedClient(rowsOf(3), [], {
+        lookupAssistantChats: (ids) => new Promise((resolve) => calls.push({ ids, resolve })),
+      }).client,
+    );
+    const dialog = await open();
+    await within(dialog).findAllByRole('option');
+    await wait(READ_WAIT_MS - 500);
+    await wait(1000);
+    expect(await within(dialog).findByText(NEW_CHAT_COPY.lookupFailed)).toBeTruthy();
+    await act(async () => calls[0]?.resolve({ ok: true, value: { withChat: [...(calls[0]?.ids ?? [])] } }));
+    expect(within(dialog).queryByText(NEW_CHAT_COPY.hasChat)).toBeNull();
+    expect(within(dialog).getByText(NEW_CHAT_COPY.lookupFailed)).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.lookupTryAgain }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+    await act(async () => calls[1]?.resolve({ ok: true, value: { withChat: [] } }));
+    await waitFor(() => expect(within(dialog).queryByText(NEW_CHAT_COPY.lookupFailed)).toBeNull());
+    expect(within(dialog).queryByText(NEW_CHAT_COPY.hasChat)).toBeNull();
+    expect(within(dialog).getAllByText(NEW_CHAT_COPY.startChat)).toHaveLength(3);
   });
 
   it('claims nothing and says so when the lookup fails alone, while the list is drawn and a source that is available can be picked', async () => {
@@ -200,6 +224,7 @@ describe('the picker of a new chat: the lookup of the chats that hangs or fails'
     await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.lookupTryAgain }));
     await waitFor(() => expect(within(dialog).getAllByText(NEW_CHAT_COPY.hasChat)).toHaveLength(1));
     expect(within(dialog).queryByText(NEW_CHAT_COPY.lookupFailed)).toBeNull();
+    expect(document.activeElement).toBe(within(dialog).getByRole('combobox'));
   });
 
   it('keeps a removed source that has no chat unpickable once the lookup has answered that it has none', async () => {
