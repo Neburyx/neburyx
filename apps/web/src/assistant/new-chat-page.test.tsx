@@ -184,8 +184,9 @@ describe('a pick of an investigation that has no chat, on the Assistant page', (
     await waitFor(() => expect(rowsOf('kind-a C-2')).toHaveLength(1));
     const [current] = rowsOf('kind-a C-2');
     expect(current?.textContent).toContain(CHAT_LIST_COPY.noQuestions);
-    expect(current?.closest('[aria-current="true"]') ?? current?.getAttribute('aria-current')).toBeTruthy();
+    expect(current?.getAttribute('aria-current')).toBe('true');
     expect(current?.tagName).not.toBe('A');
+    await act(async () => undefined);
     // the landing reads the list, the lookup and the stored thread of the chosen investigation (a read), and writes nothing
     expect(h.calls.slice(before).filter((name) => ![...READS, 'assistantThread'].includes(name))).toEqual([]);
     expect(h.calls.filter((name) => ['assistantTurn', 'clearAssistantThread', 'saveDraft', 'putPreferences', 'openInvestigation', 'deleteInvestigation'].includes(name))).toEqual([]);
