@@ -40,7 +40,7 @@ function mint(sign: (text: string) => string, binding: Binding, position: Thread
   return `${Buffer.from(payload).toString('base64url')}.${sign(payload)}`;
 }
 
-/** The position a cursor holds, or undefined for one that was not made by this application for this caller, this search and this policy version. */
+/** The position a cursor holds, or undefined for one that was not made by this application for this caller and this search. */
 function verify(sign: (text: string) => string, binding: Binding, cursor: string): ThreadListPosition | undefined {
   const [encoded, signature, ...rest] = cursor.split('.');
   if (encoded === undefined || signature === undefined || rest.length > 0) return undefined;

@@ -32,8 +32,9 @@ export interface ExtensionMount {
   /** Reads the elements of a source again for one request with no investigation (Ask's route), bound to its caller, its trace ID and its abort signal; absent, a route that reads them refuses. */
   readonly readSourceElementsFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['readSourceElements'];
   /** Whether the caller still has the investigation of a view and its source, for one request; absent, a route that asks it refuses. */
-  readonly chatInvestigationsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['chatInvestigations'];
   readonly investigationReadableFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['investigationReadable'];
+  /** The investigations of a set of ids that the caller's investigations list shows, as it shows them. */
+  readonly chatInvestigationsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['chatInvestigations'];
   /** The source of the caller's investigation, from its record, for one request; rejects as `NOT_FOUND` for an investigation that is not the caller's; absent, a route that declares an `investigation` refuses. */
   readonly investigationSourceFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ((investigationId: string) => Promise<string>) | undefined;
   /** The AI notes of the caller's own drafts, for one request; absent, a route that stores or reads them refuses. */

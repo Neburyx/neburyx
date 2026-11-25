@@ -301,6 +301,9 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
 
 interface MemoryThread {
   readonly id: string;
+  /** The person and the investigation of the thread, held apart from its turns because a thread may have none yet. */
+  readonly investigationId: string;
+  readonly userId: string;
   readonly turns: AssistantThreadTurnWrite[];
 }
 
@@ -371,7 +374,7 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
       const held = state(checked.investigationId);
       if (!held.open || held.deleted || held.epoch + (personal.get(key(checked.investigationId, checked.userId)) ?? 0) !== epoch) return 'refused';
       const name = key(checked.investigationId, checked.userId);
-      const thread = threads.get(name) ?? { id: randomUUID(), turns: [] };
+      const thread = threads.get(name) ?? { id: randomUUID(), investigationId: turn.investigationId, userId: turn.userId, turns: [] };
       if ([...threads.values()].some((other) => other.turns.some((held) => held.id === checked.id))) return 'duplicate';
       thread.turns.push(checked);
       threads.set(name, thread);
@@ -429,11 +432,10 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
       const keyOf = (at: string): string => `${at.slice(0, -1)}000Z`;
       const rows: ThreadListRow[] = [];
       for (const thread of threads.values()) {
-        const [first] = thread.turns;
-        if (first === undefined || first.userId.toLowerCase() !== userId.toLowerCase()) continue;
-        const last = thread.turns.reduce((newest, turn) => (turn.at.getTime() > newest.getTime() ? turn.at : newest), first.at).toISOString();
+        if (thread.userId.toLowerCase() !== userId.toLowerCase()) continue;
+        const last = thread.turns.reduce<Date | undefined>((newest, turn) => (newest === undefined || turn.at.getTime() > newest.getTime() ? turn.at : newest), undefined) ?? new Date(0);
         const question = [...thread.turns].reverse().find((turn) => turn.question !== undefined)?.question;
-        rows.push({ threadId: thread.id, investigationId: first.investigationId, lastTurnAt: last, key: keyOf(last), turns: thread.turns.length, lastQuestion: question ?? null });
+        rows.push({ threadId: thread.id, investigationId: thread.investigationId, lastTurnAt: last.toISOString(), key: keyOf(last.toISOString()), turns: thread.turns.length, lastQuestion: question ?? null });
       }
       return rows
         .sort((left, right) => (left.key < right.key ? 1 : left.key > right.key ? -1 : left.threadId < right.threadId ? 1 : -1))
