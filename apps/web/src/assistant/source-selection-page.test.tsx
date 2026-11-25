@@ -240,6 +240,18 @@ describe('Select on graph on the Assistant page', () => {
     await waitFor(() => expect(within(row(1)).getByText(ASSISTANT_COPY.highlightedInGraph)).toBeTruthy());
   });
 
+  it('drops the highlight when the window that reported the element closes while another open window reported that it did not hold it, and keeps the header chip of the other', async () => {
+    await page();
+    const holds = graphWindow([KEY_HELD]);
+    graphWindow([]);
+    await waitFor(() => expect(screen.getByText(ASSISTANT_COPY.graphWindowOpen)).toBeTruthy());
+    await userEvent.click(row(1));
+    await waitFor(() => expect(within(row(1)).getByText(ASSISTANT_COPY.highlightedInGraph)).toBeTruthy());
+    holds.channel.close();
+    await waitFor(() => expect(screen.queryByText(ASSISTANT_COPY.highlightedInGraph)).toBeNull());
+    expect(screen.getByText(ASSISTANT_COPY.graphWindowOpen)).toBeTruthy();
+  });
+
   it('sends nothing for an element the investigation does not hold', async () => {
     await page();
     const graph = graphWindow([KEY_HELD]);

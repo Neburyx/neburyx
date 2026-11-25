@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { useStoreSelector } from '../state/store.js';
-import { useOtherWindowRoles, useWindowChannel, useWindowScope } from '../windows/use-window-channel.js';
+import { useWindowChannel, useWindowScope } from '../windows/use-window-channel.js';
 import { createSourceSelection, type RowSelection, type SourceSelection } from './source-selection.js';
 
 interface PageSelection {
@@ -14,8 +14,7 @@ const SelectionContext = createContext<PageSelection | undefined>(undefined);
 /** On the Assistant page the rows of the sources select on a graph window; in the panel, which is in the graph window itself, there is none of this and a row selects on its own canvas. */
 export function SourceSelectionProvider({ openGraph, children }: { readonly openGraph: (key: string) => void; readonly children: ReactNode }) {
   const channel = useWindowChannel(useWindowScope());
-  const roles = useOtherWindowRoles();
-  const graphOpen = roles.has('graph');
+  const windows = useStoreSelector(channel?.openWindows ?? NO_WINDOWS, (current) => current.get('graph') ?? NO_IDS);
   const selection = useMemo(
     () =>
       createSourceSelection({
@@ -27,8 +26,8 @@ export function SourceSelectionProvider({ openGraph, children }: { readonly open
   );
   useEffect(() => () => selection.dispose(), [selection]);
   useEffect(() => {
-    if (!graphOpen) selection.graphClosed();
-  }, [graphOpen, selection]);
+    selection.graphWindowsChanged(windows);
+  }, [windows, selection]);
   const value = useMemo(() => ({ selection, openGraph }), [selection, openGraph]);
   return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;
 }
@@ -45,3 +44,6 @@ export function useRowSelection(): RowSelection | undefined {
 }
 
 const EMPTY = { getState: () => undefined, subscribe: () => () => undefined } as const;
+const NO_IDS: ReadonlySet<string> = new Set();
+const NO_MAP: ReadonlyMap<string, ReadonlySet<string>> = new Map();
+const NO_WINDOWS = { getState: () => NO_MAP, subscribe: () => () => undefined } as const;

@@ -5,7 +5,7 @@ import { PageFrame } from '../shell/page-shell.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 import { useEffect, useState } from 'react';
-import { useClientState, useVisibleGraph } from '../state/context.js';
+import { useClientState, useLoadedGraph, useVisibleGraph } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import { GraphWindowLink } from '../windows/graph-window-link.js';
 import { ASSISTANT_COPY } from '../assistant/copy.js';
@@ -62,10 +62,11 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const restoreAsked = restoreIntentOf(location.state);
   const arrivalKey = selectKeyOf(location.state);
   const arrivalGraph = useVisibleGraph();
+  const loadedGraph = useLoadedGraph();
   const [arrivalMissing, setArrivalMissing] = useState<{ readonly investigationId: string; readonly key: string } | undefined>(undefined);
   const { status, again } = useOpenInvestigation(client, investigationId, principalId);
   const onScreen = useStoreSelector(state.investigation, (held) => held);
-  const graphReady = arrivalGraph.nodes.length > 0 || onScreen.nodeRefs.length === 0;
+  const graphReady = loadedGraph.nodes.length > 0 || onScreen.nodeRefs.length === 0;
   useEffect(() => {
     if (arrivalKey === undefined || status.kind !== 'ready' || onScreen.id !== investigationId || investigationId === undefined || !graphReady) return;
     if (drawnKeys(arrivalGraph).has(arrivalKey)) state.presentation.select([arrivalKey]);

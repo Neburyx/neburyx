@@ -9,7 +9,7 @@ function setup(open = true) {
   const sent: string[] = [];
   let counter = 0;
   let open_ = open;
-  let listener: ((answer: { readonly requestId: string; readonly onCanvas: readonly string[] }) => void) | undefined;
+  let listener: ((answer: { readonly requestId: string; readonly windowId: string; readonly onCanvas: readonly string[] }) => void) | undefined;
   const link: SelectionLink = {
     graphOpen: () => open_,
     send: (key) => {
@@ -25,8 +25,49 @@ function setup(open = true) {
     },
   };
   const selection = createSourceSelection(link);
-  return { selection, sent, answer: (requestId: string, onCanvas: string[]) => listener?.({ requestId, onCanvas }), setOpen: (value: boolean) => (open_ = value) };
+  return { selection, sent, answer: (requestId: string, onCanvas: string[], windowId = 'w1') => listener?.({ requestId, windowId, onCanvas }), setOpen: (value: boolean) => (open_ = value) };
 }
+
+describe('the claim of a highlight when graph windows close', () => {
+  const highlighted = (reports: readonly (readonly [string, boolean])[]) => {
+    const h = setup();
+    h.selection.graphWindowsChanged(new Set(reports.map(([id]) => id)));
+    h.selection.select('k1');
+    for (const [id, has] of reports) h.answer('r1', has ? ['k1'] : [], id);
+    return h;
+  };
+
+  it('goes when the window that reported the element closes and another open window never reported', () => {
+    const h = setup();
+    h.selection.graphWindowsChanged(new Set(['a', 'b']));
+    h.selection.select('k1');
+    h.answer('r1', ['k1'], 'a');
+    expect(h.selection.state.getState()?.phase).toBe('highlighted');
+    h.selection.graphWindowsChanged(new Set(['b']));
+    expect(h.selection.state.getState()).toBeUndefined();
+  });
+
+  it('goes when the window that reported the element closes and the other open window reported that it was not on its canvas', () => {
+    const h = highlighted([['a', true], ['b', false]]);
+    expect(h.selection.state.getState()?.phase).toBe('highlighted');
+    h.selection.graphWindowsChanged(new Set(['b']));
+    expect(h.selection.state.getState()).toBeUndefined();
+  });
+
+  it('stays while another open window also reported the element, and goes when the last such window closes', () => {
+    const h = highlighted([['a', true], ['b', true]]);
+    h.selection.graphWindowsChanged(new Set(['b']));
+    expect(h.selection.state.getState()?.phase).toBe('highlighted');
+    h.selection.graphWindowsChanged(new Set());
+    expect(h.selection.state.getState()).toBeUndefined();
+  });
+
+  it('stays when a window that did not report closes', () => {
+    const h = highlighted([['a', true], ['b', false]]);
+    h.selection.graphWindowsChanged(new Set(['a']));
+    expect(h.selection.state.getState()?.phase).toBe('highlighted');
+  });
+});
 
 describe('the selection of a source row across windows', () => {
   it('sends the key and shows the highlight only after the graph window answers that it has the element', () => {
@@ -97,11 +138,11 @@ describe('the selection of a source row across windows', () => {
     const { selection, answer } = setup();
     selection.select('k1');
     answer('r1', ['k1']);
-    selection.graphClosed();
+    selection.graphWindowsChanged(new Set());
     expect(selection.state.getState()).toBeUndefined();
     selection.select('k2');
     vi.advanceTimersByTime(ANSWER_WAIT_MS);
-    selection.graphClosed();
+    selection.graphWindowsChanged(new Set());
     expect(selection.state.getState()).toEqual({ key: 'k2', phase: 'no-window' });
   });
 });

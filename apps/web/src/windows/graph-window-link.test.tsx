@@ -51,13 +51,11 @@ async function graph(state = createClientState()) {
   const counted = countingClient(known.client);
   const view = renderApp(`/explore/${INVESTIGATION_A}`, counted.client, state, undefined, stubFactory().create);
   await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const before = counted.count();
   const sender = createWindowChannel(SCOPE);
   opened.push(sender);
   const answers: { requestId: string; onCanvas: readonly string[] }[] = [];
   sender.onSelectionResult((result) => answers.push(result));
-  return { view, state, sender, answers, calls, made: () => counted.count() - before };
+  return { view, state, sender, answers, calls, count: counted.count };
 }
 const selected = (state: ReturnType<typeof createClientState>): readonly string[] => [...state.presentation.view.getState().selection];
 
@@ -72,29 +70,28 @@ describe('the graph window and a selection made in another window', () => {
   it('selects an element its canvas draws and answers with that key', async () => {
     const h = await graph();
     const calls = structuredClone(h.calls.getInvestigation);
+    const before = h.count();
     h.sender.sendSelection([KEY]);
     await waitFor(() => expect(h.answers).toHaveLength(1));
     expect(h.answers[0]?.onCanvas).toEqual([KEY]);
     expect(selected(h.state)).toEqual([KEY]);
     expect(h.calls.getInvestigation).toEqual(calls);
-    expect(h.made()).toBe(0);
+    expect(h.count()).toBe(before);
   });
 
   it('answers with no key and selects and draws nothing for an element it does not hold', async () => {
     const h = await graph();
+    const before = h.count();
     h.sender.sendSelection([OTHER_KEY]);
     await waitFor(() => expect(h.answers).toHaveLength(1));
     expect(h.answers[0]?.onCanvas).toEqual([]);
     expect(selected(h.state)).toEqual([]);
-    expect(h.made()).toBe(0);
+    expect(h.count()).toBe(before);
   });
 
   it('ignores a selection that holds more than one key: nothing selected and no answer', async () => {
     const h = await graph();
     h.sender.sendSelection([KEY, OTHER_KEY]);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    });
     expect(h.answers).toEqual([]);
     expect(selected(h.state)).toEqual([]);
   });
@@ -106,9 +103,6 @@ describe('the graph window and a selection made in another window', () => {
       opened.push(elsewhere);
       elsewhere.sendSelection([KEY]);
     }
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    });
     expect(h.answers).toEqual([]);
     expect(selected(h.state)).toEqual([]);
   });
@@ -137,6 +131,22 @@ describe('opening the graph with an element selected', () => {
 });
 
 describe('the notice of an arrival whose element is not on the canvas', () => {
+  it('appears when every loaded element is hidden by the person, and is gone when the element is shown again', async () => {
+    const { client } = knowing([A]);
+    const state = createClientState();
+    const view = renderApp(`/explore/${INVESTIGATION_A}`, client, state, undefined, stubFactory().create);
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    act(() => state.hide([KEY]));
+    await act(async () => {
+      await view.router.navigate({ pathname: `/explore/${INVESTIGATION_A}` }, { state: { select: KEY } });
+    });
+    expect(await screen.findByText(ASSISTANT_COPY.selectionNotOnCanvas)).toBeTruthy();
+    expect(selected(state)).toEqual([]);
+    expect(view.router.state.location.state ?? null).toBeNull();
+    act(() => state.presentation.showAllHidden());
+    await waitFor(() => expect(screen.queryByText(ASSISTANT_COPY.selectionNotOnCanvas)).toBeNull());
+  });
+
   it('is gone when another investigation is opened on the same route', async () => {
     const B = { investigation: investigationOf(INVESTIGATION_B, 'source-b', 'kind-a', 'C-1'), node: nodeOf('source-b', 'kind-a', 'C-1') };
     const { client } = knowing([A, B]);

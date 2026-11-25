@@ -15,15 +15,15 @@ export interface SelectionLink {
   readonly graphOpen: () => boolean;
   /** Sends the key and returns the id the answer will carry; undefined where nothing could be sent. */
   readonly send: (key: string) => string | undefined;
-  readonly onAnswer: (listener: (answer: { readonly requestId: string; readonly onCanvas: readonly string[] }) => void) => () => void;
+  readonly onAnswer: (listener: (answer: { readonly requestId: string; readonly windowId: string; readonly onCanvas: readonly string[] }) => void) => () => void;
 }
 
 export interface SourceSelection {
   readonly state: ReadableStore<RowSelection | undefined>;
   /** Presses a row whose element the investigation holds: with a graph window open the key goes to it and the row waits for its answer; with none the row says it is selected and that nothing was highlighted. */
   select(key: string): void;
-  /** The graph window closed or went quiet: no row claims a highlight any longer. */
-  graphClosed(): void;
+  /** The graph windows that are open now: a highlight stands only while a window that reported the element on its canvas is among them. */
+  graphWindowsChanged(open: ReadonlySet<string>): void;
   dispose(): void;
 }
 
@@ -33,15 +33,18 @@ export function createSourceSelection(link: SelectionLink, timers: { readonly se
   let waiting: string | undefined;
   let sending = false;
   let early: string[] = [];
+  let reporters = new Set<string>();
+  let open: ReadonlySet<string> = new Set();
   const stop = (): void => {
     if (timer !== undefined) timers.clear(timer);
     timer = undefined;
   };
-  const apply = (requestId: string, onCanvas: readonly string[]): void => {
+  const apply = (requestId: string, windowId: string, onCanvas: readonly string[]): void => {
     const current = state.getState();
     if (current === undefined || waiting === undefined || requestId !== waiting) return;
-    if (current.phase !== 'pending' && current.phase !== 'not-on-canvas') return;
+    if (current.phase !== 'pending' && current.phase !== 'not-on-canvas' && current.phase !== 'highlighted') return;
     if (onCanvas.includes(current.key)) {
+      reporters.add(windowId);
       state.setState({ key: current.key, phase: 'highlighted' });
       return;
     }
@@ -49,16 +52,17 @@ export function createSourceSelection(link: SelectionLink, timers: { readonly se
   };
   const stopListening = link.onAnswer((answer) => {
     if (sending) {
-      early.push(JSON.stringify([answer.requestId, answer.onCanvas]));
+      early.push(JSON.stringify([answer.requestId, answer.windowId, answer.onCanvas]));
       return;
     }
-    apply(answer.requestId, answer.onCanvas);
+    apply(answer.requestId, answer.windowId, answer.onCanvas);
   });
   return {
     state,
     select(key) {
       stop();
       waiting = undefined;
+      reporters = new Set();
       if (!link.graphOpen()) {
         state.setState({ key, phase: 'no-window' });
         return;
@@ -74,8 +78,8 @@ export function createSourceSelection(link: SelectionLink, timers: { readonly se
       waiting = requestId;
       state.setState({ key, phase: 'pending' });
       for (const held of early) {
-        const [id, onCanvas] = JSON.parse(held) as [string, readonly string[]];
-        apply(id, onCanvas);
+        const [id, windowId, onCanvas] = JSON.parse(held) as [string, string, readonly string[]];
+        apply(id, windowId, onCanvas);
       }
       early = [];
       if (waiting === undefined) return;
@@ -87,12 +91,19 @@ export function createSourceSelection(link: SelectionLink, timers: { readonly se
         if (current !== undefined && current.key === key && current.phase === 'pending') state.setState({ key, phase: 'no-window' });
       }, ANSWER_WAIT_MS);
     },
-    graphClosed() {
+    graphWindowsChanged(now) {
+      open = now;
       const current = state.getState();
-      if (current === undefined || (current.phase !== 'highlighted' && current.phase !== 'pending')) return;
-      stop();
-      waiting = undefined;
-      state.setState(undefined);
+      if (current === undefined) return;
+      if (current.phase === 'highlighted' && ![...reporters].some((id) => open.has(id))) {
+        stop();
+        waiting = undefined;
+        state.setState(undefined);
+      } else if (current.phase === 'pending' && open.size === 0) {
+        stop();
+        waiting = undefined;
+        state.setState(undefined);
+      }
     },
     dispose() {
       stop();
