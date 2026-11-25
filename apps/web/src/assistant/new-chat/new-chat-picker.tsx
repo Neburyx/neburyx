@@ -41,13 +41,13 @@ function tokenPx(name: string, fallback: number): number {
  */
 function placeOf(box: DOMRect): Place {
   const gap = tokenPx('--new-chat-gap', 12);
-  const edge = tokenPx('--new-chat-edge', 16);
+  const gutter = tokenPx('--new-chat-gutter', 16);
   const least = tokenPx('--new-chat-least-height', 300);
-  const below = window.innerHeight - box.bottom - gap - edge;
-  const top = below >= least ? box.bottom + gap : Math.max(edge, window.innerHeight - edge - least);
-  // the card is as wide as the token says, or as the window leaves it, and never runs past the right edge
-  const width = Math.min(tokenPx('--new-chat-width', 400), window.innerWidth - 2 * edge);
-  return { left: Math.max(edge, Math.min(box.left, window.innerWidth - edge - width)), top, maxHeight: Math.max(0, window.innerHeight - top - edge) };
+  const below = window.innerHeight - box.bottom - gap - gutter;
+  const top = below >= least ? box.bottom + gap : Math.max(gutter, window.innerHeight - gutter - least);
+  // the card is as wide as the token says, or as the window leaves it, and never runs past the right gutter
+  const width = Math.min(tokenPx('--new-chat-width', 400), window.innerWidth - 2 * gutter);
+  return { left: Math.max(gutter, Math.min(box.left, window.innerWidth - gutter - width)), top, maxHeight: Math.max(0, window.innerHeight - top - gutter) };
 }
 
 /** The chip that says a source is gone, for a state that is not `available`. */

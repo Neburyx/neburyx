@@ -87,7 +87,7 @@
   --assistant-page-send-border: var(--chat-list-rule);
   --new-chat-width: 400px;
   --new-chat-gap: 12px;
-  --new-chat-edge: 16px;
+  --new-chat-gutter: 16px;
   --new-chat-least-height: 300px;
   --new-chat-border: #cad0da;
   --new-chat-rule: #e3e6ec;
