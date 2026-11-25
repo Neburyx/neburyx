@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createWindowChannel, EXPIRY_MS, HEARTBEAT_MS, MAX_KEY_LENGTH, MAX_REQUEST_ID_LENGTH, MAX_SELECTION_KEYS, readMessage, type ChannelLike, type WindowChannel, type WindowScope } from './window-channel.js';
+import { ANSWER_WAIT_MS, createWindowChannel, EXPIRY_MS, HEARTBEAT_MS, MAX_KEY_LENGTH, MAX_REQUEST_ID_LENGTH, MAX_SELECTION_KEYS, readMessage, type ChannelLike, type WindowChannel, type WindowScope } from './window-channel.js';
 
 const SCOPE: WindowScope = { principalId: 'p1', investigationId: 'inv-1', sourceId: 'src-1' };
 
@@ -237,28 +237,69 @@ describe('the selection', () => {
 });
 
 describe('the answer to a selection', () => {
-  it('reaches the window that selected, with the id of its request and the keys on the canvas, and not the window that answered', () => {
+  const round = (answer: (graph: WindowChannel, request: { requestId: string; keys: readonly string[] }) => void, count = 1) => {
     const h = hub();
-    const [page, graph] = [make(h), make(h)];
+    const page = make(h);
+    const graphs = Array.from({ length: count }, () => make(h));
+    graphs.forEach((graph, index) => graph.onSelection((request) => answer(graph, request) ?? index));
     const heard = vi.fn();
-    const own = vi.fn();
     page.onSelectionResult(heard);
-    graph.onSelectionResult(own);
-    graph.sendSelectionResult('r1', ['k2']);
-    graph.sendSelectionResult('r2', []);
-    expect(heard).toHaveBeenNthCalledWith(1, { requestId: 'r1', onCanvas: ['k2'] });
-    expect(heard).toHaveBeenNthCalledWith(2, { requestId: 'r2', onCanvas: [] });
+    return { h, page, graphs, heard };
+  };
+
+  it('reaches the window that selected, with the id of its request and the keys on the canvas, and not the window that answered', () => {
+    const { page, graphs, heard } = round((graph, { requestId, keys }) => graph.sendSelectionResult(requestId, keys.slice(1)));
+    const own = vi.fn();
+    graphs[0]?.onSelectionResult(own);
+    const requestId = page.sendSelection(['k1', 'k2']);
+    expect(heard).toHaveBeenCalledWith({ requestId, onCanvas: ['k2'] });
     expect(own).not.toHaveBeenCalled();
   });
 
-  it('is an answer of the window that was asked: a selection through one channel and the answer through the other make one round trip', () => {
+  it('is dropped when it is late, repeated by the same window, of a request that was never sent, or of keys that were not selected', () => {
+    const { h, page, graphs, heard } = round(() => undefined);
+    const requestId = page.sendSelection(['k1', 'k2']) as string;
+    const graph = graphs[0] as WindowChannel;
+    graph.sendSelectionResult('never-sent', ['k1']);
+    expect(heard).not.toHaveBeenCalled();
+    graph.sendSelectionResult(requestId, ['k1', 'k9']);
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(heard).toHaveBeenLastCalledWith({ requestId, onCanvas: ['k1'] });
+    graph.sendSelectionResult(requestId, ['k2']);
+    expect(heard).toHaveBeenCalledTimes(1);
+    const late = page.sendSelection(['k1']) as string;
+    vi.advanceTimersByTime(ANSWER_WAIT_MS + 1);
+    graph.sendSelectionResult(late, ['k1']);
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(h.sent.at(-1)?.data).toMatchObject({ kind: 'selected', requestId: late });
+  });
+
+  it('is never answered when no window answers, so no highlight is to be claimed', () => {
+    const { page, heard } = round(() => undefined);
+    page.sendSelection(['k1']);
+    vi.advanceTimersByTime(ANSWER_WAIT_MS * 3);
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('is heard once for each window that answers, so that a window that lacks a key never hides another that has it', () => {
+    const { page, heard } = round((graph, { requestId, keys }) => graph.sendSelectionResult(requestId, graph === undefined ? [] : keys), 2);
+    const requestId = page.sendSelection(['k1']);
+    expect(heard).toHaveBeenCalledTimes(2);
+    expect(heard).toHaveBeenNthCalledWith(1, { requestId, onCanvas: ['k1'] });
+  });
+
+  it('keeps one window that has nothing on its canvas from hiding the keys another reports', () => {
     const h = hub();
-    const [page, graph] = [make(h), make(h)];
-    graph.onSelection(({ requestId, keys }) => graph.sendSelectionResult(requestId, keys.slice(0, 1)));
+    const [page, empty, full] = [make(h), make(h), make(h)];
+    empty.onSelection(({ requestId }) => empty.sendSelectionResult(requestId, []));
+    full.onSelection(({ requestId, keys }) => full.sendSelectionResult(requestId, keys));
     const heard = vi.fn();
     page.onSelectionResult(heard);
     const requestId = page.sendSelection(['k1', 'k2']);
-    expect(heard).toHaveBeenCalledWith({ requestId, onCanvas: ['k1'] });
+    const union = new Set((heard.mock.calls as [{ onCanvas: string[] }][]).flatMap(([result]) => result.onCanvas));
+    expect([...union].sort()).toEqual(['k1', 'k2']);
+    expect(heard).toHaveBeenCalledTimes(2);
+    expect(heard.mock.calls.every(([result]) => (result as { requestId: string }).requestId === requestId)).toBe(true);
   });
 
   it('sends nothing when the request id or a key is not valid, and ignores the answer of another scope', () => {
@@ -266,13 +307,14 @@ describe('the answer to a selection', () => {
     const [page, graph] = [make(h), make(h)];
     const heard = vi.fn();
     page.onSelectionResult(heard);
+    const requestId = page.sendSelection(['k1']) as string;
     h.sent.length = 0;
     graph.sendSelectionResult('', ['k1']);
     graph.sendSelectionResult('r'.repeat(MAX_REQUEST_ID_LENGTH + 1), ['k1']);
-    graph.sendSelectionResult('r1', ['']);
-    graph.sendSelectionResult('r1', Array.from({ length: MAX_SELECTION_KEYS + 1 }, (_, index) => `k${index}`));
+    graph.sendSelectionResult(requestId, ['']);
+    graph.sendSelectionResult(requestId, Array.from({ length: MAX_SELECTION_KEYS + 1 }, (_, index) => `k${index}`));
     expect(h.sent).toHaveLength(0);
-    h.deliver(NAME, { ...envelope({ kind: 'selected', requestId: 'r1', onCanvas: [] }), investigationId: 'inv-2' });
+    h.deliver(NAME, { ...envelope({ kind: 'selected', requestId, onCanvas: [] }), investigationId: 'inv-2' });
     expect(heard).not.toHaveBeenCalled();
   });
 
@@ -281,7 +323,8 @@ describe('the answer to a selection', () => {
     const [page, graph] = [make(h), make(h)];
     const heard = vi.fn();
     page.onSelectionResult(heard)();
-    graph.sendSelectionResult('r1', ['k1']);
+    const requestId = page.sendSelection(['k1']) as string;
+    graph.sendSelectionResult(requestId, ['k1']);
     expect(heard).not.toHaveBeenCalled();
   });
 });

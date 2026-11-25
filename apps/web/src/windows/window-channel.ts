@@ -22,7 +22,7 @@ export interface WindowChannel {
   onSelection(listener: (request: SelectionRequest) => void): () => void;
   /** Answers a selection: which of its keys the window has on its canvas (0 to 100 keys). Nothing is sent where the request id or a key is not valid. */
   sendSelectionResult(requestId: string, onCanvas: readonly string[]): void;
-  /** Hears the answers of other windows of the scope; a request id the listener did not send is its own concern. */
+  /** Hears the answers to the selections this window sent, each of a window that answered within `ANSWER_WAIT_MS` of the selection: one answer of a window to a request counts, a late, repeated or unknown answer is dropped, and `onCanvas` holds only keys that were selected. With several answering windows the listener is called once for each; the keys on the canvas are the union of what they report, so a window that does not have a key never hides another's. A selection nobody answers in that time is never answered: no highlight is to be claimed. */
   onSelectionResult(listener: (result: SelectionResult) => void): () => void;
   close(): void;
 }
@@ -53,6 +53,8 @@ export const EXPIRY_MS = 15000;
 export const MAX_SELECTION_KEYS = 100;
 export const MAX_KEY_LENGTH = 200;
 export const MAX_REQUEST_ID_LENGTH = 64;
+export const ANSWER_WAIT_MS = 3000;
+const MAX_PENDING = 50;
 
 const CHANNEL_PREFIX = 'neburyx-windows';
 const ROLES: readonly WindowRole[] = ['graph', 'assistant'];
@@ -141,6 +143,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
   const resultListeners = new Set<(result: SelectionResult) => void>();
   let closed = false;
   let requests = 0;
+  const pending = new Map<string, { readonly keys: readonly string[]; readonly until: number; readonly answered: Set<string> }>();
 
   const post = (body: Body): void => {
     if (closed) return;
@@ -175,7 +178,13 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
     const { body } = message;
     if (body.kind === 'hello') sayAll();
     else if (body.kind === 'select') for (const listener of [...listeners]) listener({ requestId: body.requestId, keys: body.keys });
-    else if (body.kind === 'selected') for (const listener of [...resultListeners]) listener({ requestId: body.requestId, onCanvas: body.onCanvas });
+    else if (body.kind === 'selected') {
+      const asked = pending.get(body.requestId);
+      if (asked === undefined || now() > asked.until || asked.answered.has(message.windowId)) return;
+      asked.answered.add(message.windowId);
+      const onCanvas = body.onCanvas.filter((key) => asked.keys.includes(key));
+      for (const listener of [...resultListeners]) listener({ requestId: body.requestId, onCanvas });
+    }
     else {
       const roles = heard.get(message.windowId) ?? new Map<WindowRole, number>();
       if (body.open) roles.set(body.role, now());
@@ -223,6 +232,9 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
       if (!validKeys(keys)) return undefined;
       requests += 1;
       const requestId = `${windowId}:${requests}`;
+      for (const [id, asked] of pending) if (now() > asked.until) pending.delete(id);
+      if (pending.size >= MAX_PENDING) pending.delete(pending.keys().next().value as string);
+      pending.set(requestId, { keys: [...keys], until: now() + ANSWER_WAIT_MS, answered: new Set() });
       post({ kind: 'select', requestId, keys: [...keys] });
       return requestId;
     },
@@ -252,6 +264,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
       }
       listeners.clear();
       resultListeners.clear();
+      pending.clear();
       channel.onmessage = null;
       channel.close();
     },
