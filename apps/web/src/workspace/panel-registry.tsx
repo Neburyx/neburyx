@@ -102,6 +102,14 @@ export function usePanelRegistry(): PanelRegistry {
   return registry;
 }
 
+const NO_PANELS: ReadableStore<readonly RegisteredPanel[]> = readable(createStore<readonly RegisteredPanel[]>([]));
+
+/** Whether a panel is registered, false where the panels are not provided (a part drawn on its own): for what only reacts to another panel being there. */
+export function usePanelRegistered(id: string): boolean {
+  const registry = useContext(PanelsContext);
+  return useStoreSelector(registry === undefined ? NO_PANELS : registry.view, (panels) => panels.some((panel) => panel.id === id));
+}
+
 export function usePanels(): readonly RegisteredPanel[] {
   return useStoreSelector(usePanelRegistry().view, (panels) => panels);
 }

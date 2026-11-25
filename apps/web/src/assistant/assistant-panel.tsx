@@ -26,6 +26,7 @@ import { useAssistant } from './use-assistant.js';
 import { PopOutButton } from './pop-out-button.js';
 import { PopOutNote } from './pop-out-notes.js';
 import { usePopOutNote } from './use-pop-out-note.js';
+import { useInspectorOpen, useNarrowWhenInspectorOpens } from './yield-to-inspector.js';
 import { useQuietTipsAfterLayoutChange } from './use-quiet-tips.js';
 import { popOut } from '../windows/pop-out.js';
 import { useOtherWindowRoles, useWindowChannelAvailable } from '../windows/use-window-channel.js';
@@ -49,12 +50,14 @@ function WideIcon() {
 function WideButton() {
   const { presentation } = useClientState();
   const size = usePanelSize();
+  const inspectorOpen = useInspectorOpen();
   if (size === undefined) return null;
   const canWiden = size.limits.max > ASSISTANT_PANEL_WIDTH;
   const wide = canWiden && size.width >= size.limits.max;
+  const blocked = inspectorOpen && !wide;
   const toggle = (): void => (wide ? presentation.clearPanelSize(ASSISTANT_PANEL_ID) : presentation.setPanelSize(ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDE_SIZE));
   return (
-    <button type="button" className="assistant-wide" aria-label={wide ? ASSISTANT_COPY.normalWidth : ASSISTANT_COPY.wide} data-tip={wide ? ASSISTANT_COPY.normalWidth : ASSISTANT_COPY.wide} aria-pressed={wide} disabled={!canWiden} onClick={toggle}>
+    <button type="button" className="assistant-wide" aria-label={wide ? ASSISTANT_COPY.normalWidth : blocked ? ASSISTANT_COPY.wideBlocked : ASSISTANT_COPY.wide} data-tip={wide ? ASSISTANT_COPY.normalWidth : blocked ? ASSISTANT_COPY.wideBlocked : ASSISTANT_COPY.wide} aria-pressed={wide} disabled={!canWiden} aria-disabled={blocked ? true : undefined} onClick={blocked ? undefined : toggle}>
       <WideIcon />
     </button>
   );
@@ -143,6 +146,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const [showHere, setShowHere] = useState(false);
   const collapsed = !page && pageElsewhere && !showHere;
   const tipsQuiet = useQuietTipsAfterLayoutChange(collapsed);
+  const narrowedNote = useNarrowWhenInspectorOpens(!page && !collapsed);
   const wasCollapsed = useRef(false);
   const focusLost = useRef(false);
   const clearButton = useRef<HTMLButtonElement>(null);
@@ -286,6 +290,9 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
       {popOutNote.note === undefined ? null : <PopOutNote kind={popOutNote.note} investigationId={investigationId} />}
       <p className="visually-hidden" role="status" aria-live="polite">
         {clearedNote ? ASSISTANT_COPY.cleared : announced}
+      </p>
+      <p className="visually-hidden" aria-live="polite" data-narrowed-note>
+        {narrowedNote ?? ''}
       </p>
       {confirming === undefined ? null : <ClearChatDialog send={() => client.clearAssistantThread(confirming.investigationId)} onCleared={() => cleared(confirming)} onClose={closeConfirm} />}
       {collapsed ? <PoppedOutNote onShow={() => {

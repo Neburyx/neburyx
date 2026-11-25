@@ -6,6 +6,7 @@ import { createClientState } from '../state/client-state.js';
 import { clientWith, me, need, renderApp, source, stubSizeObserver } from '../test-utils.js';
 import type { PanelEntry } from '../workspace/panel-registry.js';
 import { bindAssistantPanel } from './assistant-binder.js';
+import { INSPECTOR_PANEL_ID } from '../inspector/inspector-layout.js';
 import { ASSISTANT_PANEL_ID } from './panel-layout.js';
 
 const client = clientWith({ me: me(), sources: [source('a')] });
@@ -49,7 +50,7 @@ async function openAssistant(windowWidth: number, canvasWidth: number, extra: re
   const layer = need(container.querySelector<HTMLElement>('.panel-layer'), 'the panel layer');
   act(() => stub?.resize(layer, canvasWidth, 700));
   const box = (id: string) => need(container.querySelector<HTMLElement>(`[data-panel="${id}"]`)?.closest<HTMLElement>('.floating-panel'), id);
-  const wide = () => screen.getByRole('button', { name: /^(Wide|Normal width)$/ });
+  const wide = () => screen.getByRole('button', { name: /^(Wide|Normal width|Wide: close the inspector first.*)$/ });
   return { state, layer, box, wide };
 }
 
@@ -124,12 +125,13 @@ describe('the Assistant panel drawn by the panel host', () => {
     expect(wide().getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('moves an inspector that is open beside the panel when Wide is pressed, without closing it or losing what it holds, and sizes it to the space left when the window is made narrower', async () => {
+  it('moves an inspector that is open beside the panel when the panel is made wide by its handle (Wide itself is off while the inspector is open), without closing it or losing what it holds, and sizes it to the space left when the window is made narrower', async () => {
     const side: PanelEntry = { id: 'inspector', title: 'Inspector', placement: { kind: 'floating', side: 'right', top: 64, beside: ASSISTANT_PANEL_ID }, content: Counter };
-    const { box, wide, layer } = await openAssistant(1440, 1384, [side]);
+    const { box, wide, layer, state } = await openAssistant(1440, 1384, [side]);
     expect(box('inspector').style.right).toBe('412px');
     await userEvent.click(screen.getByRole('button', { name: 'Held 0' }));
-    await userEvent.click(wide());
+    expect(wide().getAttribute('aria-disabled')).toBe('true');
+    act(() => state.presentation.setPanelSize(ASSISTANT_PANEL_ID, 100_000));
     expect(box('inspector').style.right).toBe('896px');
     expect(screen.getByRole('button', { name: 'Held 1' })).toBeTruthy();
     setWindow(1000);
@@ -137,5 +139,77 @@ describe('the Assistant panel drawn by the panel host', () => {
     expect(box(ASSISTANT_PANEL_ID).style.width).toBe('600px');
     expect(box('inspector').style.right).toBe('632px');
     expect(box('inspector').style.width).toBe('296px');
+  });
+});
+
+describe('the Assistant panel when the inspector opens', () => {
+  const inspector = (panels: { register: (entry: PanelEntry) => () => void }): (() => void) => panels.register({ id: INSPECTOR_PANEL_ID, title: 'Inspector', placement: { kind: 'floating', side: 'right', top: 16, beside: ASSISTANT_PANEL_ID }, content: () => null });
+
+  async function openWide() {
+    stub = stubSizeObserver();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1400 });
+    const state = createClientState();
+    const { container, panels } = renderApp('/explore', client, state);
+    await screen.findByText('Local workspace');
+    unbind = bindAssistantPanel(state, panels);
+    act(() => state.presentation.setAssistantOpen(true));
+    const layer = need(container.querySelector<HTMLElement>('.panel-layer'), 'the panel layer');
+    act(() => stub?.resize(layer, 1000, 700));
+    const box = () => need(container.querySelector<HTMLElement>(`[data-panel="${ASSISTANT_PANEL_ID}"]`)?.closest<HTMLElement>('.floating-panel'), 'the Assistant');
+    const wide = () => screen.getByRole('button', { name: /^(Wide|Normal width|Wide: close the inspector first.*)$/ });
+    return { state, panels, box, wide };
+  }
+
+  it('returns a Wide Assistant to its normal width and says so politely, leaving Wide available once the inspector is closed', async () => {
+    const { state, panels, box, wide } = await openWide();
+    await userEvent.click(wide());
+    expect(wide().getAttribute('aria-pressed')).toBe('true');
+    const wideWidth = box().style.width;
+    let close: () => void = () => undefined;
+    act(() => void (close = inspector(panels)));
+    expect(state.presentation.view.getState().panelSizes.get(ASSISTANT_PANEL_ID)).toBeUndefined();
+    expect(box().style.width).not.toBe(wideWidth);
+    expect(wide().getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText(/back to its normal width because the inspector is open/i).closest('[data-narrowed-note]')).toBeTruthy();
+    act(() => close());
+    expect((wide() as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(wide());
+    expect(wide().getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('keeps Wide off while the inspector is open, so no panel is covered, and says why', async () => {
+    const { panels, wide } = await openWide();
+    act(() => void inspector(panels));
+    // aria-disabled, not disabled: it stays in the tab order, so the reason is heard
+    expect(wide().getAttribute('aria-disabled')).toBe('true');
+    expect(wide().getAttribute('aria-label')).toMatch(/close the inspector/i);
+    await userEvent.click(wide());
+    expect(wide().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('opens at its normal width, and says so, when it is opened with the inspector already open and a Wide width kept', async () => {
+    stub = stubSizeObserver();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1400 });
+    const state = createClientState();
+    const { container, panels } = renderApp('/explore', client, state);
+    await screen.findByText('Local workspace');
+    unbind = bindAssistantPanel(state, panels);
+    act(() => {
+      inspector(panels);
+      state.presentation.setPanelSize(ASSISTANT_PANEL_ID, 100_000);
+      state.presentation.setAssistantOpen(true);
+    });
+    const layer = need(container.querySelector<HTMLElement>('.panel-layer'), 'the panel layer');
+    act(() => stub?.resize(layer, 1000, 700));
+    expect(state.presentation.view.getState().panelSizes.get(ASSISTANT_PANEL_ID)).toBeUndefined();
+    expect(screen.getByText(/back to its normal width because the inspector is open/i)).toBeTruthy();
+  });
+
+  it('leaves a width the person dragged to with the inspector open', async () => {
+    const { state, panels, box } = await openWide();
+    act(() => void inspector(panels));
+    act(() => state.presentation.setPanelSize(ASSISTANT_PANEL_ID, 100_000));
+    expect(state.presentation.view.getState().panelSizes.get(ASSISTANT_PANEL_ID)).toBe(100_000);
+    expect(box()).toBeTruthy();
   });
 });

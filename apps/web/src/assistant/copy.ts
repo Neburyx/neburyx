@@ -5,6 +5,8 @@ export const ASSISTANT_COPY = {
   close: 'Close',
   wide: 'Wide',
   normalWidth: 'Normal width',
+  wideBlocked: 'Wide: close the inspector first, so that no panel is covered',
+  narrowedForInspector: 'The Assistant is back to its normal width because the inspector is open.',
   clearChat: 'Clear chat',
   popOut: 'Pop out',
   popOutTip: 'Open this chat as a full page in a new window',

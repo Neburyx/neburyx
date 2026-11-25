@@ -4,7 +4,7 @@ import { canvasOf } from './support/workspace.ts';
 
 const panel = (page: Page) => page.locator('.assistant-panel');
 const floatingBox = (page: Page) => page.locator('.floating-panel', { has: page.locator('.assistant-panel') });
-const wideButton = (page: Page) => panel(page).getByRole('button', { name: /^(Wide|Normal width)$/ });
+const wideButton = (page: Page) => panel(page).getByRole('button', { name: /^(Wide|Normal width|Wide: close the inspector first.*)$/ });
 const widthOf = async (page: Page): Promise<number> => (await floatingBox(page).boundingBox())?.width ?? 0;
 const windowWidth = (page: Page): number => page.viewportSize()?.width ?? 0;
 const limitOf = (page: Page): number => Math.floor(0.6 * windowWidth(page));
@@ -151,13 +151,15 @@ test.describe('the wide Assistant panel', () => {
     expect(await topmost('.floating-panel[aria-label="Assistant"]')).toBe('Assistant');
   });
 
-  test('starts the inspector beside the wide panel 16 px below the scope lines when they overlap it, also with a long scope line', async ({ page }) => {
+  test('starts the inspector beside the Assistant, which returned to its normal width, 16 px below the scope lines when they overlap it, also with a long scope line', async ({ page }) => {
     await openWorkspace(page);
     await answerWithTable(page);
     await wideButton(page).click();
     await panel(page).getByRole('button', { name: /^Citation 1, / }).first().click();
     const inspector = page.getByRole('complementary', { name: 'Inspector' });
     await expect(inspector).toBeVisible();
+    // the Assistant went back to its normal width when the inspector opened
+    await expect(wideButton(page)).toHaveAttribute('aria-pressed', 'false');
     const boxes = async () => ({ inspector: await inspector.boundingBox(), scope: await page.locator('.graph-scope').boundingBox(), panel: await floatingBox(page).boundingBox() });
     const apart = (a: { x: number; y: number; width: number; height: number } | null, b: { x: number; y: number; width: number; height: number } | null): boolean => a === null || b === null || a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
     let found = await boxes();
@@ -200,7 +202,7 @@ test.describe('the wide Assistant panel', () => {
     expect(await wideButton(page).evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none');
   });
 
-  test('gives a table the whole width of the card, without sideways scrolling, and keeps the inspector beside the panel without overlap', async ({ page }) => {
+  test('gives a table the whole width of the card, without sideways scrolling, and keeps the inspector beside the panel, which returns to its normal width, without overlap', async ({ page }) => {
     await openWorkspace(page);
     await answerWithTable(page);
     await wideButton(page).click();

@@ -60,6 +60,24 @@ const OPEN: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await popup.waitForLoadState();
     await expect(page.locator('.assistant-panel').getByText('The chat is open in another window')).toBeVisible();
   },
+  'assistant wide attempted': async (page) => {
+    await header(page).getByRole('button', { name: 'Assistant' }).click();
+    await expect(page.locator('.assistant-panel')).toBeVisible();
+    // Wide is off while the inspector is open, so that no panel is covered
+    await expect(page.locator('.assistant-panel').getByRole('button', { name: /^Wide: close the inspector first/ })).toHaveAttribute('aria-disabled', 'true');
+  },
+  'inspector over a wide assistant': async (page) => {
+    await header(page).getByRole('button', { name: 'Assistant' }).click();
+    await expect(page.locator('.assistant-panel')).toBeVisible();
+    await page.locator('.assistant-panel').getByRole('button', { name: 'Wide', exact: true }).click();
+    await expect(page.locator('.assistant-panel').getByRole('button', { name: 'Normal width' })).toBeVisible();
+    const at = await screenOf(page, 'AC-2');
+    await page.mouse.click(at.x, at.y);
+    await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+    // the Assistant went back to its normal width, and said so politely
+    await expect(page.locator('.assistant-panel').getByRole('button', { name: 'Wide', exact: true })).toBeVisible();
+    await expect(page.locator('.assistant-panel [data-narrowed-note]').filter({ hasText: 'back to its normal width because the inspector is open' })).toHaveCount(1);
+  },
   ask: async (page) => {
     await header(page).getByRole('button', { name: 'Ask' }).click();
     await expect(page.locator('.ask-panel').first()).toBeVisible();
@@ -96,7 +114,8 @@ const COMBINATIONS: ReadonlyArray<readonly string[]> = [
   ['assistant popped out'],
   ['inspector', 'assistant popped out'],
   ['inspector', 'assistant'],
-  ['inspector', 'assistant wide'],
+  ['inspector', 'assistant wide attempted'],
+  ['inspector over a wide assistant'],
   ['inspector', 'legend'],
   ['assistant', 'selection bar'],
 ];
@@ -112,7 +131,6 @@ const apart = (a: Box, b: Box): boolean => a.x >= b.x + b.width || b.x >= a.x + 
 test.describe('path search with every other panel that can be open at once', () => {
   for (const combination of COMBINATIONS) {
     test(`stands clear of ${combination.length === 0 ? 'the tool strip, the scope lines, the hint and the controls' : combination.join(' and ')}, inside the canvas`, async ({ page }) => {
-      test.fixme(combination.join(',') === 'inspector,assistant wide' && process.env['NEBURYX_UX_SHOT_FIXME'] === undefined, 'a Wide Assistant with the inspector beside it reaches over every left panel (path search among them) at both widths: not yet decided');
       await prepare(page);
       for (const name of combination) await OPEN[name]?.(page);
       await page.getByRole('button', { name: 'Paths', exact: true }).click();
