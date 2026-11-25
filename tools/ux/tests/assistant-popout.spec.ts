@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { ASSISTANT_REFUSAL_SENTENCES } from '@neburyx/contracts';
 import { canvasOf } from './support/workspace.ts';
 
 const STATUS = { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } };
@@ -7,10 +8,25 @@ const panel = (page: Page) => page.locator('.assistant-panel');
 const popOutButton = (page: Page) => panel(page).getByRole('button', { name: 'Pop out' });
 const NOTE = 'The chat is open in another window';
 
-async function stubs(context: BrowserContext): Promise<void> {
+/** The stored thread of the stub server: a turn answered through POST turns is in what the thread read returns, as on the real server. */
+async function stubs(context: BrowserContext): Promise<{ readonly turns: object[]; clear(): void }> {
+  const stored: object[] = [];
   await context.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
-  await context.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: EMPTY }));
+  await context.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: { ...EMPTY, turns: [...stored] } }));
+  await context.route((url) => url.pathname === '/v1/assistant/turns', (route) => {
+    const seq = stored.length + 1;
+    const sent = route.request().postDataJSON() as { turnId?: string };
+    stored.push({ id: sent.turnId ?? `0192f000-0000-7000-8000-0000000000${String(seq).padStart(2, '0')}`, seq, at: '2026-11-25T10:00:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 });
+    return route.fulfill({ json: { status: 'answered', route: 'refuse', cause: 'verdict', sentence: ASSISTANT_REFUSAL_SENTENCES.verdict } });
+  });
+  return { turns: stored, clear: () => void (stored.length = 0) };
 }
+
+const storedRows = (page: Page) => page.locator('.assistant-stored-list > li');
+const ask = async (page: Page, text: string): Promise<void> => {
+  await page.getByLabel('Your message').fill(text);
+  await page.keyboard.press('Enter');
+};
 
 async function openInvestigation(page: Page): Promise<string> {
   await page.goto('/dev/open-entity');
@@ -89,6 +105,48 @@ test.describe('Pop out of the Assistant panel', () => {
     expect(await extra).toBe(false);
     await expect(popup).toHaveURL(new RegExp(`/assistant/${id}$`));
     expect(context.pages()).toHaveLength(2);
+  });
+
+  test('shows a turn made in either window in the other without a reload, while both show the chat', async ({ page, context }) => {
+    await stubs(context);
+    const id = await openInvestigation(page);
+    await openPanel(page);
+    const popup = await popOut(page);
+    await panel(page).getByRole('button', { name: 'Show the chat here' }).click();
+    await ask(popup, 'what is here?');
+    await expect(popup.getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    await expect(storedRows(page)).toHaveCount(1, { timeout: 5000 });
+    await ask(page, 'and this?');
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    await expect(storedRows(popup)).toHaveCount(1, { timeout: 5000 });
+    await expect(popup).toHaveURL(new RegExp(`/assistant/${id}$`));
+  });
+
+  test('brings the panel back at once when the window closes, as a window that is closing says so', async ({ page, context }) => {
+    await stubs(context);
+    await openInvestigation(page);
+    await openPanel(page);
+    const popup = await popOut(page);
+    await expect(panel(page).getByText(NOTE)).toBeVisible();
+    const started = Date.now();
+    await popup.evaluate(() => window.close());
+    await expect(panel(page).getByText(NOTE)).toBeHidden({ timeout: 4000 });
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
+  test('leaves the page where it is when the browser blocks the window, says so, and gives a link that opens the chat here', async ({ page, context }) => {
+    await stubs(context);
+    await page.addInitScript(() => {
+      window.open = () => null;
+    });
+    const id = await openInvestigation(page);
+    await openPanel(page);
+    await popOutButton(page).click();
+    await expect(page).toHaveURL(new RegExp(`/explore/${id}$`));
+    const line = panel(page).getByRole('status').filter({ hasText: 'could not be opened' });
+    await expect(line).toBeVisible();
+    await line.getByRole('link', { name: 'Open the chat in this window' }).click();
+    await expect(page).toHaveURL(new RegExp(`/assistant/${id}$`));
   });
 
   test('keeps the panel as it was for a page of another investigation', async ({ page, context }) => {

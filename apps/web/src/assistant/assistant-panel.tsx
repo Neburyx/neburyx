@@ -10,7 +10,7 @@ import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, word
 import { MaskingCard, NewThreadCard, StandingNote } from './thread-notices.js';
 import { StoredTurns } from './stored-turns.js';
 import { useAssistantSession } from './assistant-session.js';
-import { useReloadWhenRestored } from './use-reload-when-restored.js';
+import { useThreadSync } from './use-thread-sync.js';
 import { PoppedOutNote } from './popped-out-note.js';
 import { NO_STORED_THREAD } from './stored-thread-state.js';
 import { boundElementsOf } from './stored-answer.js';
@@ -23,6 +23,7 @@ import { useSuggestions } from './suggestions.js';
 import { EmptyThread, PageHeader } from './page-parts.js';
 import { useAssistant } from './use-assistant.js';
 import { PopOutButton } from './pop-out-button.js';
+import { PopOutNote } from './pop-out-notes.js';
 import { usePopOutNote } from './use-pop-out-note.js';
 import { popOut } from '../windows/pop-out.js';
 import { useOtherWindowRoles, useWindowChannelAvailable } from '../windows/use-window-channel.js';
@@ -149,6 +150,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const cancel = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const { turns, notice, input, summary } = model.state;
+  const sync = useThreadSync(collapsed, turns);
   const storedTurns = stored.kind === 'ready' ? stored.thread.turns : [];
   const bound = useMemo(() => boundElementsOf(storedTurns.flatMap((turn) => (turn.answer === undefined ? [] : [turn.answer]))), [storedTurns]);
   const reads = useRefReads(bound, stored.kind === 'ready' && !off);
@@ -166,6 +168,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   // the clearing belongs to the person and investigation it was confirmed for: a completion that arrives after the panel moved on to another does not touch the thread now on screen
   const cleared = (scope: NonNullable<typeof confirming>): void => {
     session.notice?.announce(scope.principalId, scope.investigationId);
+    sync.announceChanged();
     setConfirming(undefined);
     const now = session.store.getState();
     if ((now.investigationId !== null && now.investigationId !== scope.investigationId) || (now.principalId !== null && now.principalId !== scope.principalId) || now.epoch !== scope.epoch) return;
@@ -185,7 +188,6 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   useEffect(() => {
     if (!pageElsewhere) setShowHere(false);
   }, [pageElsewhere]);
-  useReloadWhenRestored(collapsed);
   useEffect(() => {
     if (collapsed) {
       wasCollapsed.current = true;
@@ -274,7 +276,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
           </div>
         </header>
       )}
-      {popOutNote.note === undefined ? null : <p className="ask-note assistant-popout-refused" role="status">{popOutNote.note === 'refused' ? ASSISTANT_COPY.popOutRefused : ASSISTANT_COPY.popOutUnreachable}</p>}
+      {popOutNote.note === undefined ? null : <PopOutNote kind={popOutNote.note} investigationId={investigationId} />}
       <p className="visually-hidden" role="status" aria-live="polite">
         {clearedNote ? ASSISTANT_COPY.cleared : announced}
       </p>

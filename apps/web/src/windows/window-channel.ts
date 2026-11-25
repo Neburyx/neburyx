@@ -26,6 +26,10 @@ export interface WindowChannel {
   sendSelectionResult(requestId: string, onCanvas: readonly string[]): void;
   /** Hears the answers to the selections this window sent, each of a window that answered within `ANSWER_WAIT_MS` of the selection: one answer of a window to a request counts, a late, repeated or unknown answer is dropped, and `onCanvas` holds only keys that were selected. With several answering windows the listener is called once for each; the keys on the canvas are the union of what they report, so a window that does not have a key never hides another's. A selection nobody answers in that time is never answered: no highlight is to be claimed. */
   onSelectionResult(listener: (result: WindowSelectionResult) => void): () => void;
+  /** Tells the other windows of the scope that the stored thread of the investigation changed (a turn settled, the chat was cleared). The message holds no text and no count: a window that hears it reads the thread again through its own read. */
+  announceThreadChanged(): void;
+  /** Hears that another window changed the thread; the returned function stops listening. */
+  onThreadChanged(listener: () => void): () => void;
   close(): void;
 }
 
@@ -65,10 +69,11 @@ const ROLES: readonly WindowRole[] = ['graph', 'assistant'];
 const NO_ROLES: ReadonlySet<WindowRole> = new Set();
 const NO_WINDOWS: ReadonlyMap<WindowRole, ReadonlySet<string>> = new Map();
 
-type Body = { readonly kind: 'hello' } | { readonly kind: 'presence'; readonly role: WindowRole; readonly open: boolean } | { readonly kind: 'select'; readonly requestId: string; readonly keys: readonly string[] } | { readonly kind: 'selected'; readonly requestId: string; readonly onCanvas: readonly string[] };
+type Body = { readonly kind: 'hello' } | { readonly kind: 'thread' } | { readonly kind: 'presence'; readonly role: WindowRole; readonly open: boolean } | { readonly kind: 'select'; readonly requestId: string; readonly keys: readonly string[] } | { readonly kind: 'selected'; readonly requestId: string; readonly onCanvas: readonly string[] };
 
 const MEMBERS: Readonly<Record<Body['kind'], readonly string[]>> = {
   hello: ['v', 'investigationId', 'sourceId', 'windowId', 'kind'],
+  thread: ['v', 'investigationId', 'sourceId', 'windowId', 'kind'],
   presence: ['v', 'investigationId', 'sourceId', 'windowId', 'kind', 'role', 'open'],
   select: ['v', 'investigationId', 'sourceId', 'windowId', 'kind', 'requestId', 'keys'],
   selected: ['v', 'investigationId', 'sourceId', 'windowId', 'kind', 'requestId', 'onCanvas'],
@@ -95,13 +100,13 @@ export function readMessage(data: unknown, scope: WindowScope): { readonly windo
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return undefined;
   const record: Record<string, unknown> = Object.fromEntries(Object.entries(data));
   const kind = record['kind'];
-  if (kind !== 'hello' && kind !== 'presence' && kind !== 'select' && kind !== 'selected') return undefined;
+  if (kind !== 'hello' && kind !== 'thread' && kind !== 'presence' && kind !== 'select' && kind !== 'selected') return undefined;
   const names = Object.keys(record);
   const members = MEMBERS[kind];
   if (names.length !== members.length || !names.every((name) => members.includes(name))) return undefined;
   const windowId = record['windowId'];
   if (record['v'] !== 1 || record['investigationId'] !== scope.investigationId || record['sourceId'] !== scope.sourceId || typeof windowId !== 'string' || windowId === '') return undefined;
-  if (kind === 'hello') return { windowId, body: { kind } };
+  if (kind === 'hello' || kind === 'thread') return { windowId, body: { kind } };
   if (kind === 'presence') {
     const role = record['role'];
     const open = record['open'];
@@ -134,7 +139,7 @@ function newWindowId(): string {
 function unavailable(): WindowChannel {
   const others = createStore<ReadonlySet<WindowRole>>(NO_ROLES);
   const openWindows = createStore<ReadonlyMap<WindowRole, ReadonlySet<string>>>(NO_WINDOWS);
-  return { available: false, announce: () => () => undefined, others, openWindows, sendSelection: () => undefined, onSelection: () => () => undefined, sendSelectionResult: () => undefined, onSelectionResult: () => () => undefined, close: () => undefined };
+  return { available: false, announce: () => () => undefined, others, openWindows, sendSelection: () => undefined, onSelection: () => () => undefined, sendSelectionResult: () => undefined, onSelectionResult: () => () => undefined, announceThreadChanged: () => undefined, onThreadChanged: () => () => undefined, close: () => undefined };
 }
 
 function sameWindows(a: ReadonlyMap<WindowRole, ReadonlySet<string>>, b: ReadonlyMap<WindowRole, ReadonlySet<string>>): boolean {
@@ -160,6 +165,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
   const mine = new Map<WindowRole, number>();
   const listeners = new Set<(request: WindowSelection) => void>();
   const resultListeners = new Set<(result: WindowSelectionResult) => void>();
+  const threadListeners = new Set<() => void>();
   let closed = false;
   let requests = 0;
   const pending = new Map<string, { readonly keys: readonly string[]; readonly until: number; readonly answered: Set<string> }>();
@@ -199,6 +205,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
     if (message === undefined || message.windowId === windowId || closed) return;
     const { body } = message;
     if (body.kind === 'hello') sayAll();
+    else if (body.kind === 'thread') for (const listener of [...threadListeners]) listener();
     else if (body.kind === 'select') for (const listener of [...listeners]) listener({ requestId: body.requestId, keys: body.keys });
     else if (body.kind === 'selected') {
       const asked = pending.get(body.requestId);
@@ -271,6 +278,15 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
     sendSelectionResult(requestId, onCanvas) {
       if (validRequestId(requestId) && textKeys(onCanvas, 0)) post({ kind: 'selected', requestId, onCanvas: [...onCanvas] });
     },
+    announceThreadChanged() {
+      post({ kind: 'thread' });
+    },
+    onThreadChanged(listener) {
+      threadListeners.add(listener);
+      return () => {
+        threadListeners.delete(listener);
+      };
+    },
     onSelectionResult(listener) {
       resultListeners.add(listener);
       return () => {
@@ -288,6 +304,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
       }
       listeners.clear();
       resultListeners.clear();
+      threadListeners.clear();
       pending.clear();
       channel.onmessage = null;
       channel.close();

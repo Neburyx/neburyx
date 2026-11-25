@@ -9,6 +9,7 @@ export const ASSISTANT_COPY = {
   popOut: 'Pop out',
   popOutTip: 'Open this chat as a full page in a new window',
   popOutRefused: 'The window could not be opened. Check that this browser allows pop-up windows.',
+  popOutOpenHere: 'Open the chat in this window',
   popOutUnreachable: 'The chat is open in a window this window cannot switch to. Use that window, or close it to show the chat here.',
   poppedOutTitle: 'The chat is open in another window',
   poppedOutBody: 'The thread shows in both windows. Selecting a source there highlights the element on this graph.',

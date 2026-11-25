@@ -339,6 +339,49 @@ describe('the answer to a selection', () => {
   });
 });
 
+describe('the notice that the thread changed', () => {
+  it('reaches the other windows of the scope with nothing in it, and not the window that sent it', () => {
+    const h = hub();
+    const [a, b, c] = [make(h), make(h), make(h)];
+    const heard = [vi.fn(), vi.fn(), vi.fn()];
+    [a, b, c].forEach((channel, index) => channel.onThreadChanged(heard[index] as () => void));
+    h.sent.length = 0;
+    a.announceThreadChanged();
+    expect(heard[0]).not.toHaveBeenCalled();
+    expect(heard[1]).toHaveBeenCalledTimes(1);
+    expect(heard[2]).toHaveBeenCalledTimes(1);
+    expect(Object.keys(h.sent[0]?.data as object).sort()).toEqual(['investigationId', 'kind', 'sourceId', 'v', 'windowId']);
+  });
+
+  it('is not heard from another investigation, another source or a malformed message, and stops after the listener is removed or the channel closed', () => {
+    const h = hub();
+    const [a, b] = [make(h), make(h)];
+    const heard = vi.fn();
+    const stop = b.onThreadChanged(heard);
+    make(h, { ...SCOPE, investigationId: 'inv-2' }).announceThreadChanged();
+    make(h, { ...SCOPE, sourceId: 'src-2' }).announceThreadChanged();
+    h.deliver(NAME, envelope({ kind: 'thread', text: 'x' }));
+    expect(heard).not.toHaveBeenCalled();
+    stop();
+    a.announceThreadChanged();
+    expect(heard).not.toHaveBeenCalled();
+    const later = vi.fn();
+    b.onThreadChanged(later);
+    b.close();
+    a.announceThreadChanged();
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it('does nothing where there is no channel', () => {
+    vi.stubGlobal('BroadcastChannel', undefined);
+    const channel = createWindowChannel(SCOPE);
+    channel.announceThreadChanged();
+    channel.onThreadChanged(() => undefined)();
+    vi.unstubAllGlobals();
+    expect(channel.available).toBe(false);
+  });
+});
+
 describe('the windows that answered and the windows that are open', () => {
   it('names the window that answered, and the ids of the open windows by role say which windows are left when one closes', () => {
     const h = hub();
