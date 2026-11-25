@@ -39,7 +39,6 @@ function entryFromRead(entry: CitationEntry, ref: Ref, reads: RefReads): Citatio
  */
 export function StoredSources({ entries, refs, open, onOpenChange, focusRequest, onFocusHandled }: { readonly entries: readonly CitationEntry[]; readonly refs: readonly Ref[]; readonly open: boolean; readonly onOpenChange: (open: boolean) => void; readonly focusRequest: SourcesControl['focusRequest']; readonly onFocusHandled: () => void }) {
   const listId = useId();
-  const listOwner = listId;
   const [note, setNote] = useState('');
   const reads = useRefReads(refs, open);
   // a list that is closed forgets what it read, so that each opening reads anew and nothing read at an earlier opening is listed
@@ -68,7 +67,7 @@ export function StoredSources({ entries, refs, open, onOpenChange, focusRequest,
     if (page !== undefined) {
       if (held.has(entry.graphKey)) {
         setNote('');
-        page.selection.select(entry.graphKey, listOwner);
+        page.selection.select(entry.graphKey, listId);
       } else setNote(SUMMARY_COPY.gone);
       return;
     }
@@ -98,7 +97,7 @@ export function StoredSources({ entries, refs, open, onOpenChange, focusRequest,
             </button>
           </p>
         ) : null}
-        {showList ? <SourcesList entries={listed} labelOf={(entry) => entry.label ?? ASSISTANT_COPY.sourceUnavailable} statusOf={status} isSelectable={(entry) => available(entry) && (drawn.has(entry.graphKey) || (page !== undefined && held.has(entry.graphKey)))} rowStateOf={page === undefined ? undefined : (entry) => (available(entry) && held.has(entry.graphKey) ? rowStateOf(entry.graphKey, listOwner, rowSelection, SUMMARY_COPY.select, () => page.openGraph(entry.graphKey)) : undefined)} onPress={press} focusRequest={focusRequest} onFocusHandled={onFocusHandled} /> : null}
+        {showList ? <SourcesList entries={listed} labelOf={(entry) => entry.label ?? ASSISTANT_COPY.sourceUnavailable} statusOf={status} isSelectable={(entry) => available(entry) && (drawn.has(entry.graphKey) || (page !== undefined && held.has(entry.graphKey)))} rowStateOf={page === undefined ? undefined : (entry) => (available(entry) && held.has(entry.graphKey) ? rowStateOf(entry.graphKey, listId, rowSelection, SUMMARY_COPY.select, () => page.openGraph(entry.graphKey)) : undefined)} onPress={press} focusRequest={focusRequest} onFocusHandled={onFocusHandled} /> : null}
       </div>
       <p className={note === '' ? 'summary-note visually-hidden' : 'summary-note'} role="status">{note}</p>
     </div>
