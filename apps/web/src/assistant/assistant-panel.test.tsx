@@ -27,6 +27,15 @@ describe('the Assistant panel: the intro and the read of the earlier chat', () =
     expect(await screen.findByText(ASSISTANT_COPY.introTitle)).toBeTruthy();
     expect(screen.queryByText(ASSISTANT_COPY.storedLoading)).toBeNull();
   });
+
+  it('shows the intro when no read of the earlier chat will start because the source has changed', async () => {
+    const h = harness(async () => ({ ok: true, value: REFUSE }), 800, () => new Promise(() => undefined));
+    h.state.describeInvestigation({ ...RECORD, sourceState: 'removed' });
+    render(h.tree());
+    expect(await screen.findByText(ASSISTANT_COPY.introTitle)).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.sourceChanged)).toBeTruthy();
+    expect(screen.queryByText(ASSISTANT_COPY.storedLoading)).toBeNull();
+  });
 });
 
 describe('the Assistant panel: a message', () => {

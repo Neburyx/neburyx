@@ -157,6 +157,8 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   useOpenAtEnd(body, stored.kind === 'ready' && !off && storedTurns.length > 0 && investigationId !== null ? `${investigationId}:${storedTurns[0]?.id ?? ''}` : undefined, turns.length);
   const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
   const pageEmpty = page && !unavailable && stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && notice?.kind !== 'access-lost' && notice?.kind !== 'masking-cleared';
+  // the intro waits for the read of the earlier chat: while it is out, or about to start (the person, the investigation and the source are known and the assistant is available)
+  const readIsComing = stored.kind === 'loading' || (stored.kind === 'idle' && availability === 'available' && !model.sourceChanged && investigationId !== null && principalId !== undefined);
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
   const hasThread = !off && investigationId !== null && principalId !== undefined && (storedTurns.length > 0 || turns.length > 0);
   useEffect(() => {
@@ -298,7 +300,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
         ) : null}
         {!unavailable && storedTurns.length > 0 ? <StoredTurns turns={storedTurns} earlier={stored.kind === 'ready' ? stored.thread.earlierTurns : 0} reads={reads} drawsValues={bound.length > 0} /> : null}
         {!unavailable && summary !== undefined ? <SummaryContext summary={summary} /> : null}
-        {pageEmpty ? <EmptyThread send={model.sendText} busy={model.busy || !available || model.sourceChanged} limit={limit} /> : page || unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread || stored.kind === 'loading' || stored.kind === 'idle' ? null : <Intro limit={limit} />}
+        {pageEmpty ? <EmptyThread send={model.sendText} busy={model.busy || !available || model.sourceChanged} limit={limit} /> : page || unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread || readIsComing ? null : <Intro limit={limit} />}
         {!unavailable && turns.length > 0 ? (
           <ol className="assistant-thread" aria-label={ASSISTANT_COPY.thread}>
             {turns.map((turn) => (
