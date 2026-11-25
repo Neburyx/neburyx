@@ -228,6 +228,8 @@ export const assistantThreadListItemSchema = chatInvestigationSchema.omit({ id: 
     .string()
     .refine((value) => [...value].length <= CHAT_LAST_QUESTION_MAX, { message: 'at most 200 code points' })
     .nullable(),
+  /** True when the stored question was longer than `lastQuestion`, which then ends where it was cut: a client shows an ellipsis after it. */
+  lastQuestionCut: z.boolean(),
 });
 
 export const assistantThreadListResponseSchema = z.strictObject({ items: z.array(assistantThreadListItemSchema).max(MAX_INVESTIGATION_LIST_LIMIT), nextCursor: z.string().min(1).max(2048).nullable() });

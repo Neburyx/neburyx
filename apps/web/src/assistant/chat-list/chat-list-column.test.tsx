@@ -21,7 +21,7 @@ type Query = { readonly limit?: number; readonly cursor?: string; readonly q?: s
 const ok = <T,>(value: T): ApiResult<T> => ({ ok: true, value });
 const NOW = new Date('2026-11-23T12:00:00Z');
 const idOf = (n: number): string => `0192f000-0000-7000-8000-${String(n).padStart(12, '0')}`;
-const chat = (n: number, over: Partial<Row> = {}): Row => ({ investigationId: idOf(n), title: `Chat title ${n}`, caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: '2026-11-23T09:00:00.000Z', turns: 1, lastQuestion: `Question ${n}`, ...over });
+const chat = (n: number, over: Partial<Row> = {}): Row => ({ investigationId: idOf(n), title: `Chat title ${n}`, caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: '2026-11-23T09:00:00.000Z', turns: 1, lastQuestion: `Question ${n}`, lastQuestionCut: false, ...over });
 const page = (items: readonly Row[], nextCursor: string | null = null): ApiResult<AssistantThreadListResponse> => ok({ items: [...items], nextCursor });
 
 function Where() {
@@ -560,5 +560,14 @@ describe('the chat list column: no read that nobody asked for', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('the chat list column: a question that was cut', () => {
+  it('ends the second line with an ellipsis when the server cut the stored question, and with none when it did not', async () => {
+    setup(async () => page([chat(1, { lastQuestion: 'whether any o', lastQuestionCut: true }), chat(2, { lastQuestion: 'whole question', lastQuestionCut: false })]));
+    await screen.findByText('Chat title 1');
+    expect(screen.getByRole('link', { name: /Chat title 1/ }).querySelector('.chat-list-row-question')?.textContent).toBe('whether any o…');
+    expect(screen.getByRole('link', { name: /Chat title 2/ }).querySelector('.chat-list-row-question')?.textContent).toBe('whole question');
   });
 });

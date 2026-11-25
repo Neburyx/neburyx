@@ -1169,7 +1169,7 @@ describe('the thread of an investigation in the running application', () => {
     await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
     const listed = assistantThreadListResponseSchema.parse((await list()).json());
     expect(listed.items).toHaveLength(1);
-    expect(listed.items[0]).toMatchObject({ investigationId: rig.body.investigationId, sourceId: 'demo', sourceState: 'available', turns: 1, lastQuestion: 'Which accounts are shown?' });
+    expect(listed.items[0]).toMatchObject({ investigationId: rig.body.investigationId, sourceId: 'demo', sourceState: 'available', turns: 1, lastQuestion: 'Which accounts are shown?', lastQuestionCut: false });
     expect(assistantThreadListResponseSchema.parse((await list('?q=which accounts')).json()).items).toHaveLength(1);
     expect(assistantThreadListResponseSchema.parse((await list('?q=nothing matches')).json()).items).toEqual([]);
     const zero = await list('?limit=0');

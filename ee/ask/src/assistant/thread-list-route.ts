@@ -22,9 +22,9 @@ const LIST_FAILED = 'assistant-thread.list-failed';
 
 const positionSchema = z.strictObject({ p: z.string(), s: z.string(), k: z.string(), i: z.string() });
 
-const cut = (text: string): string => {
+const cut = (text: string): { readonly text: string; readonly cut: boolean } => {
   const points = [...text];
-  return points.length <= CHAT_LAST_QUESTION_MAX ? text : points.slice(0, CHAT_LAST_QUESTION_MAX).join('');
+  return points.length <= CHAT_LAST_QUESTION_MAX ? { text, cut: false } : { text: points.slice(0, CHAT_LAST_QUESTION_MAX).join(''), cut: true };
 };
 
 const searchKeyOf = (text: string | undefined): string => createHash('sha256').update(text?.toLowerCase() ?? '').digest('hex');
@@ -63,6 +63,7 @@ function verify(sign: (text: string) => string, binding: Binding, cursor: string
 }
 
 function itemOf(row: ThreadListRow, named: ChatInvestigation) {
+  const question = row.lastQuestion === null ? undefined : cut(row.lastQuestion);
   return {
     investigationId: named.id,
     title: named.title,
@@ -72,7 +73,8 @@ function itemOf(row: ThreadListRow, named: ChatInvestigation) {
     sourceState: named.sourceState,
     lastQuestionAt: row.lastTurnAt,
     turns: row.turns,
-    lastQuestion: row.lastQuestion === null ? null : cut(row.lastQuestion),
+    lastQuestion: question === undefined ? null : question.text,
+    lastQuestionCut: question?.cut ?? false,
   };
 }
 

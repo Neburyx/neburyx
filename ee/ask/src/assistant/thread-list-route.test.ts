@@ -72,7 +72,7 @@ describe('the route that lists the caller’s chats', () => {
     const { call } = await rig(3);
     const answer = await call();
     expect(answer.items.map((item) => item.investigationId)).toEqual([idOf(3), idOf(2), idOf(1)]);
-    expect(answer.items[0]).toEqual({ investigationId: idOf(3), title: 'Title 3', caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: '2026-11-18T10:03:00.000Z', turns: 1, lastQuestion: 'Question 3' });
+    expect(answer.items[0]).toEqual({ investigationId: idOf(3), title: 'Title 3', caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: '2026-11-18T10:03:00.000Z', turns: 1, lastQuestion: 'Question 3', lastQuestionCut: false });
     expect(answer.nextCursor).toBeNull();
   });
 
@@ -86,13 +86,14 @@ describe('the route that lists the caller’s chats', () => {
     const byId = new Map(answer.items.map((item) => [item.investigationId, item]));
     expect([...(byId.get(idOf(1))?.lastQuestion ?? '')].length).toBe(200);
     expect(byId.get(idOf(1))?.lastQuestion?.startsWith('é'.repeat(150))).toBe(true);
-    expect(byId.get(idOf(2))).toMatchObject({ lastQuestion: 'A question asked with a heavy step', turns: 2 });
+    expect(byId.get(idOf(1))?.lastQuestionCut).toBe(true);
+    expect(byId.get(idOf(2))).toMatchObject({ lastQuestion: 'A question asked with a heavy step', lastQuestionCut: false, turns: 2 });
   });
 
   it('lists a thread that has no turn yet with zero turns, no question and the epoch as its date', async () => {
     const { store, call } = await rig(0);
     store.threads.set(`${idOf(5)}:${PERSON}`, { id: crypto.randomUUID(), investigationId: idOf(5), userId: PERSON, turns: [] });
-    expect((await call()).items[0]).toMatchObject({ investigationId: idOf(5), turns: 0, lastQuestion: null, lastQuestionAt: '1970-01-01T00:00:00.000Z' });
+    expect((await call()).items[0]).toMatchObject({ investigationId: idOf(5), turns: 0, lastQuestion: null, lastQuestionCut: false, lastQuestionAt: '1970-01-01T00:00:00.000Z' });
   });
 
   it('gives null for a thread of turns that kept no question', async () => {

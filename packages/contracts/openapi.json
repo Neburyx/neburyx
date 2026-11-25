@@ -14641,6 +14641,9 @@
                     "string",
                     "null"
                   ]
+                },
+                "lastQuestionCut": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -14652,7 +14655,8 @@
                 "investigationId",
                 "lastQuestionAt",
                 "turns",
-                "lastQuestion"
+                "lastQuestion",
+                "lastQuestionCut"
               ],
               "additionalProperties": false
             }

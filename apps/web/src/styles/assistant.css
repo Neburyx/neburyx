@@ -1578,6 +1578,16 @@
   resize: none;
 }
 
+/* the focus ring of the input is drawn on the box that holds it, as one control; the input keeps a transparent outline so that forced colours still draw one */
+.assistant-compose:has(textarea:focus-visible) {
+  outline: var(--border-width-current) solid var(--color-focus);
+}
+
+.assistant-surface-page .assistant-compose textarea:focus,
+.assistant-surface-page .assistant-compose textarea:focus-visible {
+  outline: var(--border-width-current) solid transparent;
+}
+
 .assistant-compose textarea::placeholder,
 .assistant-compose .ask-counter {
   color: var(--assistant-page-muted);

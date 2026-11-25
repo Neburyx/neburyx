@@ -58,7 +58,7 @@ function tipOf(link: HTMLElement, byFocus: boolean): RowTip | undefined {
 
 function Row({ row, selected, onTip }: { readonly row: ChatRow; readonly selected: boolean; readonly onTip: (tip: RowTip | undefined) => void }) {
   const chip = row.sourceState === 'removed' ? REMOVED_CHIP : row.sourceState === 'repointed' ? REPOINTED_CHIP : undefined;
-  const second = row.turns === 0 ? CHAT_LIST_COPY.noQuestions : (row.lastQuestion ?? '');
+  const second = row.turns === 0 ? CHAT_LIST_COPY.noQuestions : `${row.lastQuestion ?? ''}${row.lastQuestion !== null && row.lastQuestionCut ? '…' : ''}`;
   return (
     <li>
       <Link

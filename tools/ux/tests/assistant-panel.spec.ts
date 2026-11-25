@@ -1378,4 +1378,13 @@ test.describe('the Assistant panel', () => {
     await expect(panel(page).getByText('No longer attached', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Your message')).toHaveValue('which claim rests on the account?');
   });
+  test('opens a long stored chat at its latest turn, just above the composer', async ({ page }) => {
+    const turns = Array.from({ length: 16 }, (_, index) => ({ id: `0192f000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`, seq: index + 1, at: new Date(Date.UTC(2026, 10, 18, 10, index)).toISOString(), route: 'view' as const, outcome: 'answered' as const, citedElements: 1, steps: 0, question: `Question number ${index + 1}: who holds the accounts that moved money to the counterparties of this customer last week, and over what period?` }));
+    await openWorkspace(page, { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' }, { turns, earlierTurns: 0, previousThreadClearedAt: null });
+    await open(page);
+    await expect(panel(page).getByText('Question number 16', { exact: false })).toBeVisible();
+    const room = await panel(page).locator('.assistant-body').evaluate((element) => ({ overflow: element.scrollHeight > element.clientHeight + 40, room: element.scrollHeight - element.clientHeight - element.scrollTop }));
+    expect(room.overflow).toBe(true);
+    expect(room.room).toBeLessThanOrEqual(2);
+  });
 });

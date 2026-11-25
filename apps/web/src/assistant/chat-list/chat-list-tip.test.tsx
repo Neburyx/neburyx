@@ -18,7 +18,7 @@ function setup(question: string, narrow = false) {
   const client = fakeClient({
     listAssistantThreads: async (query) => ({
       ok: true,
-      value: { items: query.q !== undefined && narrow ? [] : [{ investigationId: '0192f000-0000-7000-8000-000000000001', title: 'Chat title 1', caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: new Date().toISOString(), turns: 1, lastQuestion: question }], nextCursor: null },
+      value: { items: query.q !== undefined && narrow ? [] : [{ investigationId: '0192f000-0000-7000-8000-000000000001', title: 'Chat title 1', caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: new Date().toISOString(), turns: 1, lastQuestion: question, lastQuestionCut: question.endsWith('o') }], nextCursor: null },
     }),
   });
   const state = createClientState();
@@ -66,5 +66,12 @@ describe('the tip of a chat row whose text is cut', () => {
     await userEvent.type(screen.getByRole('searchbox'), 'zz');
     await screen.findByText('No chats match your search.');
     expect(document.querySelector('.assistant-table-tip')).toBeNull();
+  });
+
+  it('ends the tip with an ellipsis when the server cut the question', async () => {
+    cutNow.value = true;
+    setup('whether any o');
+    await userEvent.hover(await screen.findByRole('link', { name: /Chat title 1/ }));
+    expect(document.querySelector('.assistant-table-tip')?.textContent).toBe('Chat title 1\nwhether any o…');
   });
 });

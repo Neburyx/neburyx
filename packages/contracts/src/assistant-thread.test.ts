@@ -157,7 +157,7 @@ describe('the count a thread read tells', () => {
 });
 
 describe('the list of chats', () => {
-  const item = { investigationId: '0192f000-0000-7000-8000-000000000001', title: 'A title', caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: '2026-11-18T10:00:00.000Z', turns: 2, lastQuestion: 'A question' };
+  const item = { investigationId: '0192f000-0000-7000-8000-000000000001', title: 'A title', caseRef: null, sourceId: 'demo', sourceAlias: 'demo', sourceState: 'available', lastQuestionAt: '2026-11-18T10:00:00.000Z', turns: 2, lastQuestion: 'A question', lastQuestionCut: false };
 
   it('accepts a page with a last question of at most 200 code points, whatever their size in UTF-16 units, or none, and a cursor or none', () => {
     expect(assistantThreadListResponseSchema.safeParse({ items: [item, { ...item, lastQuestion: '😀'.repeat(200) }, { ...item, lastQuestion: null }], nextCursor: 'abc.def' }).success).toBe(true);
@@ -165,7 +165,7 @@ describe('the list of chats', () => {
   });
 
   it('refuses a last question of 201 code points, an extra member, a missing member, a negative count, a source state that is not one and more than 100 items', () => {
-    for (const bad of [{ ...item, lastQuestion: 'x'.repeat(201) }, { ...item, extra: 1 }, { ...item, turns: -1 }, { ...item, sourceState: 'gone' }, { ...item, lastQuestionAt: 'yesterday' }]) expect(assistantThreadListResponseSchema.safeParse({ items: [bad], nextCursor: null }).success).toBe(false);
+    for (const bad of [{ ...item, lastQuestion: 'x'.repeat(201) }, { ...item, extra: 1 }, { ...item, turns: -1 }, { ...item, sourceState: 'gone' }, { ...item, lastQuestionAt: 'yesterday' }, { ...item, lastQuestionCut: undefined }, { ...item, lastQuestionCut: 'yes' }]) expect(assistantThreadListResponseSchema.safeParse({ items: [bad], nextCursor: null }).success).toBe(false);
     const { title: _title, ...missing } = item;
     expect(assistantThreadListResponseSchema.safeParse({ items: [missing], nextCursor: null }).success).toBe(false);
     expect(assistantThreadListResponseSchema.safeParse({ items: Array.from({ length: 101 }, () => item), nextCursor: null }).success).toBe(false);

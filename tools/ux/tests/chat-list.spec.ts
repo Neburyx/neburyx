@@ -14,6 +14,7 @@ const row = (n: number, daysBefore: number, over: Record<string, unknown> = {}) 
   lastQuestionAt: day(daysBefore),
   turns: 1,
   lastQuestion: `The last question of chat ${n}`,
+  lastQuestionCut: false,
   ...over,
 });
 const CHATS = [row(1, 0), row(2, 0), row(3, 3), row(4, 4), row(5, 30), row(6, 40, { sourceState: 'removed' })];
@@ -234,5 +235,15 @@ test.describe('The chat list column of the Assistant page', () => {
     const { nodes } = await cdp.send('Accessibility.getFullAXTree');
     const names = nodes.filter((node) => node.role?.value === 'list').map((node) => String(node.name?.value ?? '')).filter((name) => name !== '');
     expect(names).toEqual(['Today', 'Previous 7 days', 'Older']);
+  });
+
+  test('ends the second line and the tip with an ellipsis when the server cut the stored question, at a word of the stored text', async ({ page }) => {
+    const cutText = 'Please look at this customer and tell me which accounts they hold and whether any o';
+    await routes(page, [{ items: [row(1, 0, { lastQuestion: cutText, lastQuestionCut: true }), row(2, 0, { lastQuestion: 'A whole question that is long enough to be cut by the ellipsis of the row only because of the width', lastQuestionCut: false })], nextCursor: null }]);
+    await openPage(page);
+    await expect(page.getByRole('link', { name: /Chat title 1/ }).locator('.chat-list-row-question')).toHaveText(`${cutText}…`);
+    await expect(page.getByRole('link', { name: /Chat title 2/ }).locator('.chat-list-row-question')).not.toContainText('…');
+    await page.getByRole('link', { name: /Chat title 1/ }).hover();
+    await expect(page.locator('.assistant-table-tip')).toContainText(`${cutText}…`);
   });
 });

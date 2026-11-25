@@ -236,4 +236,130 @@ test.describe('The Assistant page', () => {
     release();
     await expect(page.getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
   });
+
+  test('draws the focus ring on the composer box, not tight around the one-line input, without moving anything', async ({ page }) => {
+    await routes(page);
+    await openPage(page);
+    const field = page.getByLabel('Your message');
+    await expect(field).toBeVisible();
+    const look = () =>
+      page.evaluate(() => {
+        const compose = getComputedStyle(document.querySelector('.assistant-compose') as Element);
+        const input = getComputedStyle(document.querySelector('.assistant-compose textarea') as Element);
+        const box = (document.querySelector('.assistant-compose') as Element).getBoundingClientRect();
+        const text = (document.querySelector('.assistant-compose textarea') as Element).getBoundingClientRect();
+        return { ring: [compose.outlineStyle, compose.outlineWidth, compose.outlineColor], input: [input.outlineStyle === 'none' || input.outlineColor === 'rgba(0, 0, 0, 0)'], box: [box.x, box.y, box.width, box.height], text: [text.x, text.y, text.width, text.height] };
+      });
+    await field.evaluate((element) => (element as HTMLElement).blur());
+    const before = await look();
+    expect(before.ring[0]).toBe('none');
+    await field.focus();
+    const after = await look();
+    expect(after.ring).toEqual(['solid', await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--border-width-current').trim() || '2px'), after.ring[2]]);
+    expect(after.ring[2]).toBe(await page.evaluate(() => { const probe = document.createElement('i'); probe.style.color = 'var(--color-focus)'; document.body.append(probe); const colour = getComputedStyle(probe).color; probe.remove(); return colour; }));
+    expect(after.input).toEqual([true]);
+    expect(after.box).toEqual(before.box);
+    expect(after.text).toEqual(before.text);
+  });
+
+  const storedTurns = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `0192f000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`,
+      seq: index + 1,
+      at: new Date(Date.UTC(2026, 10, 18, 10, index)).toISOString(),
+      route: 'view',
+      outcome: 'answered',
+      citedElements: 1,
+      steps: 0,
+      question: `Question number ${index + 1}: who holds the accounts that moved money to the counterparties of this customer last week, and over what period?`,
+    }));
+
+  async function openStoredPage(page: Page, count = 16): Promise<void> {
+    await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
+    await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: { turns: storedTurns(count), earlierTurns: 0, previousThreadClearedAt: null } }));
+    await page.route((url) => url.pathname === '/v1/assistant/threads', (route) => route.fulfill({ json: { items: [], nextCursor: null } }));
+    await openPage(page);
+  }
+
+  const atEnd = async (page: Page): Promise<{ readonly room: number; readonly overflow: boolean; readonly lastBottom: number; readonly formTop: number }> =>
+    page.evaluate(() => {
+      const body = document.querySelector('.assistant-surface-page .assistant-body') as HTMLElement;
+      const form = document.querySelector('.assistant-surface-page .ask-form') as HTMLElement;
+      const turns = [...body.querySelectorAll('li, [data-assistant-turn], .assistant-stored-turn')];
+      const last = turns.at(-1) ?? body.lastElementChild;
+      return { room: body.scrollHeight - body.clientHeight - body.scrollTop, overflow: body.scrollHeight > body.clientHeight + 40, lastBottom: last?.getBoundingClientRect().bottom ?? 0, formTop: form.getBoundingClientRect().top };
+    });
+
+  test('opens a stored chat at its latest turn, just above the composer', async ({ page }) => {
+    await openStoredPage(page);
+    await expect(page.getByText('Question number 16', { exact: false })).toBeVisible();
+    const state = await atEnd(page);
+    expect(state.overflow).toBe(true);
+    expect(state.room).toBeLessThanOrEqual(2);
+    expect(state.lastBottom).toBeLessThanOrEqual(state.formTop + 1);
+  });
+
+  test('opens the latest turn again for another investigation, and does not move a person who scrolled up when the chat is read again', async ({ page }) => {
+    await openStoredPage(page);
+    await expect(page.getByText('Question number 16', { exact: false })).toBeVisible();
+    const body = page.locator('.assistant-surface-page .assistant-body');
+    await body.hover();
+    await page.mouse.wheel(0, -4000);
+    await expect.poll(async () => (await atEnd(page)).room).toBeGreaterThan(200);
+    const before = await body.evaluate((element) => element.scrollTop);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(600);
+    expect(Math.abs((await body.evaluate((element) => element.scrollTop)) - before)).toBeLessThanOrEqual(2);
+    await openPage(page);
+    await expect(page.getByText('Question number 16', { exact: false })).toBeVisible();
+    await expect.poll(async () => (await atEnd(page)).room).toBeLessThanOrEqual(2);
+  });
+
+  test('draws the stored chat at its end with no animation when the person asks for reduced motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await openStoredPage(page);
+    await expect(page.getByText('Question number 16', { exact: false })).toBeVisible();
+    expect(await page.locator('.assistant-surface-page .assistant-body').evaluate((element) => getComputedStyle(element).scrollBehavior)).toBe('auto');
+    expect((await atEnd(page)).room).toBeLessThanOrEqual(2);
+  });
+
+  test('does not pull a person back to the end who scrolled up by the scrollbar or a key, when the content grows', async ({ page }) => {
+    await openStoredPage(page);
+    await expect(page.getByText('Question number 16', { exact: false })).toBeVisible();
+    const body = page.locator('.assistant-surface-page .assistant-body');
+    // a scrollbar drag sends no wheel, touch or key event: only the scroll itself
+    await body.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await expect.poll(async () => (await atEnd(page)).room).toBeGreaterThan(200);
+    await body.evaluate((element) => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '300px';
+      element.firstElementChild?.append(spacer);
+    });
+    await page.waitForTimeout(400);
+    expect((await atEnd(page)).room).toBeGreaterThan(200);
+  });
+
+  test('reads a turn that is sent in a stored chat from its top, and does not pull it to the end', async ({ page }) => {
+    const tall: AssistantTurnAnswer = { ...TABLE, blocks: [0, 1, 2].flatMap((copy) => TABLE.blocks.map((block) => (block.kind === 'table' ? { ...block, table: { ...block.table, title: copy === 0 ? block.table.title : `${block.table.title} (${copy + 1})` } } : block))) } as AssistantTurnAnswer;
+    await openStoredPage(page);
+    await page.route((url) => url.pathname === '/v1/assistant/turns', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.fulfill({ json: tall });
+    });
+    await expect(page.getByText('Question number 16', { exact: false })).toBeVisible();
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('[data-assistant-turn]').first()).toBeVisible();
+    await page.waitForTimeout(600);
+    const place = await page.evaluate(() => {
+      const body = document.querySelector('.assistant-surface-page .assistant-body') as HTMLElement;
+      const turn = document.querySelector('[data-assistant-turn]') as HTMLElement | null;
+      return { turnTop: turn?.getBoundingClientRect().top ?? -1, bodyTop: body.getBoundingClientRect().top, bodyBottom: body.getBoundingClientRect().bottom, room: body.scrollHeight - body.clientHeight - body.scrollTop };
+    });
+    expect(place.turnTop).toBeGreaterThanOrEqual(place.bodyTop - 2);
+    expect(place.turnTop).toBeLessThan(place.bodyBottom);
+    expect(place.room).toBeGreaterThan(50);
+  });
 });
