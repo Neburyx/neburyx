@@ -2,7 +2,8 @@ import { ASSISTANT_PATH } from '../shell/navigation.js';
 
 const NAME_PREFIX = 'neburyx-assistant-';
 
-export type PopOutResult = 'opened' | 'focused' | 'refused';
+/** `unreachable`: the channel says a page is open but its window is not one this window can reach by name (a tab opened by hand is in another group of windows), so nothing is opened. */
+export type PopOutResult = 'opened' | 'focused' | 'refused' | 'unreachable';
 
 export interface PopOutDeps {
   readonly open: (url: string, name: string) => Window | null;
@@ -47,6 +48,7 @@ export function popOut(investigationId: string, deps: PopOutDeps): PopOutResult 
         return 'focused';
       }
       found.close();
+      return 'unreachable';
     }
   }
   const created = deps.open(popOutAddress(investigationId), name);

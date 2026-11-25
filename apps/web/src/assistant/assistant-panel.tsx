@@ -257,16 +257,18 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
             <h2>{ASSISTANT_COPY.title}</h2>
             <p>{model.title}</p>
           </div>
-          <WideButton />
-          <PopOutButton pressed={pageElsewhere} onPress={pressPopOut} />
-          {hasThread && !collapsed ? (
-            <button ref={clearButton} type="button" className="assistant-clear" aria-label={ASSISTANT_COPY.clearChat} data-tip={ASSISTANT_COPY.clearChat} disabled={pending} onClick={askToClear}>
-              <TrashIcon />
+          <div className="assistant-head-actions">
+            <WideButton />
+            <PopOutButton pressed={pageElsewhere} onPress={pressPopOut} />
+            {hasThread && !collapsed ? (
+              <button ref={clearButton} type="button" className="assistant-clear" aria-label={ASSISTANT_COPY.clearChat} data-tip={ASSISTANT_COPY.clearChat} disabled={pending} onClick={askToClear}>
+                <TrashIcon />
+              </button>
+            ) : null}
+            <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} data-tip={ASSISTANT_COPY.close} onClick={close}>
+              ×
             </button>
-          ) : null}
-          <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} data-tip={ASSISTANT_COPY.close} onClick={close}>
-            ×
-          </button>
+          </div>
         </header>
       )}
       {popOutRefused ? <p className="ask-note assistant-popout-refused" role="status">{ASSISTANT_COPY.popOutRefused}</p> : null}

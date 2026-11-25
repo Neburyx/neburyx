@@ -61,13 +61,18 @@ describe('Pop out', () => {
     expect(page.focus).toHaveBeenCalledTimes(1);
   });
 
-  it('closes the empty window that a name nobody holds opens, and opens the page instead', () => {
+  it('closes the empty window that a name nobody here can reach opens, and opens nothing else: the page it cannot reach is open', () => {
     const empty = fakeWindow('about:blank');
-    const page = fakeWindow();
-    const open = vi.fn().mockReturnValueOnce(asWindow(empty)).mockReturnValueOnce(asWindow(page));
-    expect(popOut('inv-1', { open, pageOpenElsewhere: () => true })).toBe('opened');
+    const open = vi.fn(() => asWindow(empty));
+    expect(popOut('inv-1', { open, pageOpenElsewhere: () => true })).toBe('unreachable');
     expect(empty.close).toHaveBeenCalledTimes(1);
-    expect(open).toHaveBeenLastCalledWith('/assistant/inv-1', 'neburyx-assistant-inv-1');
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('says it was refused when the browser refuses the lookup and then the window', () => {
+    const open = vi.fn(() => null);
+    expect(popOut('inv-1', { open, pageOpenElsewhere: () => true })).toBe('refused');
+    expect(open).toHaveBeenCalledTimes(2);
   });
 
   it('keeps one window for each investigation', () => {
