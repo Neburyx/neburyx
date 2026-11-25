@@ -23,6 +23,7 @@ import { useSuggestions } from './suggestions.js';
 import { EmptyThread, PageHeader } from './page-parts.js';
 import { useAssistant } from './use-assistant.js';
 import { PopOutButton } from './pop-out-button.js';
+import { usePopOutNote } from './use-pop-out-note.js';
 import { popOut } from '../windows/pop-out.js';
 import { useOtherWindowRoles, useWindowChannelAvailable } from '../windows/use-window-channel.js';
 
@@ -132,10 +133,10 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const principalId = usePrincipalIdWhenProvided();
   const [confirming, setConfirming] = useState<{ readonly investigationId: string; readonly principalId: string; readonly epoch: number } | undefined>(undefined);
   const [clearedNote, setClearedNote] = useState(false);
-  const [popOutNote, setPopOutNote] = useState<'refused' | 'unreachable' | undefined>(undefined);
   const otherWindows = useOtherWindowRoles();
   const channelAvailable = useWindowChannelAvailable();
   const pageElsewhere = otherWindows.has('assistant');
+  const popOutNote = usePopOutNote(pageElsewhere);
   const [showHere, setShowHere] = useState(false);
   const collapsed = !page && pageElsewhere && !showHere;
   const wasCollapsed = useRef(false);
@@ -175,7 +176,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const pressPopOut = (): void => {
     if (investigationId === null) return;
     const result = popOut(investigationId, { open: (url, name) => window.open(url, name), pageOpenElsewhere: () => pageElsewhere, channelAvailable: () => channelAvailable });
-    setPopOutNote(result === 'refused' || result === 'unreachable' ? result : undefined);
+    popOutNote.show(result === 'refused' || result === 'unreachable' ? result : undefined);
     if (result === 'unreachable') setShowHere(false);
   };
   const noteLostFocus = useCallback(() => {
@@ -273,12 +274,15 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
           </div>
         </header>
       )}
-      {popOutNote === undefined ? null : <p className="ask-note assistant-popout-refused" role="status">{popOutNote === 'refused' ? ASSISTANT_COPY.popOutRefused : ASSISTANT_COPY.popOutUnreachable}</p>}
+      {popOutNote.note === undefined ? null : <p className="ask-note assistant-popout-refused" role="status">{popOutNote.note === 'refused' ? ASSISTANT_COPY.popOutRefused : ASSISTANT_COPY.popOutUnreachable}</p>}
       <p className="visually-hidden" role="status" aria-live="polite">
         {clearedNote ? ASSISTANT_COPY.cleared : announced}
       </p>
       {confirming === undefined ? null : <ClearChatDialog send={() => client.clearAssistantThread(confirming.investigationId)} onCleared={() => cleared(confirming)} onClose={closeConfirm} />}
-      {collapsed ? <PoppedOutNote onShow={() => setShowHere(true)} onFocusLost={noteLostFocus} /> : null}
+      {collapsed ? <PoppedOutNote onShow={() => {
+        popOutNote.clear();
+        setShowHere(true);
+      }} onFocusLost={noteLostFocus} /> : null}
       <div className="ask-body assistant-body" ref={body} hidden={collapsed}>
         {unavailable ? <NotAvailable /> : showNewThread ? <NewThreadCard /> : null}
         {!unavailable && stored.kind === 'loading' ? <p className="ask-note" role="status">{ASSISTANT_COPY.storedLoading}</p> : null}

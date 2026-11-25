@@ -105,6 +105,40 @@ test.describe('Pop out of the Assistant panel', () => {
     await expect(panel(page).getByLabel('Your message')).toBeVisible();
   });
 
+  test('tells why nothing was switched to when the page is open in a window it cannot reach, without moving the header or clipping the text, at the opening width and wide', async ({ page, context }) => {
+    await stubs(context);
+    const id = await openInvestigation(page);
+    await openPanel(page);
+    const other = await context.newPage();
+    await other.goto(`/assistant/${id}`);
+    await expect(panel(page).getByText(NOTE)).toBeVisible({ timeout: 10_000 });
+    const head = panel(page).locator('.ask-head');
+    const before = await head.boundingBox();
+    const lookup = page.waitForEvent('popup', { timeout: 3000 }).catch(() => null);
+    await popOutButton(page).click();
+    const line = panel(page).getByRole('status').filter({ hasText: 'cannot switch to' });
+    await expect(line).toBeVisible();
+    const emptied = await lookup;
+    if (emptied !== null && !emptied.isClosed()) await emptied.waitForEvent('close', { timeout: 5000 });
+    expect(context.pages().filter((entry) => !entry.isClosed())).toHaveLength(2);
+    const measure = async () => {
+      const after = await head.boundingBox();
+      expect(after?.y).toBe(before?.y);
+      expect(after?.height).toBe(before?.height);
+      const box = await line.boundingBox();
+      const frame = await panel(page).boundingBox();
+      expect(box && frame ? box.x >= frame.x && box.x + box.width <= frame.x + frame.width : false).toBe(true);
+      expect(await line.evaluate((element) => element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight)).toBe(true);
+      await expect(panel(page).getByText(NOTE)).toBeVisible();
+    };
+    await measure();
+    await panel(page).getByRole('button', { name: 'Wide' }).click();
+    await expect(line).toBeVisible();
+    await measure();
+    await other.close();
+    await expect(line).toBeHidden({ timeout: 10_000 });
+  });
+
   test('is reached from the keyboard, and shows its tooltip and the note as the frames draw them', async ({ page, context }, info) => {
     await stubs(context);
     await openInvestigation(page);

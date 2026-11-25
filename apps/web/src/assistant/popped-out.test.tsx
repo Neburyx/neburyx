@@ -217,6 +217,55 @@ describe('the panel while the page of the chat is open in another window', () =>
     expect(screen.queryByText(ASSISTANT_COPY.popOutRefused)).toBeNull();
   });
 
+  describe('the line about a window that cannot be reached', () => {
+    const blank = () => ({ closed: false, focus: vi.fn(), close: vi.fn(), location: { href: 'about:blank' } });
+    const press = async () => {
+      vi.spyOn(window, 'open').mockReturnValue(blank() as unknown as Window);
+      await panel();
+      const stop = await pageOpens(window2());
+      await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.popOut }));
+      return stop;
+    };
+    const line = () => screen.queryByText(ASSISTANT_COPY.popOutUnreachable);
+
+    it('is announced politely, as a status, and shows beside the collapsed header', async () => {
+      await press();
+      const shown = line();
+      expect(shown?.getAttribute('role')).toBe('status');
+      expect(shown?.closest('.assistant-panel')).not.toBeNull();
+      expect(note()).not.toBeNull();
+    });
+
+    it('goes when the other window closes', async () => {
+      const stop = await press();
+      expect(line()).not.toBeNull();
+      await stop();
+      expect(line()).toBeNull();
+    });
+
+    it('goes when the chat is shown here', async () => {
+      await press();
+      await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.showHere }));
+      expect(line()).toBeNull();
+    });
+
+    it('goes when the person comes back to this window, and not for the focus that the empty window gives back at once', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-25T10:00:00Z'));
+      vi.spyOn(window, 'open').mockReturnValue(blank() as unknown as Window);
+      await panel();
+      await pageOpens(window2());
+      const button = screen.getByRole('button', { name: ASSISTANT_COPY.popOut });
+      await act(async () => button.click());
+      expect(line()).not.toBeNull();
+      await act(async () => void window.dispatchEvent(new Event('focus')));
+      expect(line()).not.toBeNull();
+      vi.setSystemTime(new Date('2026-11-25T10:00:05Z'));
+      await act(async () => void window.dispatchEvent(new Event('focus')));
+      expect(line()).toBeNull();
+    });
+  });
+
   it('closes on Escape and on Close as the open panel does, and moves the focus to the composer when it is restored while the button has it', async () => {
     const h = harness(async () => ok(REFUSE));
     const closed = vi.fn();
