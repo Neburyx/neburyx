@@ -1848,3 +1848,70 @@
 .assistant-empty .assistant-empty-line {
   font-size: var(--font-size-small);
 }
+
+/* the state of a source row of the page: what pressing it does, or what it did in the graph window */
+.assistant-source-state {
+  margin-left: auto;
+  flex: none;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+.assistant-source-state[data-selection="highlighted"] {
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius);
+  background: var(--color-success-surface);
+  color: var(--color-success-text);
+}
+
+.assistant-source-state[data-selection="selected"],
+.assistant-source-state[data-selection="not-on-canvas"] {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.assistant-source-notice {
+  display: flex;
+  gap: var(--space-12);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-6);
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.assistant-source-open {
+  display: inline-flex;
+  gap: var(--space-6);
+  flex: none;
+  align-items: center;
+  padding: var(--space-4) var(--space-12);
+  border: var(--border-width) solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.assistant-window-chip {
+  display: inline-flex;
+  gap: var(--space-6);
+  flex: none;
+  align-items: center;
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius);
+  background: var(--color-success-surface);
+  color: var(--color-success-text);
+  font-size: var(--font-size-small);
+}
+
+.assistant-window-dot {
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: 50%;
+  background: var(--color-success-text);
+}

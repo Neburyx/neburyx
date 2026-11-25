@@ -8,6 +8,7 @@ import { sourceNameOf } from '../shell/current-source.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { ASSISTANT_COPY } from './copy.js';
 import { useSuggestions } from './suggestions.js';
+import { useOtherWindowRoles } from '../windows/use-window-channel.js';
 
 /** What the canvas draws: each loaded entity and each relationship between two of them. Both are counted from what is drawn, so they are exact. */
 function shownCounts(graph: LoadedGraph): { readonly entities: number; readonly relationships: number } {
@@ -19,6 +20,7 @@ export function PageHeader({ clearButton, hasThread, pending, onClear }: { reado
   const held = useStoreSelector(state.investigation, (investigation) => investigation);
   const shell = useShellDataWhenProvided();
   const sources = shell === undefined ? [] : (answeredData(shell.sources)?.items ?? []);
+  const graphOpen = useOtherWindowRoles().has('graph');
   const record = held.record;
   const parts = [held.sourceId === null ? undefined : sourceNameOf(sources, held.sourceId), ASSISTANT_COPY.readOnly, record?.caseRef ?? undefined].filter((part) => part !== undefined && part !== '');
   return (
@@ -27,6 +29,12 @@ export function PageHeader({ clearButton, hasThread, pending, onClear }: { reado
         <h1>{record?.title ?? ''}</h1>
         <p>{parts.join(' · ')}</p>
       </div>
+      {graphOpen ? (
+        <span className="assistant-window-chip" role="status">
+          <span className="assistant-window-dot" aria-hidden="true" />
+          {ASSISTANT_COPY.graphWindowOpen}
+        </span>
+      ) : null}
       {held.id === null ? null : (
         <Link className="assistant-page-button" to={`${EXPLORE_PATH}/${held.id}`}>
           <span className="icon icon-arrow-up-right" aria-hidden="true" />

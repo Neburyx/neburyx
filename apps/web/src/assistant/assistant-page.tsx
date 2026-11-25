@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router';
+import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import type { ApiClient } from '../api/client.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
 import { AttemptedSource } from '../investigations/attempted-source.js';
@@ -8,7 +8,7 @@ import { useOpenInvestigation } from '../investigations/use-open-investigation.j
 import { PageFrame } from '../shell/page-shell.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
-import { ASSISTANT_PATH, INVESTIGATIONS_PATH } from '../shell/navigation.js';
+import { ASSISTANT_PATH, EXPLORE_PATH, INVESTIGATIONS_PATH } from '../shell/navigation.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { AssistantSurface } from './assistant-panel.js';
@@ -17,6 +17,7 @@ import { NewChatPicker } from './new-chat/new-chat-picker.js';
 import { assistantSessionOf, AssistantSessionProvider } from './assistant-session.js';
 import { ASSISTANT_COPY } from './copy.js';
 import { useAssistantPageWindow } from '../windows/assistant-window.js';
+import { SourceSelectionProvider } from './source-selection-context.js';
 
 function Message({ title, text, children }: { readonly title: string; readonly text?: string; readonly children?: React.ReactNode }) {
   return (
@@ -52,6 +53,7 @@ export function AssistantEntry() {
 /** `/assistant/{investigationId}`: the Assistant on a full page, over the one thread the panel shows. */
 export function AssistantPage({ client }: { readonly client: ApiClient }) {
   const { investigationId } = useParams();
+  const navigate = useNavigate();
   const state = useClientState();
   const shell = useShellData();
   const principalId = answeredData(shell.me)?.principal.id;
@@ -110,7 +112,9 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
           <ChatListColumn onNewChat={() => setPicking((held) => !held)} newChatRef={newChat} />
           {picking ? <NewChatPicker anchor={newChat} onClose={() => setPicking(false)} /> : null}
           <div className="assistant-page-thread">
-            <AssistantSurface variant="page" />
+            <SourceSelectionProvider openGraph={(key) => void navigate(`${EXPLORE_PATH}/${encodeURIComponent(shownId)}`, { state: { select: key } })}>
+              <AssistantSurface variant="page" />
+            </SourceSelectionProvider>
           </div>
         </AssistantSessionProvider>
       </div>

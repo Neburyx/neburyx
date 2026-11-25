@@ -9,6 +9,8 @@ import { pressOf, type CitationEntry } from '../summary/summary-model.js';
 import { ASSISTANT_COPY } from './copy.js';
 import type { SourcesControl } from './view-answer-card.js';
 import { SourcesList } from './sources-list.js';
+import { rowStateOf } from './row-state.js';
+import { useRowSelection, useSourceSelection } from './source-selection-context.js';
 import { useRefReads, type RefReads } from './stored-reads.js';
 
 type Ref = Parameters<typeof useRefReads>[0][number];
@@ -46,6 +48,8 @@ export function StoredSources({ entries, refs, open, onOpenChange, focusRequest,
   const graph = useVisibleGraph();
   const state = useClientState();
   const investigation = useStoreSelector(state.investigation, (held) => held);
+  const page = useSourceSelection();
+  const rowSelection = useRowSelection();
   if (entries.length === 0) return null;
   const drawn = drawnKeys(graph);
   const held = new Set([...investigation.nodeRefs.map(elementKey), ...investigation.edgeRefs.map(edgeKey)]);
@@ -54,10 +58,17 @@ export function StoredSources({ entries, refs, open, onOpenChange, focusRequest,
     const ref = refs[index];
     return ref === undefined ? entry : entryFromRead(entry, ref, reads);
   });
-  const status = (entry: CitationEntry): string => (!available(entry) ? ASSISTANT_COPY.sourceUnavailable : drawn.has(entry.graphKey) ? SUMMARY_COPY.select : held.has(entry.graphKey) ? SUMMARY_COPY.outsideView : SUMMARY_COPY.gone);
+  const status = (entry: CitationEntry): string => (!available(entry) ? ASSISTANT_COPY.sourceUnavailable : drawn.has(entry.graphKey) || (page !== undefined && held.has(entry.graphKey)) ? SUMMARY_COPY.select : held.has(entry.graphKey) ? SUMMARY_COPY.outsideView : SUMMARY_COPY.gone);
   const press = (entry: CitationEntry): void => {
     if (!available(entry)) {
       setNote(ASSISTANT_COPY.sourceUnavailable);
+      return;
+    }
+    if (page !== undefined) {
+      if (held.has(entry.graphKey)) {
+        setNote('');
+        page.selection.select(entry.graphKey);
+      } else setNote(SUMMARY_COPY.gone);
       return;
     }
     const outcome = pressOf(entry, drawn, held, SUMMARY_COPY);
@@ -86,7 +97,7 @@ export function StoredSources({ entries, refs, open, onOpenChange, focusRequest,
             </button>
           </p>
         ) : null}
-        {showList ? <SourcesList entries={listed} labelOf={(entry) => entry.label ?? ASSISTANT_COPY.sourceUnavailable} statusOf={status} isSelectable={(entry) => available(entry) && drawn.has(entry.graphKey)} onPress={press} focusRequest={focusRequest} onFocusHandled={onFocusHandled} /> : null}
+        {showList ? <SourcesList entries={listed} labelOf={(entry) => entry.label ?? ASSISTANT_COPY.sourceUnavailable} statusOf={status} isSelectable={(entry) => available(entry) && (drawn.has(entry.graphKey) || (page !== undefined && held.has(entry.graphKey)))} rowStateOf={page === undefined ? undefined : (entry) => (available(entry) && held.has(entry.graphKey) ? rowStateOf(entry.graphKey, rowSelection, SUMMARY_COPY.select, () => page.openGraph(entry.graphKey)) : undefined)} onPress={press} focusRequest={focusRequest} onFocusHandled={onFocusHandled} /> : null}
       </div>
       <p className={note === '' ? 'summary-note visually-hidden' : 'summary-note'} role="status">{note}</p>
     </div>

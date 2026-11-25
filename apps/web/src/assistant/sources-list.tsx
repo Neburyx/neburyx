@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CitationEntry } from "../summary/summary-model.js";
 import { ASSISTANT_COPY, GROUP_MEMBERS_SHOWN, moreInGroupText, sourcesGroupedText, sourcesText } from "./copy.js";
+import type { RowState } from "./row-state.js";
 import { groupSources, type SourceRow } from "./source-groups.js";
 
 export function SourcesList({
@@ -8,6 +9,7 @@ export function SourcesList({
   labelOf,
   statusOf,
   isSelectable,
+  rowStateOf,
   onPress,
   focusRequest,
   onFocusHandled,
@@ -16,6 +18,8 @@ export function SourcesList({
   readonly labelOf: (entry: CitationEntry) => string;
   readonly statusOf: (entry: CitationEntry) => string;
   readonly isSelectable: (entry: CitationEntry) => boolean;
+  /** On the page: the state a row shows beside its label and the notice under it. */
+  readonly rowStateOf?: (entry: CitationEntry) => RowState | undefined;
   readonly onPress: (entry: CitationEntry) => void;
   readonly focusRequest: { readonly number: number; readonly tick: number } | undefined;
   readonly onFocusHandled: () => void;
@@ -40,7 +44,9 @@ export function SourcesList({
     if (!next.delete(id)) next.add(id);
     return next;
   };
-  const rowOf = (entry: CitationEntry, nested: boolean) => (
+  const rowOf = (entry: CitationEntry, nested: boolean) => {
+    const rowState = rowStateOf?.(entry);
+    return (
     <li key={entry.key} className={nested ? "assistant-source-member" : undefined}>
       <button
         type="button"
@@ -54,17 +60,31 @@ export function SourcesList({
           button.focus();
         }}
         title={statusOf(entry)}
-        aria-label={`${ASSISTANT_COPY.sources}: ${entry.number}, ${labelOf(entry)}. ${statusOf(entry)}`}
+        data-selection={rowState === undefined || rowState.kind === "idle" ? undefined : rowState.kind}
+        aria-label={`${ASSISTANT_COPY.sources}: ${entry.number}, ${labelOf(entry)}. ${rowState === undefined ? statusOf(entry) : rowState.text}`}
         onClick={() => onPress(entry)}
       >
         <span className="summary-chip assistant-marker" aria-hidden="true">[{entry.number}]</span>
         <span className="assistant-source-label">
           {labelOf(entry)}
-          {isSelectable(entry) ? null : <span className="summary-chip-note">{statusOf(entry)}</span>}
+          {isSelectable(entry) || rowState !== undefined ? null : <span className="summary-chip-note">{statusOf(entry)}</span>}
         </span>
+        {rowState === undefined ? null : <span className="assistant-source-state" data-selection={rowState.kind}>{rowState.text}</span>}
       </button>
+      {rowState === undefined || (rowState.notice === undefined && rowState.openGraph === undefined) ? null : (
+        <div className="assistant-source-notice" role="status">
+          {rowState.notice === undefined ? null : <span>{rowState.notice}</span>}
+          {rowState.openGraph === undefined ? null : (
+            <button type="button" className="assistant-source-open" onClick={rowState.openGraph}>
+              <span className="icon icon-arrow-up-right" aria-hidden="true" />
+              {ASSISTANT_COPY.openGraph}
+            </button>
+          )}
+        </div>
+      )}
     </li>
-  );
+    );
+  };
   const groupOf = (row: Extract<SourceRow, { kind: "group" }>) => {
     const open = expanded.has(row.id);
     const shown = allShown.has(row.id) ? row.members : row.members.slice(0, GROUP_MEMBERS_SHOWN);

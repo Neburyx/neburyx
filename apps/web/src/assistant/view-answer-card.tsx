@@ -9,6 +9,8 @@ import { ASSISTANT_COPY, MARKER_RUN_MIN, citationRangeLabel, rowCitationsLabel }
 import { ReadSteps } from "./read-steps.js";
 import { markerGroups } from "./marker-runs.js";
 import { SourcesList } from "./sources-list.js";
+import { rowStateOf } from "./row-state.js";
+import { useRowSelection, useSourceSelection } from "./source-selection-context.js";
 import { TableBlock } from "./table-block.js";
 import type { ViewAnswer } from "./assistant-session.js";
 
@@ -69,7 +71,16 @@ export function ViewAnswerCard({
     ...investigation.edgeRefs.map(edgeKey),
   ]);
   const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+  const page = useSourceSelection();
+  const rowSelection = useRowSelection();
   const press = (entry: CitationEntry): void => {
+    if (page !== undefined) {
+      if (held.has(entry.graphKey)) {
+        setNote("");
+        page.selection.select(entry.graphKey);
+      } else setNote(SUMMARY_COPY.gone);
+      return;
+    }
     const outcome = pressOf(entry, drawn, held, SUMMARY_COPY);
     if (outcome.kind === "note") {
       setNote(outcome.text);
@@ -79,7 +90,7 @@ export function ViewAnswerCard({
     state.presentation.select([entry.graphKey]);
   };
   const status = (entry: CitationEntry): string =>
-    drawn.has(entry.graphKey)
+    drawn.has(entry.graphKey) || (page !== undefined && held.has(entry.graphKey))
       ? SUMMARY_COPY.select
       : held.has(entry.graphKey)
         ? SUMMARY_COPY.outsideView
@@ -294,7 +305,7 @@ export function ViewAnswerCard({
           </button>
           {sourcesOpen ? (
             <div id={sourcesId} className="assistant-sources-list">
-              <SourcesList entries={entries} labelOf={labelOf} statusOf={status} isSelectable={(entry) => drawn.has(entry.graphKey)} onPress={press} focusRequest={focusRequest} onFocusHandled={() => setFocusRequest(undefined)} />
+              <SourcesList entries={entries} labelOf={labelOf} statusOf={status} isSelectable={(entry) => drawn.has(entry.graphKey) || (page !== undefined && held.has(entry.graphKey))} rowStateOf={page === undefined ? undefined : (entry) => (held.has(entry.graphKey) ? rowStateOf(entry.graphKey, rowSelection, SUMMARY_COPY.select, () => page.openGraph(entry.graphKey)) : undefined)} onPress={press} focusRequest={focusRequest} onFocusHandled={() => setFocusRequest(undefined)} />
             </div>
           ) : null}
         </div>

@@ -4,7 +4,11 @@ import { canRetry, FailureNotice } from '../failure-notice.js';
 import { PageFrame } from '../shell/page-shell.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
-import { useClientState } from '../state/context.js';
+import { useEffect, useState } from 'react';
+import { useClientState, useVisibleGraph } from '../state/context.js';
+import { drawnKeys } from '../state/loaded-graph.js';
+import { GraphWindowLink } from '../windows/graph-window-link.js';
+import { ASSISTANT_COPY } from '../assistant/copy.js';
 import { maskSwitchOf } from '../mask/mask-switch.js';
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import { AttemptedSource } from './attempted-source.js';
@@ -36,6 +40,11 @@ function Message({ title, text, source, attempted }: { readonly title: string; r
   );
 }
 
+/** The key of the element another window asked to have selected on arrival: carried in the navigation state, never in the address. */
+function selectKeyOf(state: unknown): string | undefined {
+  return typeof state === 'object' && state !== null && 'select' in state && typeof state.select === 'string' && state.select !== '' ? state.select : undefined;
+}
+
 function arrivedByResuming(state: unknown): boolean {
   return typeof state === 'object' && state !== null && 'resumed' in state && state.resumed === true;
 }
@@ -51,8 +60,18 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const location = useLocation();
   const resumed = arrivedByResuming(location.state);
   const restoreAsked = restoreIntentOf(location.state);
+  const arrivalKey = selectKeyOf(location.state);
+  const arrivalGraph = useVisibleGraph();
+  const [arrivalMissing, setArrivalMissing] = useState(false);
   const { status, again } = useOpenInvestigation(client, investigationId, principalId);
   const onScreen = useStoreSelector(state.investigation, (held) => held);
+  useEffect(() => {
+    if (arrivalKey === undefined || status.kind !== 'ready' || onScreen.id !== investigationId) return;
+    if (drawnKeys(arrivalGraph).has(arrivalKey)) state.presentation.select([arrivalKey]);
+    else setArrivalMissing(true);
+    const rest = Object.fromEntries(Object.entries(location.state as Record<string, unknown>).filter(([name]) => name !== 'select'));
+    void navigate(location.pathname, { replace: true, state: Object.keys(rest).length === 0 ? undefined : rest });
+  }, [arrivalKey, status.kind, onScreen.id, investigationId]);
   const sync = draftSyncOf(state, client);
   const maskRead = useStoreSelector(maskSwitchOf(state, client).status, (current) => current);
   const draftKind = useStoreSelector(sync.status, (current) => current.kind);
@@ -95,9 +114,10 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
         ) : undefined
       }
       busy={status.kind === 'loading' && failure === undefined}
-      status={notLoaded === undefined ? visible : <>{visible}<p role="status">{notLoaded}</p></>}
+      status={arrivalMissing ? <>{notLoaded === undefined ? visible : <>{visible}<p role="status">{notLoaded}</p></>}<p role="status">{ASSISTANT_COPY.selectionNotOnCanvas}</p></> : notLoaded === undefined ? visible : <>{visible}<p role="status">{notLoaded}</p></>}
     />
     {asking === undefined ? null : <RestoreConfirm view={asking} onClose={() => void navigate(location.pathname, { replace: true, state: undefined })} />}
+    <GraphWindowLink />
     <DraftAnnouncer sync={sync} />
     <DraftConflictBanner sync={sync} />
     {/* the order matters: both use the one standing-banner slot, and the read-only sync clears it before the mapping banner sets it again on a reopen */}
