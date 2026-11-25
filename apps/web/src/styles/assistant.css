@@ -2030,3 +2030,14 @@
   width: var(--space-12);
   height: var(--space-12);
 }
+
+/* the opened group of the page's list: its members are rows, and the line that ends it ("n more in this group") takes their padding and their indent, not the panel's margin */
+.assistant-surface-page .assistant-sources-list .assistant-source-group > ul {
+  margin-top: 0;
+}
+
+.assistant-surface-page .assistant-sources-list .assistant-group-more {
+  margin: 0;
+  padding: calc(var(--space-10) - var(--border-width)) var(--space-12) calc(var(--space-10) - var(--border-width)) calc(var(--space-20) + var(--space-12));
+  border-top: var(--border-width) solid var(--color-workspace-border);
+}
