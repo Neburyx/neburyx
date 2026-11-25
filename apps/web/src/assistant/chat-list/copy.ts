@@ -1,3 +1,4 @@
+import { TRY_AGAIN } from '../../investigations/messages.js';
 import type { ChatGroup } from './chat-groups.js';
 
 export const CHAT_LIST_COPY = {
@@ -14,5 +15,6 @@ export const CHAT_LIST_COPY = {
   moreMayExist: 'More chats may exist.',
   showMore: 'Show more',
   loadingMore: 'Loading…',
-  retry: 'Reload chats',
+  retry: TRY_AGAIN,
+  retryLabel: 'Try again to load the chats',
 } as const;

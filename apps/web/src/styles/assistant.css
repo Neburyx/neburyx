@@ -1297,6 +1297,7 @@
 
 .assistant-page-button.chat-list-new {
   width: 100%;
+  border-color: var(--chat-list-control-border);
   color: var(--color-text);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-medium);
@@ -1309,7 +1310,7 @@
   gap: var(--space-8);
   box-sizing: border-box;
   padding: var(--space-8) var(--chat-list-pad-x);
-  border: var(--border-width) solid var(--color-control-border);
+  border: var(--border-width) solid var(--chat-list-control-border);
   border-radius: var(--radius);
   background: var(--color-surface);
 }

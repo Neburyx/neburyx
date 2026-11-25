@@ -11,6 +11,9 @@ import { groupChats } from './chat-groups.js';
 import { CHAT_LIST_COPY } from './copy.js';
 import { useChatList, type ChatRow } from './use-chat-list.js';
 
+/** The window in which a second sign that the window was shown does not read the list again. */
+const SHOWN_COALESCE_MS = 400;
+
 /** The shortest search text the server accepts. */
 const MIN_SEARCH_CHARACTERS = 2;
 
@@ -60,8 +63,13 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
   }, [text, query]);
 
   useEffect(() => {
+    let last = Number.NEGATIVE_INFINITY;
     const shown = (): void => {
-      if (document.visibilityState !== 'hidden') reload();
+      // a window that is shown is made visible and focused together: one read serves both
+      const now = Date.now();
+      if (document.visibilityState === 'hidden' || now - last < SHOWN_COALESCE_MS) return;
+      last = now;
+      reload();
     };
     document.addEventListener('visibilitychange', shown);
     window.addEventListener('focus', shown);
@@ -117,7 +125,7 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
           <div role="group" className="chat-list-failure">
             <FailureNotice failure={chats.firstFailure ?? { code: 'UNEXPECTED_FAILURE' }} />
             {chats.firstFailure === undefined || canRetry(chats.firstFailure) ? (
-              <button type="button" className="chat-list-link" onClick={reload}>
+              <button type="button" className="chat-list-link" aria-label={CHAT_LIST_COPY.retryLabel} onClick={reload}>
                 {CHAT_LIST_COPY.retry}
               </button>
             ) : null}

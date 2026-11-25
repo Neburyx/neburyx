@@ -116,7 +116,7 @@ describe('the chat list column', () => {
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByText('Chat title 1')).toBeTruthy();
     fail = false;
-    await userEvent.click(screen.getByRole('button', { name: CHAT_LIST_COPY.retry }));
+    await userEvent.click(screen.getByRole('button', { name: CHAT_LIST_COPY.retryLabel }));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     expect(screen.getByText('Chat title 1')).toBeTruthy();
   });
@@ -202,6 +202,43 @@ describe('the chat list column when there are more chats than one page', () => {
   });
 });
 
+describe('the chat list column when the window is shown again', () => {
+  it('keeps the chats that were loaded by Show more when it reads the list again on focus', async () => {
+    const { asked } = setup(async (query) => (query.cursor === undefined ? page([chat(1), chat(2)], 'c1') : page([chat(3)])));
+    await userEvent.click(await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore }));
+    await screen.findByText('Chat title 3');
+    const before = asked.length;
+    await act(async () => void window.dispatchEvent(new Event('focus')));
+    await waitFor(() => expect(asked.length).toBe(before + 2));
+    expect(rowsShown().map((text) => text.slice(0, 12))).toEqual(['Chat title 1', 'Chat title 2', 'Chat title 3']);
+    expect(screen.queryByRole('button', { name: CHAT_LIST_COPY.showMore })).toBeNull();
+  });
+
+  it('reads the list once when the window is made visible and focused together', async () => {
+    const { asked } = setup(async () => page([chat(1)]));
+    await screen.findByText('Chat title 1');
+    const before = asked.length;
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(asked.length).toBe(before + 1));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(asked.length).toBe(before + 1);
+  });
+
+  it('shows the chats it could read when a later page of the reread fails, and leaves the rest to Show more', async () => {
+    let fail = false;
+    setup(async (query) => (query.cursor === undefined ? page([chat(1), chat(2)], 'c1') : fail ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : page([chat(3)])));
+    await userEvent.click(await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore }));
+    await screen.findByText('Chat title 3');
+    fail = true;
+    await act(async () => void window.dispatchEvent(new Event('focus')));
+    await waitFor(() => expect(rowsShown()).toHaveLength(2));
+    expect(screen.getByRole('button', { name: CHAT_LIST_COPY.showMore })).toBeTruthy();
+  });
+});
+
 describe('the search box of the chat list', () => {
   it('reads the list with the text after the pause once it has two characters, and the whole list again below two', async () => {
     const { asked } = setup(async (query) => page(query.q === 'ab' ? [chat(2)] : [chat(1), chat(2)]));
@@ -283,6 +320,7 @@ describe('the chat list column follows the thread', () => {
     rows = [chat(1), chat(2)];
     await act(async () => void window.dispatchEvent(new Event('focus')));
     await screen.findByText('Chat title 2');
+    await new Promise((resolve) => setTimeout(resolve, 450));
     fail = true;
     await act(async () => void document.dispatchEvent(new Event('visibilitychange')));
     expect(await screen.findByRole('alert')).toBeTruthy();

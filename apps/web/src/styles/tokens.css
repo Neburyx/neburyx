@@ -78,8 +78,9 @@
   --chat-list-chip-surface: #fff3d7;
   --chat-list-chip-text: #99610d;
   --chat-list-pad-x: 10px;
-  --chat-list-icon-new: 12px;
-  --chat-list-icon-search: 14px;
+  --chat-list-icon-new: 12.7px;
+  --chat-list-icon-search: 14.7px;
+  --chat-list-control-border: #cad0da;
   --chat-list-line: 16px;
   --chat-list-heading-top: 6px;
   --chat-list-heading-line: 13px;

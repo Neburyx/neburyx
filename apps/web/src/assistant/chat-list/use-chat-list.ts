@@ -15,6 +15,9 @@ export interface ChatListState {
   readonly moreFailure: ApiFailure | undefined;
 }
 
+/** The most pages a reread reads to give back the chats that were shown: each page is bounded by the server, so the reread is too. */
+const MAX_REREAD_PAGES = 10;
+
 const START: ChatListState = { rows: [], nextCursor: null, first: 'loading', firstFailure: undefined, more: 'idle', moreFailure: undefined };
 
 /**
@@ -29,15 +32,36 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
   const held = useRef(state);
   held.current = state;
 
+  const lastQuery = useRef(query);
+
   useEffect(() => {
     generation.current += 1;
     const mine = generation.current;
     const controller = new AbortController();
+    // a reread for the same search keeps as many pages as were shown; a new search starts from its first page
+    const keep = lastQuery.current === query ? held.current.rows.length : 0;
+    lastQuery.current = query;
     setState((current) => ({ ...current, first: 'loading', firstFailure: undefined, more: 'idle', moreFailure: undefined }));
-    void client.listAssistantThreads(query === undefined ? {} : { q: query }, controller.signal).then((result) => {
+    const search = query === undefined ? {} : { q: query };
+    void (async () => {
+      let result = await client.listAssistantThreads(search, controller.signal);
+      let pages = 1;
+      let rows: readonly ChatRow[] = result.ok ? result.value.items : [];
+      while (result.ok && result.value.nextCursor !== null && rows.length < keep && pages < MAX_REREAD_PAGES) {
+        const next = await client.listAssistantThreads({ cursor: result.value.nextCursor, ...search }, controller.signal);
+        pages += 1;
+        if (!next.ok) {
+          // the first page was read: what could not be read again is left to Show more
+          result = { ok: true, value: { items: [...rows], nextCursor: result.value.nextCursor } };
+          break;
+        }
+        const seen = new Set(rows.map((row) => row.investigationId));
+        rows = [...rows, ...next.value.items.filter((row) => !seen.has(row.investigationId))];
+        result = { ok: true, value: { items: [...rows], nextCursor: next.value.nextCursor } };
+      }
       if (mine !== generation.current) return;
       setState((current) => (result.ok ? { rows: result.value.items, nextCursor: result.value.nextCursor, first: 'ready', firstFailure: undefined, more: 'idle', moreFailure: undefined } : { ...current, first: 'failed', firstFailure: result.failure }));
-    });
+    })();
     return () => controller.abort();
   }, [client, query, trigger, reloads]);
 
