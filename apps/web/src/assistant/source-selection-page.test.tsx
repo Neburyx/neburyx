@@ -5,7 +5,7 @@ import type { AssistantThreadResponse, AssistantTurnAnswer } from '@neburyx/cont
 import { testProfile } from '../dev/test-profile.js';
 import { INVESTIGATION_A, investigationOf, knowing, nodeOf } from '../investigations/test-data.js';
 import { createClientState } from '../state/client-state.js';
-import { aiStatus, renderApp } from '../test-utils.js';
+import { aiStatus, countingClient, renderApp } from '../test-utils.js';
 import { createPanelRegistryFor } from '../workspace/panel-registry.js';
 import { ANSWER_WAIT_MS, createWindowChannel, EXPIRY_MS, type WindowChannel, type WindowScope } from '../windows/window-channel.js';
 import { bindAssistantPanel } from './assistant-binder.js';
@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 async function page() {
-  const { client, calls } = knowing([A], {
+  const known = knowing([A], {
     getAiStatus: async () => ({ ok: true, value: aiStatus({ assistant: 800 }) }),
     assistantTurn: async (request) => {
       requests.push(request);
@@ -73,6 +73,9 @@ async function page() {
     },
     assistantThread: async () => ({ ok: true as const, value: EMPTY }),
   });
+  const { calls } = known;
+  const counted = countingClient(known.client);
+  const client = counted.client;
   const state = createClientState();
   const session = createAssistantSession(null);
   const view = renderApp(`/assistant/${INVESTIGATION_A}`, client, state, undefined, undefined, undefined, undefined, undefined, createPanelRegistryFor(state));
@@ -80,7 +83,7 @@ async function page() {
   await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
   await userEvent.type(await screen.findByLabelText(ASSISTANT_COPY.fieldLabel), 'what is here?{Enter}');
   await userEvent.click(await screen.findByRole('button', { name: /^Sources · 2/ }));
-  return { ...view, calls, state };
+  return { ...view, calls, state, made: counted.count };
 }
 
 const row = (n: number) => screen.getByRole('button', { name: new RegExp(`^Sources: ${n},`) });
@@ -149,10 +152,11 @@ describe('Select on graph on the Assistant page', () => {
     const h = await page();
     const graph = graphWindow([KEY_HELD]);
     await waitFor(() => expect(screen.getByText(ASSISTANT_COPY.graphWindowOpen)).toBeTruthy());
+    const before = h.made();
     await userEvent.click(row(1));
     await waitFor(() => expect(within(row(1)).getByText(ASSISTANT_COPY.highlightedInGraph)).toBeTruthy());
     expect(graph.asked).toEqual([[KEY_HELD]]);
-    expect(h.calls.getInvestigation).toEqual([INVESTIGATION_A]);
+    expect(h.made()).toBe(before);
   });
 
   it('claims no highlight before the window answers, and falls back to Selected with the notice when none answers', async () => {
@@ -161,6 +165,7 @@ describe('Select on graph on the Assistant page', () => {
     opened.push(silent);
     silent.announce('graph');
     await waitFor(() => expect(screen.getByText(ASSISTANT_COPY.graphWindowOpen)).toBeTruthy());
+    const before = h.made();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await act(async () => {
       row(1).click();
@@ -171,17 +176,19 @@ describe('Select on graph on the Assistant page', () => {
     });
     expect(within(row(1)).getByText(ASSISTANT_COPY.selected)).toBeTruthy();
     expect(screen.getByText(ASSISTANT_COPY.noGraphWindow)).toBeTruthy();
-    expect(h.calls.getInvestigation).toEqual([INVESTIGATION_A]);
+    expect(h.made()).toBe(before);
   });
 
-  it('says Not on the canvas when the window answers that it does not hold the element, with no highlight and no Open graph', async () => {
-    await page();
+  it('says Not on the canvas when the window answers that it does not hold the element, with no highlight, no Open graph and no request', async () => {
+    const h = await page();
     graphWindow([]);
     await waitFor(() => expect(screen.getByText(ASSISTANT_COPY.graphWindowOpen)).toBeTruthy());
+    const before = h.made();
     await userEvent.click(row(1));
     await waitFor(() => expect(within(row(1)).getByText(ASSISTANT_COPY.notOnCanvas)).toBeTruthy());
     expect(screen.queryByText(ASSISTANT_COPY.highlightedInGraph)).toBeNull();
     expect(screen.queryByRole('button', { name: ASSISTANT_COPY.openGraph })).toBeNull();
+    expect(h.made()).toBe(before);
   });
 
   it('says Selected with the notice and an Open graph button when no graph window is open, sends nothing, and shows the notice once', async () => {
@@ -189,8 +196,10 @@ describe('Select on graph on the Assistant page', () => {
     opened.push(other);
     const heard: unknown[] = [];
     other.onSelection((request) => heard.push(request));
-    await page();
+    const h = await page();
+    const before = h.made();
     await userEvent.click(row(1));
+    expect(h.made()).toBe(before);
     expect(within(row(1)).getByText(ASSISTANT_COPY.selected)).toBeTruthy();
     expect(screen.getByText(ASSISTANT_COPY.noGraphWindow)).toBeTruthy();
     expect(heard).toEqual([]);

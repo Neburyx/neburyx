@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CitationEntry } from "../summary/summary-model.js";
-import { ASSISTANT_COPY, GROUP_MEMBERS_SHOWN, moreInGroupText, sourcesGroupedText, sourcesText } from "./copy.js";
+import { ASSISTANT_COPY, GROUP_MEMBERS_SHOWN, moreInGroupText, pageSourcesText, sourcesGroupedText, sourcesText } from "./copy.js";
 import type { RowState } from "./row-state.js";
 import { groupSources, type SourceRow } from "./source-groups.js";
 
@@ -134,7 +134,7 @@ export function SourcesList({
   return (
     <>
       <p className="assistant-sources-title">
-        <span>{hasGroup ? sourcesGroupedText(entries.length) : sourcesText(entries.length)}</span>
+        <span>{rowStateOf !== undefined ? pageSourcesText(entries.length) : hasGroup ? sourcesGroupedText(entries.length) : sourcesText(entries.length)}</span>
         {rowStateOf === undefined ? null : <span className="assistant-sources-hint">{ASSISTANT_COPY.selectHint}</span>}
       </p>
       <ul>{rows.map((row) => (row.kind === "group" ? groupOf(row) : rowOf(row.entry, false)))}</ul>

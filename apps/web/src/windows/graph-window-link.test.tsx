@@ -1,11 +1,11 @@
 import { act, cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { INVESTIGATION_A, investigationOf, knowing, nodeOf } from '../investigations/test-data.js';
+import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf } from '../investigations/test-data.js';
 import { ASSISTANT_COPY } from '../assistant/copy.js';
 import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
-import { aiStatus, renderApp, stubFactory } from '../test-utils.js';
+import { aiStatus, countingClient, renderApp, stubFactory } from '../test-utils.js';
 import { createPanelRegistryFor } from '../workspace/panel-registry.js';
 import { bindAssistantPanel } from '../assistant/assistant-binder.js';
 import { createAssistantSession } from '../assistant/assistant-session.js';
@@ -46,14 +46,18 @@ afterEach(() => {
 });
 
 async function graph(state = createClientState()) {
-  const { client, calls } = knowing([A]);
-  const view = renderApp(`/explore/${INVESTIGATION_A}`, client, state, undefined, stubFactory().create);
+  const known = knowing([A]);
+  const { calls } = known;
+  const counted = countingClient(known.client);
+  const view = renderApp(`/explore/${INVESTIGATION_A}`, counted.client, state, undefined, stubFactory().create);
   await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const before = counted.count();
   const sender = createWindowChannel(SCOPE);
   opened.push(sender);
   const answers: { requestId: string; onCanvas: readonly string[] }[] = [];
   sender.onSelectionResult((result) => answers.push(result));
-  return { view, state, sender, answers, calls };
+  return { view, state, sender, answers, calls, made: () => counted.count() - before };
 }
 const selected = (state: ReturnType<typeof createClientState>): readonly string[] => [...state.presentation.view.getState().selection];
 
@@ -73,6 +77,7 @@ describe('the graph window and a selection made in another window', () => {
     expect(h.answers[0]?.onCanvas).toEqual([KEY]);
     expect(selected(h.state)).toEqual([KEY]);
     expect(h.calls.getInvestigation).toEqual(calls);
+    expect(h.made()).toBe(0);
   });
 
   it('answers with no key and selects and draws nothing for an element it does not hold', async () => {
@@ -81,6 +86,7 @@ describe('the graph window and a selection made in another window', () => {
     await waitFor(() => expect(h.answers).toHaveLength(1));
     expect(h.answers[0]?.onCanvas).toEqual([]);
     expect(selected(h.state)).toEqual([]);
+    expect(h.made()).toBe(0);
   });
 
   it('ignores a selection that holds more than one key: nothing selected and no answer', async () => {
@@ -127,6 +133,20 @@ describe('opening the graph with an element selected', () => {
     await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
     expect(await screen.findByText(ASSISTANT_COPY.selectionNotOnCanvas)).toBeTruthy();
     expect(selected(state)).toEqual([]);
+  });
+});
+
+describe('the notice of an arrival whose element is not on the canvas', () => {
+  it('is gone when another investigation is opened on the same route', async () => {
+    const B = { investigation: investigationOf(INVESTIGATION_B, 'source-b', 'kind-a', 'C-1'), node: nodeOf('source-b', 'kind-a', 'C-1') };
+    const { client } = knowing([A, B]);
+    const view = renderApp({ pathname: `/explore/${INVESTIGATION_A}`, state: { select: OTHER_KEY } }, client, createClientState(), undefined, stubFactory().create);
+    expect(await screen.findByText(ASSISTANT_COPY.selectionNotOnCanvas)).toBeTruthy();
+    await act(async () => {
+      await view.router.navigate(`/explore/${INVESTIGATION_B}`);
+    });
+    await screen.findByRole('heading', { name: 'kind-a C-1', level: 1 });
+    expect(screen.queryByText(ASSISTANT_COPY.selectionNotOnCanvas)).toBeNull();
   });
 });
 

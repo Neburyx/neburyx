@@ -207,6 +207,7 @@ export const MARKER_RUN_MIN = 3;
 export const sourcesGroupedText = (count: number): string => `${count.toLocaleString('en-US')} sources, grouped by shape`;
 export const moreInGroupText = (count: number): string => `${count.toLocaleString('en-US')} more in this group`;
 export const GROUP_MEMBERS_SHOWN = 5;
+export const pageSourcesText = (count: number): string => `Sources · ${count.toLocaleString('en-US')} ${count === 1 ? 'element' : 'elements'}`;
 export const sourcesText = (count: number): string => `${count.toLocaleString('en-US')} ${count === 1 ? 'source' : 'sources'}`;
 export const earlierText = (count: number): string => `${count.toLocaleString('en-US')} earlier ${count === 1 ? 'turn is' : 'turns are'} not shown.`;
 export const causeText = (cause: string): string => `${cause.charAt(0).toUpperCase()}${cause.slice(1).replace(/-/g, ' ')}`;

@@ -220,6 +220,21 @@ function stubRenderer(options: StubOptions = {}): StubRenderer {
   return stub;
 }
 
+/** The client with every method counted: for a test that something made no request at all, not only none of the requests a recorder happens to name. */
+export function countingClient(client: ApiClient): { readonly client: ApiClient; readonly count: () => number } {
+  let made = 0;
+  const counted = new Proxy(client, {
+    get(target, name) {
+      const member = Reflect.get(target, name) as unknown;
+      return typeof member === 'function' ? (...args: unknown[]) => {
+        made += 1;
+        return (member as (...given: unknown[]) => unknown).apply(target, args);
+      } : member;
+    },
+  });
+  return { client: counted, count: () => made };
+}
+
 export function stubFactory(options: StubOptions = {}): { readonly create: CreateRenderer; readonly made: StubRenderer[] } {
   const made: StubRenderer[] = [];
   return {

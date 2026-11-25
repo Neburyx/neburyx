@@ -62,22 +62,23 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const restoreAsked = restoreIntentOf(location.state);
   const arrivalKey = selectKeyOf(location.state);
   const arrivalGraph = useVisibleGraph();
-  const [arrivalMissing, setArrivalMissing] = useState(false);
+  const [arrivalMissing, setArrivalMissing] = useState<{ readonly investigationId: string; readonly key: string } | undefined>(undefined);
   const { status, again } = useOpenInvestigation(client, investigationId, principalId);
   const onScreen = useStoreSelector(state.investigation, (held) => held);
+  const graphReady = arrivalGraph.nodes.length > 0 || onScreen.nodeRefs.length === 0;
   useEffect(() => {
-    if (arrivalKey === undefined || status.kind !== 'ready' || onScreen.id !== investigationId) return;
+    if (arrivalKey === undefined || status.kind !== 'ready' || onScreen.id !== investigationId || investigationId === undefined || !graphReady) return;
     if (drawnKeys(arrivalGraph).has(arrivalKey)) state.presentation.select([arrivalKey]);
-    else setArrivalMissing(true);
+    else setArrivalMissing({ investigationId, key: arrivalKey });
     const rest = Object.fromEntries(Object.entries(location.state as Record<string, unknown>).filter(([name]) => name !== 'select'));
     void navigate(location.pathname, { replace: true, state: Object.keys(rest).length === 0 ? undefined : rest });
-  }, [arrivalKey, status.kind, onScreen.id, investigationId]);
+  }, [arrivalKey, arrivalGraph, graphReady, status.kind, onScreen.id, investigationId]);
   const sync = draftSyncOf(state, client);
   const maskRead = useStoreSelector(maskSwitchOf(state, client).status, (current) => current);
   const draftKind = useStoreSelector(sync.status, (current) => current.kind);
   const restoredMissing = useStoreSelector(restoreNoticeOf(state).missing, (missing) => missing);
   const previousTitle = onScreen.id !== null && onScreen.id !== investigationId ? (onScreen.record?.title ?? null) : null;
-
+  const missingShown = arrivalMissing !== undefined && arrivalMissing.investigationId === investigationId && !drawnKeys(arrivalGraph).has(arrivalMissing.key);
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT} source={null} attempted={status.sourceId} />;
   const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
   const retry = (): void => {
@@ -114,7 +115,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
         ) : undefined
       }
       busy={status.kind === 'loading' && failure === undefined}
-      status={arrivalMissing ? <>{notLoaded === undefined ? visible : <>{visible}<p role="status">{notLoaded}</p></>}<p role="status">{ASSISTANT_COPY.selectionNotOnCanvas}</p></> : notLoaded === undefined ? visible : <>{visible}<p role="status">{notLoaded}</p></>}
+      status={missingShown ? <>{notLoaded === undefined ? visible : <>{visible}<p role="status">{notLoaded}</p></>}<p role="status">{ASSISTANT_COPY.selectionNotOnCanvas}</p></> : notLoaded === undefined ? visible : <>{visible}<p role="status">{notLoaded}</p></>}
     />
     {asking === undefined ? null : <RestoreConfirm view={asking} onClose={() => void navigate(location.pathname, { replace: true, state: undefined })} />}
     <GraphWindowLink />
