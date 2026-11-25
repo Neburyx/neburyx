@@ -166,7 +166,7 @@ describe('a pick of an investigation that has no chat, on the Assistant page', (
     const session = createAssistantSession(null);
     const view = renderApp(`/assistant/${INVESTIGATION_A}`, recording, appState, undefined, undefined, undefined, undefined, undefined, createPanelRegistryFor(appState));
     unbinds.push(bindAssistantPanel(appState, view.panels, session));
-    return { ...view, calls, state };
+    return { ...view, calls, state, appState };
   }
 
   const rowsOf = (title: string) => [...document.querySelectorAll('.chat-list-row')].filter((row) => row.textContent?.includes(title));
@@ -189,6 +189,16 @@ describe('a pick of an investigation that has no chat, on the Assistant page', (
     // the landing reads the list, the lookup and the stored thread of the chosen investigation (a read), and writes nothing
     expect(h.calls.slice(before).filter((name) => ![...READS, 'assistantThread'].includes(name))).toEqual([]);
     expect(h.calls.filter((name) => ['assistantTurn', 'clearAssistantThread', 'saveDraft', 'putPreferences', 'openInvestigation', 'deleteInvestigation'].includes(name))).toEqual([]);
+  });
+
+  it('draws the current row with the title the header shows, with the masking off and on', async () => {
+    const h = setupWithoutChats();
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    for (const mask of [false, true]) {
+      await act(async () => h.appState.setMask(mask));
+      await waitFor(() => expect(document.querySelectorAll('.chat-list-row-selected .chat-list-row-name')).toHaveLength(1));
+      expect(document.querySelector('.chat-list-row-selected .chat-list-row-name')?.textContent).toBe(screen.getByRole('heading', { level: 1 }).textContent);
+    }
   });
 
   it('keeps one row for the investigation when its first question is asked: the stored chat takes the place of the current row', async () => {
