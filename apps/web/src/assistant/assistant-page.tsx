@@ -11,6 +11,7 @@ import { ASSISTANT_PATH, INVESTIGATIONS_PATH } from '../shell/navigation.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { AssistantSurface } from './assistant-panel.js';
+import { ChatListColumn } from './chat-list/chat-list-column.js';
 import { assistantSessionOf, AssistantSessionProvider } from './assistant-session.js';
 import { ASSISTANT_COPY } from './copy.js';
 
@@ -87,7 +88,10 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
     <PageFrame bare>
       <div className="assistant-page">
         <AssistantSessionProvider value={session}>
-          <AssistantSurface variant="page" />
+          <ChatListColumn />
+          <div className="assistant-page-thread">
+            <AssistantSurface variant="page" />
+          </div>
         </AssistantSessionProvider>
       </div>
     </PageFrame>
