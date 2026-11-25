@@ -534,4 +534,31 @@ describe('the chat list column: no read that nobody asked for', () => {
       vi.useRealTimers();
     }
   });
+
+  it('does not pile up reads over quick successive turns: each new turn replaces the wait, and the reads end when no turn is stored', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let reads = 0;
+      const { session } = setup(async () => (reads += 1, page([chat(1, { turns: 1 })])), { shown: idOf(1) });
+      await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+      expect(reads).toBe(1);
+      const answer = async (id: number): Promise<void> => {
+        const turns = session.store.getState().turns;
+        await act(async () => session.store.setState({ ...session.store.getState(), turns: [...turns, { id, message: 'x', outcome: { kind: 'pending', call: 'message' } }] }));
+        await act(async () => session.store.setState({ ...session.store.getState(), turns: [...turns, { id, message: 'x', outcome: { kind: 'cancelled' } }] }));
+      };
+      await answer(1);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
+      await answer(2);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
+      // one initial read, one for each turn, then one chain of three retries: the chain of the first turn was replaced, not added to
+      for (let second = 0; second < 8; second += 1) await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
+      expect(reads).toBe(1 + 2 + 3);
+      for (let second = 0; second < 8; second += 1) await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
+      expect(reads).toBe(6);
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
