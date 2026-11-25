@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ASSISTANT_CLEAR_OUTCOME_HEADER, assistantThreadListResponseSchema, ASSISTANT_CLEAR_OUTCOME_UNKNOWN, ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { ASSISTANT_CLEAR_OUTCOME_HEADER, assistantChatLookupResponseSchema, assistantThreadListResponseSchema, ASSISTANT_CLEAR_OUTCOME_UNKNOWN, ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
 import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantPendingStore, createMemoryAssistantThreadStore, sealToken } from '@neburyx/ee-ask';
 import fc from 'fast-check';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -1186,11 +1186,38 @@ describe('the thread of an investigation in the running application', () => {
     await rig.stop();
   });
 
+  it('says which of the named investigations the caller has a chat for, for another person none, and not for an investigation that is closed, with a malformed body refused', async () => {
+    current = FIRST;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: ASK, threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    const lookup = (payload: unknown) => rig.rig.app.inject({ method: 'POST', url: '/v1/assistant/threads/lookup', payload: payload as never });
+    const unknown = '0192f000-0000-7000-8000-00000000ffff';
+    await send(rig, 'Which accounts are shown?');
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    const answer = await lookup({ investigationIds: [unknown, rig.body.investigationId] });
+    expect(answer.statusCode).toBe(200);
+    expect(assistantChatLookupResponseSchema.parse(answer.json())).toEqual({ withChat: [rig.body.investigationId] });
+    expect(JSON.stringify(answer.json())).not.toContain('Which accounts');
+    expect((await lookup({ investigationIds: [] })).statusCode).toBe(400);
+    expect((await lookup({ investigationIds: [unknown, unknown] })).statusCode).toBe(400);
+    expect((await lookup({ investigationIds: [unknown], extra: 1 })).statusCode).toBe(400);
+    current = SECOND;
+    expect(assistantChatLookupResponseSchema.parse((await lookup({ investigationIds: [rig.body.investigationId] })).json())).toEqual({ withChat: [] });
+    current = FIRST;
+    const detail = (await rig.rig.app.inject({ method: 'GET', url: `/v1/investigations/${rig.body.investigationId}` })).json() as { investigation: { version: number } };
+    expect((await rig.rig.app.inject({ method: 'POST', url: `/v1/investigations/${rig.body.investigationId}/status`, payload: { status: 'closed', expectedVersion: detail.investigation.version } })).statusCode).toBe(200);
+    expect(assistantChatLookupResponseSchema.parse((await lookup({ investigationIds: [rig.body.investigationId] })).json())).toEqual({ withChat: [] });
+    await rig.stop();
+  });
+
   it('answers 403 with the reason ai-off when the assistant is off for the list of chats too', async () => {
     const rig = await assistantRig({ features: { ask: true, summary: false, assistant: false } });
     const answer = await rig.rig.app.inject({ method: 'GET', url: '/v1/assistant/threads' });
     expect(answer.statusCode).toBe(403);
     expect(answer.json().error).toMatchObject({ code: 'ACCESS_DENIED', details: { reason: 'ai-off' } });
+    const lookup = await rig.rig.app.inject({ method: 'POST', url: '/v1/assistant/threads/lookup', payload: { investigationIds: ['0192f000-0000-7000-8000-00000000ffff'] } });
+    expect(lookup.statusCode).toBe(403);
     await rig.stop();
   });
 

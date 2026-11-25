@@ -24,6 +24,7 @@ const turn = (over: Partial<AssistantThreadTurnWrite> = {}): AssistantThreadTurn
 
 interface Script {
   readonly status?: string;
+  readonly had?: readonly string[];
   readonly epoch?: number;
   readonly exists?: boolean;
   readonly failAt?: RegExp;
@@ -50,6 +51,7 @@ function pool(script: Script = {}) {
       if (/FROM assistant_investigation_epochs/.test(text)) return { rows: script.epoch === undefined ? [] : [{ epoch: script.epoch }] };
       if (/SELECT 1 FROM assistant_turns/.test(text)) return { rows: script.exists === true ? [{ '?column?': 1 }] : [] };
       if (/^SELECT h\.id, h\.investigation_id/.test(text)) return { rows: script.listed ?? [] };
+      if (/^SELECT investigation_id FROM assistant_threads/.test(text)) return { rows: (script.had ?? []).map((id) => ({ investigation_id: id })) };
       if (/^DELETE FROM assistant_threads/.test(text)) return { rows: [], rowCount: script.deleted ?? 1 };
       if (/INSERT INTO assistant_threads/.test(text)) return { rows: [{ id: 'thread-1' }] };
       if (/MAX\(seq\)/.test(text)) return { rows: [{ seq: 3 }] };
@@ -445,5 +447,23 @@ describe('the listing of the caller’s own threads by the Postgres store', () =
 
   it('lists nothing and fails as the fixed error from the memory store when it is made to fail', async () => {
     await expect(createMemoryAssistantThreadStore({ failOn: 'read' }).listOwn(OWNER, undefined, 5)).rejects.toBeInstanceOf(AssistantThreadStoreError);
+  });
+
+  it('asks which of the investigations the caller has a thread for in one statement filtered by the caller and the ids asked, and answers ids only', async () => {
+    const { held, statements, parameters, released } = pool({ had: [INVESTIGATION] });
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    expect(await store.withThreads(OWNER, [INVESTIGATION, OTHER])).toEqual([INVESTIGATION]);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('WHERE user_id = $1 AND investigation_id = ANY($2::uuid[])');
+    expect(parameters[0]).toEqual([OWNER, [INVESTIGATION, OTHER]]);
+    expect(released.count).toBe(1);
+  });
+
+  it('answers the fixed error with no driver text when the statement fails, and from the memory store only the caller\'s own threads, in the order asked', async () => {
+    const failing = pool({ failAt: /^SELECT investigation_id/ });
+    const error = await createPgAssistantThreadStore(CONTEXT, { createPool: () => failing.held }).withThreads(OWNER, [INVESTIGATION]).then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AssistantThreadStoreError);
+    expect(JSON.stringify([(error as Error).message])).not.toMatch(/DRIVER-TEXT|canary-secret-7f3/);
+    await expect(createMemoryAssistantThreadStore({ failOn: 'read' }).withThreads(OWNER, [INVESTIGATION])).rejects.toBeInstanceOf(AssistantThreadStoreError);
   });
 });

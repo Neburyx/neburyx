@@ -71,6 +71,8 @@ export interface AssistantThreadStore {
   clearOwn(investigationId: string, userId: string): Promise<boolean>;
   /** The caller's own threads, newest last turn first (ties by thread id), `limit` of them after the position given: one statement over the application's tables, never the source. Nothing here says whether the investigation may be shown: the application's `chatInvestigations` decides that. */
   listOwn(userId: string, after: ThreadListPosition | undefined, limit: number): Promise<readonly ThreadListRow[]>;
+  /** Which of the investigation ids the caller has a thread for: one statement over the application's tables, never the source, naming ids only. A thread exists once a turn was stored and until it is cleared. */
+  withThreads(userId: string, investigationIds: readonly string[]): Promise<readonly string[]>;
   close(): Promise<void>;
 }
 
@@ -94,6 +96,7 @@ const defaultDeps: Deps = { createPool: (config) => new pg.Pool(config) };
 const LOCK_INVESTIGATION = 'SELECT status, deleted_at IS NOT NULL AS deleted FROM investigations WHERE id = $1 FOR SHARE';
 const LOCK_FOR_CLEAR = 'SELECT 1 FROM investigations WHERE id = $1 FOR NO KEY UPDATE';
 const BUMP_PERSON_EPOCH = 'INSERT INTO assistant_thread_person_epochs (investigation_id, user_id, epoch) VALUES ($1, $2, 1) ON CONFLICT (investigation_id, user_id) DO UPDATE SET epoch = assistant_thread_person_epochs.epoch + 1';
+const THREADS_OF = 'SELECT investigation_id FROM assistant_threads WHERE user_id = $1 AND investigation_id = ANY($2::uuid[])';
 const FIND_TURN = 'SELECT 1 FROM assistant_turns WHERE id = $1';
 const UPSERT_THREAD =
   'INSERT INTO assistant_threads (id, investigation_id, user_id, created_at, last_turn_at) VALUES ($1, $2, $3, $4, $4) ON CONFLICT (investigation_id, user_id) DO UPDATE SET last_turn_at = GREATEST(assistant_threads.last_turn_at, EXCLUDED.last_turn_at) RETURNING id';
@@ -295,6 +298,11 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
           lastQuestion: typeof row['question'] === 'string' ? row['question'] : null,
         }));
       }),
+    withThreads: (userId, investigationIds) =>
+      withClient(async (client) => {
+        const result = await client.query(THREADS_OF, [userId, investigationIds]);
+        return result.rows.map((row) => String(row['investigation_id']));
+      }),
     close: () => (closing ??= pool.end()),
   };
 }
@@ -441,6 +449,15 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
         .sort((left, right) => (left.key < right.key ? 1 : left.key > right.key ? -1 : left.threadId < right.threadId ? 1 : -1))
         .filter((row) => after === undefined || row.key < after.key || (row.key === after.key && row.threadId < after.id))
         .slice(0, limit);
+    },
+    async withThreads(userId, investigationIds) {
+      fail('read');
+      const held = new Set<string>();
+      for (const thread of threads.values()) {
+        const [first] = thread.turns;
+        if (first !== undefined && first.userId.toLowerCase() === userId.toLowerCase()) held.add(first.investigationId.toLowerCase());
+      }
+      return investigationIds.filter((id) => held.has(id.toLowerCase()));
     },
     async close() {},
   };

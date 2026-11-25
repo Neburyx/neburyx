@@ -798,6 +798,11 @@ describe('the list of a person’s threads and its index', () => {
       expect(seen).toHaveLength(2 + MORE.length);
       expect(new Set(seen).size).toBe(2 + MORE.length);
       expect(seen).not.toContain(undefined);
+      // the lookup of which investigations have a thread of the caller: the caller's own only, ids only, and none for an id with no thread
+      const asked = [FIRST, SECOND, ...MORE, '0192f000-0000-7000-8000-00000000ffff'];
+      expect([...(await store.withThreads(OWNER, asked))].sort()).toEqual([FIRST, SECOND, ...MORE].sort());
+      expect(await store.withThreads(OTHER, [FIRST, SECOND])).toEqual([FIRST]);
+      expect(await store.withThreads(OWNER, [])).toEqual([]);
     });
   });
 });
