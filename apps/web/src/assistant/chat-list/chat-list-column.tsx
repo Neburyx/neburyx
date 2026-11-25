@@ -147,8 +147,8 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
     };
   }, [reload]);
 
-  // a tip of a row that is no longer in the list (a search narrowed it, a read dropped the chat) goes with it
-  useEffect(() => {
+  // a tip of a row that is no longer in the list (a search narrowed it, a read dropped the chat) goes with it, in the same commit that took the row away: no frame draws a tip with no row
+  useLayoutEffect(() => {
     if (tip === undefined) return;
     const links = [...(body.current?.querySelectorAll<HTMLAnchorElement>('.chat-list-row') ?? [])];
     if (!links.some((link) => link.getAttribute('href') === tip.href)) setTip(undefined);
