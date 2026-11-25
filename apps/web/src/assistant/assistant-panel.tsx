@@ -298,7 +298,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
         ) : null}
         {!unavailable && storedTurns.length > 0 ? <StoredTurns turns={storedTurns} earlier={stored.kind === 'ready' ? stored.thread.earlierTurns : 0} reads={reads} drawsValues={bound.length > 0} /> : null}
         {!unavailable && summary !== undefined ? <SummaryContext summary={summary} /> : null}
-        {pageEmpty ? <EmptyThread send={model.sendText} busy={model.busy || !available || model.sourceChanged} limit={limit} /> : page || unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread ? null : <Intro limit={limit} />}
+        {pageEmpty ? <EmptyThread send={model.sendText} busy={model.busy || !available || model.sourceChanged} limit={limit} /> : page || unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread || stored.kind === 'loading' || stored.kind === 'idle' ? null : <Intro limit={limit} />}
         {!unavailable && turns.length > 0 ? (
           <ol className="assistant-thread" aria-label={ASSISTANT_COPY.thread}>
             {turns.map((turn) => (

@@ -3,8 +3,8 @@ import { ASSISTANT_COPY } from './copy.js';
 
 function PopOutIcon() {
   return (
-    <svg aria-hidden="true" className="assistant-popout-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 2.5H2.5v7h7V7M7 2h3v3M10 2 5.8 6.2" />
+    <svg aria-hidden="true" className="assistant-popout-icon" viewBox="0 0 21 21" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 7H6V15H14V12M15 10V6H11M15 6L10 11" />
     </svg>
   );
 }
@@ -17,7 +17,7 @@ export function PopOutButton({ pressed, onPress }: { readonly pressed: boolean; 
     <span className="assistant-popout">
       <button
         type="button"
-        className="assistant-wide"
+        className="assistant-wide assistant-popout-button"
         aria-label={ASSISTANT_COPY.popOut}
         aria-pressed={pressed}
         aria-describedby={shown ? tipId : undefined}

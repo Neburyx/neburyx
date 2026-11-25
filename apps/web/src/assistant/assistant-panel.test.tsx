@@ -16,6 +16,19 @@ import { ASSISTANT_COPY, hintText } from './copy.js';
 
 afterEach(cleanup);
 
+describe('the Assistant panel: the intro and the read of the earlier chat', () => {
+  it('shows the intro only after the read of the earlier chat is answered with nothing, not beside the line that says it is reading', async () => {
+    let answer: (value: ApiResult<{ turns: never[]; earlierTurns: number; previousThreadClearedAt: null }>) => void = () => undefined;
+    const h = harness(async () => ({ ok: true, value: REFUSE }), 800, () => new Promise((resolve) => (answer = resolve)));
+    render(h.tree());
+    expect(await screen.findByText(ASSISTANT_COPY.storedLoading)).toBeTruthy();
+    expect(screen.queryByText(ASSISTANT_COPY.introTitle)).toBeNull();
+    await act(async () => answer({ ok: true, value: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } }));
+    expect(await screen.findByText(ASSISTANT_COPY.introTitle)).toBeTruthy();
+    expect(screen.queryByText(ASSISTANT_COPY.storedLoading)).toBeNull();
+  });
+});
+
 describe('the Assistant panel: a message', () => {
   it('shows the counter with the limit of the status and the hint, and sends nothing for a blank message', async () => {
     const h = harness(async () => ({ ok: true, value: REFUSE }), 800);

@@ -209,11 +209,34 @@ test.describe('Pop out of the Assistant panel', () => {
     await expect(popOutButton(page)).toBeFocused();
     const tip = page.getByRole('tooltip');
     await expect(tip).toContainText('Open this chat as a full page in a new window');
+    const drawn = await tip.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const lines = [...element.children].map((child) => getComputedStyle(child));
+      return { width: box.width, height: box.height, background: getComputedStyle(element).backgroundColor, first: [lines[0]?.fontWeight, lines[0]?.color], second: [lines[1]?.fontWeight, lines[1]?.color] };
+    });
+    expect(Math.round(drawn.height)).toBe(44);
+    expect(drawn.width).toBeGreaterThan(270);
+    expect(drawn.width).toBeLessThan(285);
+    expect(drawn.background).toBe('rgb(37, 41, 50)');
+    expect(drawn.first).toEqual(['500', 'rgb(255, 255, 255)']);
+    expect(drawn.second).toEqual(['400', 'rgb(223, 227, 238)']);
+    const button = await popOutButton(page).evaluate((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height, background: getComputedStyle(element).backgroundColor }));
+    expect(button).toEqual({ width: 21, height: 21, background: 'rgb(234, 237, 247)' });
     const shots = process.env['NBX_UX_SHOTS'];
     if (shots !== undefined) await page.screenshot({ path: `${shots}/pop-out-tooltip-${info.project.name}.png` });
     await page.keyboard.press('Enter');
     const popup = await page.waitForEvent('popup');
     await expect(panel(page).getByText(NOTE)).toBeVisible();
+    const collapsed = await panel(page).evaluate((element) => {
+      const icon = element.querySelector('.assistant-popped-icon')?.getBoundingClientRect();
+      const wide = element.querySelector('.assistant-wide[aria-label="Wide"]');
+      const subtitle = element.querySelector('.ask-head-text p');
+      return { icon: [icon?.width, icon?.height], iconColor: getComputedStyle(element.querySelector('.assistant-popped-icon') as Element).color, subtitle: subtitle === null ? '' : getComputedStyle(subtitle).color, wideTip: wide === null ? '' : getComputedStyle(wide, '::after').content };
+    });
+    expect(collapsed.icon.map((value) => Math.round((value ?? 0) * 10) / 10)).toEqual([10.4, 10.4]);
+    expect(collapsed.iconColor).toBe('rgb(82, 100, 167)');
+    expect(collapsed.subtitle).toBe('rgb(100, 109, 128)');
+    expect(collapsed.wideTip).toBe('none');
     await popOutButton(page).blur();
     const box = await page.locator('.floating-panel', { has: panel(page) }).boundingBox();
     expect(box?.width).toBe(380);

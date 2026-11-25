@@ -3,8 +3,8 @@ import { ASSISTANT_COPY } from './copy.js';
 
 function Mark() {
   return (
-    <svg aria-hidden="true" className="assistant-popped-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 2.5H2.5v7h7V7M7 2h3v3M10 2 5.8 6.2" />
+    <svg aria-hidden="true" className="assistant-popped-icon" viewBox="0 0 10.4 10.4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.7 1.7H0.7V9.7H8.7V6.7M9.7 4.7V0.7H5.7M9.7 0.7L4.7 5.7" />
     </svg>
   );
 }

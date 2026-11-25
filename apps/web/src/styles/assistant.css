@@ -741,7 +741,7 @@
   border: 0;
   border-radius: var(--radius);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-workspace-muted);
   cursor: pointer;
 }
 
@@ -793,9 +793,40 @@
   display: inline-flex;
 }
 
+.assistant-popout-button {
+  box-sizing: border-box;
+  width: var(--assistant-popout-button-size);
+  height: var(--assistant-popout-button-size);
+  padding: 0;
+  border-radius: var(--radius-small);
+}
+
+.assistant-popout-button:is(:hover, :focus-visible) {
+  background: var(--color-accent-surface);
+}
+
+.assistant-popout-button[aria-pressed='true'] {
+  border-radius: var(--radius);
+}
+
 .assistant-popout-icon {
-  width: var(--space-14);
-  height: var(--space-14);
+  width: var(--assistant-popout-button-size);
+  height: var(--assistant-popout-button-size);
+}
+
+.assistant-panel .ask-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.assistant-panel .ask-head-text h2 {
+  line-height: var(--space-20);
+}
+
+.assistant-panel .ask-head-text p {
+  color: var(--color-clear-note);
+  line-height: var(--space-16);
 }
 
 .assistant-popout-tip {
@@ -812,6 +843,7 @@
   box-shadow: var(--shadow-tooltip-dark);
   color: var(--color-tooltip-dark-text);
   font-size: var(--font-size-small);
+  line-height: var(--line-height-tip);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -819,6 +851,10 @@
 .assistant-popout-tip strong {
   color: var(--color-surface);
   font-weight: var(--font-weight-medium);
+}
+
+.assistant-popout-tip span {
+  font-weight: var(--font-weight-regular);
 }
 
 /* while the page of the chat is open in another window the panel is the header and a note, as tall as its content */
@@ -851,8 +887,8 @@
 
 .assistant-popped-icon {
   flex: none;
-  width: var(--space-10);
-  height: var(--space-10);
+  width: var(--assistant-popped-icon-size);
+  height: var(--assistant-popped-icon-size);
   color: var(--color-accent);
 }
 
