@@ -204,6 +204,8 @@ describe('Select on graph on the Assistant page', () => {
     await userEvent.click(row(1));
     expect(h.made()).toBe(before);
     expect(within(row(1)).getByText(ASSISTANT_COPY.selected)).toBeTruthy();
+    expect(row(1).getAttribute('aria-label')?.endsWith(ASSISTANT_COPY.selected)).toBe(true);
+    expect(row(1).getAttribute('title')).toBe(ASSISTANT_COPY.selected);
     expect(screen.getByText(ASSISTANT_COPY.noGraphWindow)).toBeTruthy();
     expect(heard).toEqual([]);
     await userEvent.click(row(1));
