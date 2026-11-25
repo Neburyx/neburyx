@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import type { ApiClient } from '../api/client.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
@@ -12,6 +13,7 @@ import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { AssistantSurface } from './assistant-panel.js';
 import { ChatListColumn } from './chat-list/chat-list-column.js';
+import { NewChatPicker } from './new-chat/new-chat-picker.js';
 import { assistantSessionOf, AssistantSessionProvider } from './assistant-session.js';
 import { ASSISTANT_COPY } from './copy.js';
 
@@ -56,6 +58,10 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
   const { status, again } = useOpenInvestigation(client, investigationId, principalId, (shownId) => (shownId === null ? '/' : `${ASSISTANT_PATH}/${encodeURIComponent(shownId)}`));
   const shownId = useStoreSelector(state.investigation, (investigation) => investigation.id);
   const session = assistantSessionOf(state);
+  const newChat = useRef<HTMLButtonElement | null>(null);
+  const [picking, setPicking] = useState(false);
+  // the picker belongs to the investigation the page is on: another one closes it
+  useEffect(() => setPicking(false), [investigationId]);
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT}>{status.sourceId === undefined ? null : <AttemptedSource sourceId={status.sourceId} />}</Message>;
   const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
   if (failure !== undefined) {
@@ -88,7 +94,8 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
     <PageFrame bare>
       <div className="assistant-page">
         <AssistantSessionProvider value={session}>
-          <ChatListColumn />
+          <ChatListColumn onNewChat={() => setPicking((held) => !held)} newChatRef={newChat} />
+          {picking ? <NewChatPicker anchor={newChat} onClose={() => setPicking(false)} /> : null}
           <div className="assistant-page-thread">
             <AssistantSurface variant="page" />
           </div>

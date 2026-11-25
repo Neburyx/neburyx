@@ -129,6 +129,19 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   }, [placed]);
 
   useEffect(() => {
+    // Escape closes the picker wherever the focus is, and goes no further
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      event.preventDefault();
+      onClose();
+      anchor.current?.focus();
+    };
+    document.addEventListener('keydown', escape, true);
+    return () => document.removeEventListener('keydown', escape, true);
+  }, [anchor, onClose]);
+
+  useEffect(() => {
     // a press outside the picker and the button that opened it closes it; the button's own press is the opener's to answer
     const outside = (event: PointerEvent): void => {
       const target = event.target;
@@ -154,13 +167,11 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
       aria-labelledby={titleId}
       className="new-chat"
       style={{ left: place.left, top: place.top }}
+      onMouseDown={(event) => {
+        // a press on the text or a row of the picker leaves the focus where it is, so that the keys still reach it
+        if (!(event.target instanceof Element) || event.target.closest('input, button') === null) event.preventDefault();
+      }}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.stopPropagation();
-          event.preventDefault();
-          close();
-          return;
-        }
         if (event.key !== 'Tab' || card.current === null) return;
         // the focus stays inside the picker until it closes
         const inside = [...card.current.querySelectorAll<HTMLElement>('input, button:not(:disabled)')];

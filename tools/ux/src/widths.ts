@@ -12,6 +12,7 @@ export const WIDTH_DEPENDENT: readonly string[] = [
   'assistant-panel.spec.ts',
   'assistant-wide.spec.ts',
   'chat-list.spec.ts',
+  'new-chat.spec.ts',
   'compare.spec.ts',
   'evidence.spec.ts',
   'first-run.spec.ts',
