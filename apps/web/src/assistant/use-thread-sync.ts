@@ -52,15 +52,16 @@ export function useThreadSync(collapsed: boolean, turns: readonly Turn[]): { rea
     chain.current += 1;
     const mine = chain.current;
     const before = heldTurns();
+    const began = session.store.getState().investigationId;
     const attempt = (index: number): void => {
       void reload().then((done) => {
-        if (mine !== chain.current || done?.failed === true || (done?.held !== undefined && done.held !== before)) return;
+        if (mine !== chain.current || session.store.getState().investigationId !== began || done?.failed === true || (done?.held !== undefined && done.held !== before)) return;
         const wait = SETTLE_RETRY_MS[index];
         if (wait !== undefined) waiting.current = window.setTimeout(() => attempt(index + 1), wait);
       });
     };
     attempt(0);
-  }, [heldTurns, reload]);
+  }, [heldTurns, reload, session]);
   useEffect(() => {
     if (collapsed) {
       wasCollapsed.current = true;
@@ -81,7 +82,15 @@ export function useThreadSync(collapsed: boolean, turns: readonly Turn[]): { rea
       window.removeEventListener('focus', shown);
     };
   }, [collapsed, reload]);
-  useEffect(() => (channel === undefined ? undefined : channel.onThreadChanged(changed)), [channel, changed]);
+  useEffect(() => {
+    if (channel === undefined) return undefined;
+    const stop = channel.onThreadChanged(changed);
+    return () => {
+      stop();
+      chain.current += 1;
+      window.clearTimeout(waiting.current);
+    };
+  }, [channel, changed]);
   useEffect(
     () => () => {
       chain.current += 1;

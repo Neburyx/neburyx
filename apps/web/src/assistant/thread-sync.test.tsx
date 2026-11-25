@@ -7,7 +7,7 @@ import type { ApiResult } from '../api/client.js';
 import { installFakeBroadcastChannel } from '../windows/fake-broadcast.js';
 import { forgetOpenedWindows } from '../windows/pop-out.js';
 import { createWindowChannel, type WindowChannel, type WindowScope } from '../windows/window-channel.js';
-import { harness, REFUSE, typeAndSend } from './assistant-kit.js';
+import { harness, RECORD, REFUSE, typeAndSend } from './assistant-kit.js';
 import { ASSISTANT_COPY } from './copy.js';
 
 const SCOPE: WindowScope = { principalId: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', investigationId: 'inv-1', sourceId: 'a' };
@@ -131,6 +131,23 @@ describe('the thread of a window while another window shows the chat', () => {
       await act(async () => void window.dispatchEvent(new Event('focus')));
       await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
       expect(reads).toBeGreaterThan(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops the waits when the window moves to another investigation, and reads nothing of the first one after', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const h = harness(async () => ok(REFUSE), 1000, async () => ok(thread(1)));
+      render(h.tree());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+      const other = window2();
+      await act(async () => other.announceThreadChanged());
+      const first = h.reads.filter((id) => id === 'inv-1').length;
+      await act(async () => h.state.show({ id: 'inv-2', sourceId: 'a', record: RECORD, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+      expect(h.reads.filter((id) => id === 'inv-1').length).toBe(first);
     } finally {
       vi.useRealTimers();
     }
