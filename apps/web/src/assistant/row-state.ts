@@ -9,8 +9,8 @@ export interface RowState {
   readonly openGraph?: () => void;
 }
 
-export function rowStateOf(key: string, selection: RowSelection | undefined, idleText: string, openGraph: () => void): RowState {
-  if (selection === undefined || selection.key !== key) return { kind: 'idle', text: idleText };
+export function rowStateOf(key: string, owner: string, selection: RowSelection | undefined, idleText: string, openGraph: () => void): RowState {
+  if (selection === undefined || selection.key !== key || selection.owner !== owner) return { kind: 'idle', text: idleText };
   switch (selection.phase) {
     case 'pending':
       return { kind: 'pending', text: idleText };

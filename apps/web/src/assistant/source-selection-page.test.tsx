@@ -103,6 +103,30 @@ function graphWindow(has: readonly string[]) {
 
 const KEY_HELD = JSON.stringify(['node', 'source-a', 'kind-a', 'A-1']);
 
+describe('the same element cited in two answers of the thread', () => {
+  it('gives the state and the notice to the pressed row only, and brings only that row into view', async () => {
+    const scroll = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, writable: true, value: scroll });
+    await page();
+    await userEvent.type(await screen.findByLabelText(ASSISTANT_COPY.fieldLabel), 'and again?{Enter}');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Sources · / })).toHaveLength(2));
+    const toggles = screen.getAllByRole('button', { name: /^Sources · / });
+    await userEvent.click(toggles[1] as HTMLElement);
+    const second = screen.getAllByRole('button', { name: /^Sources: 1,/ });
+    expect(second).toHaveLength(2);
+    scroll.mockClear();
+    await userEvent.click(second[1] as HTMLElement);
+    await waitFor(() => expect(screen.getAllByText(ASSISTANT_COPY.noGraphWindow)).toHaveLength(1));
+    expect(screen.getAllByText(ASSISTANT_COPY.selected)).toHaveLength(1);
+    expect((second[0] as HTMLElement).getAttribute('data-selection')).toBeNull();
+    expect((second[1] as HTMLElement).getAttribute('data-selection')).toBe('selected');
+    const items = scroll.mock.contexts.filter((item) => item instanceof HTMLElement) as HTMLElement[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(new Set(items).size).toBe(1);
+    expect((second[1] as HTMLElement).closest('li')).toBe(items[0]);
+  });
+});
+
 describe('keeping the pressed row whole in view', () => {
   it('scrolls the row and its notice into view only as far as needed (nearest, never centred), once the row holds a state, and not before', async () => {
     const scroll = vi.fn();

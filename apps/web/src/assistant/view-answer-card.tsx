@@ -48,6 +48,7 @@ export function ViewAnswerCard({
 }) {
   const titleId = useId();
   const sourcesId = useId();
+  const listOwner = useId();
   const graph = useVisibleGraph();
   const state = useClientState();
   const investigation = useStoreSelector(state.investigation, (held) => held);
@@ -77,7 +78,7 @@ export function ViewAnswerCard({
     if (page !== undefined) {
       if (held.has(entry.graphKey)) {
         setNote("");
-        page.selection.select(entry.graphKey);
+        page.selection.select(entry.graphKey, listOwner);
       } else setNote(SUMMARY_COPY.gone);
       return;
     }
@@ -305,7 +306,7 @@ export function ViewAnswerCard({
           </button>
           {sourcesOpen ? (
             <div id={sourcesId} className="assistant-sources-list">
-              <SourcesList entries={entries} labelOf={labelOf} statusOf={status} isSelectable={(entry) => drawn.has(entry.graphKey) || (page !== undefined && held.has(entry.graphKey))} rowStateOf={page === undefined ? undefined : (entry) => (held.has(entry.graphKey) ? rowStateOf(entry.graphKey, rowSelection, SUMMARY_COPY.select, () => page.openGraph(entry.graphKey)) : undefined)} onPress={press} focusRequest={focusRequest} onFocusHandled={() => setFocusRequest(undefined)} />
+              <SourcesList entries={entries} labelOf={labelOf} statusOf={status} isSelectable={(entry) => drawn.has(entry.graphKey) || (page !== undefined && held.has(entry.graphKey))} rowStateOf={page === undefined ? undefined : (entry) => (held.has(entry.graphKey) ? rowStateOf(entry.graphKey, listOwner, rowSelection, SUMMARY_COPY.select, () => page.openGraph(entry.graphKey)) : undefined)} onPress={press} focusRequest={focusRequest} onFocusHandled={() => setFocusRequest(undefined)} />
             </div>
           ) : null}
         </div>

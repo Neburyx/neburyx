@@ -7,6 +7,8 @@ type SelectionPhase = 'pending' | 'highlighted' | 'no-window' | 'not-on-canvas';
 /** The one row of the page that holds a state of this feature: the key of its element and where it stands. */
 export interface RowSelection {
   readonly key: string;
+  /** The list of sources the row was pressed in: the same element is cited in several answers of the thread, and only the pressed row holds the state. */
+  readonly owner: string;
   readonly phase: SelectionPhase;
 }
 
@@ -21,7 +23,7 @@ export interface SelectionLink {
 export interface SourceSelection {
   readonly state: ReadableStore<RowSelection | undefined>;
   /** Presses a row whose element the investigation holds: with a graph window open the key goes to it and the row waits for its answer; with none the row says it is selected and that nothing was highlighted. */
-  select(key: string): void;
+  select(key: string, owner: string): void;
   /** The graph windows that are open now: a highlight stands only while a window that reported the element on its canvas is among them. */
   graphWindowsChanged(open: ReadonlySet<string>): void;
   dispose(): void;
@@ -45,10 +47,10 @@ export function createSourceSelection(link: SelectionLink, timers: { readonly se
     if (current.phase !== 'pending' && current.phase !== 'not-on-canvas' && current.phase !== 'highlighted') return;
     if (onCanvas.includes(current.key)) {
       reporters.add(windowId);
-      state.setState({ key: current.key, phase: 'highlighted' });
+      state.setState({ ...current, phase: 'highlighted' });
       return;
     }
-    if (current.phase === 'pending') state.setState({ key: current.key, phase: 'not-on-canvas' });
+    if (current.phase === 'pending') state.setState({ ...current, phase: 'not-on-canvas' });
   };
   const stopListening = link.onAnswer((answer) => {
     if (sending) {
@@ -59,12 +61,12 @@ export function createSourceSelection(link: SelectionLink, timers: { readonly se
   });
   return {
     state,
-    select(key) {
+    select(key, owner) {
       stop();
       waiting = undefined;
       reporters = new Set();
       if (!link.graphOpen()) {
-        state.setState({ key, phase: 'no-window' });
+        state.setState({ key, owner, phase: 'no-window' });
         return;
       }
       sending = true;
@@ -72,11 +74,11 @@ export function createSourceSelection(link: SelectionLink, timers: { readonly se
       const requestId = link.send(key);
       sending = false;
       if (requestId === undefined) {
-        state.setState({ key, phase: 'no-window' });
+        state.setState({ key, owner, phase: 'no-window' });
         return;
       }
       waiting = requestId;
-      state.setState({ key, phase: 'pending' });
+      state.setState({ key, owner, phase: 'pending' });
       for (const held of early) {
         const [id, windowId, onCanvas] = JSON.parse(held) as [string, string, readonly string[]];
         apply(id, windowId, onCanvas);
@@ -88,7 +90,7 @@ export function createSourceSelection(link: SelectionLink, timers: { readonly se
         const current = state.getState();
         if (waiting !== requestId) return;
         waiting = undefined;
-        if (current !== undefined && current.key === key && current.phase === 'pending') state.setState({ key, phase: 'no-window' });
+        if (current !== undefined && current.key === key && current.phase === 'pending') state.setState({ key, owner, phase: 'no-window' });
       }, ANSWER_WAIT_MS);
     },
     graphWindowsChanged(now) {
