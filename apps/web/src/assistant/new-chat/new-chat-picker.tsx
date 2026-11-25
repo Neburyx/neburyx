@@ -45,7 +45,9 @@ function placeOf(box: DOMRect): Place {
   const least = tokenPx('--new-chat-least-height', 300);
   const below = window.innerHeight - box.bottom - gap - edge;
   const top = below >= least ? box.bottom + gap : Math.max(edge, window.innerHeight - edge - least);
-  return { left: box.left, top, maxHeight: Math.max(0, window.innerHeight - top - edge) };
+  // the card is as wide as the token says, or as the window leaves it, and never runs past the right edge
+  const width = Math.min(tokenPx('--new-chat-width', 400), window.innerWidth - 2 * edge);
+  return { left: Math.max(edge, Math.min(box.left, window.innerWidth - edge - width)), top, maxHeight: Math.max(0, window.innerHeight - top - edge) };
 }
 
 /** The chip that says a source is gone, for a state that is not `available`. */

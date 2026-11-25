@@ -69,6 +69,7 @@ describe('the picker of a new chat on the Assistant page', () => {
     await userEvent.click(screen.getByRole('button', { name: CHAT_LIST_COPY.newChat }));
     const dialog = await screen.findByRole('dialog', { name: NEW_CHAT_COPY.title });
     expect(await within(dialog).findAllByRole('option')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: CHAT_LIST_COPY.newChat }).getAttribute('aria-expanded')).toBe('true');
     await waitFor(() => expect(within(dialog).getAllByText(NEW_CHAT_COPY.startChat).length).toBeGreaterThan(0));
     expect(h.requests).toContain('lookupAssistantChats');
     await userEvent.click(within(dialog).getByRole('option', { name: /kind-a A-1/u }));
@@ -85,6 +86,7 @@ describe('the picker of a new chat on the Assistant page', () => {
     await screen.findByRole('dialog');
     await userEvent.click(button);
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('lands on the paused source-changed state for an investigation whose source has changed and that has a chat: no empty-thread heading, description or suggestions, nothing sent, and only reads made', async () => {

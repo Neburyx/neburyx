@@ -110,6 +110,7 @@
 
 .new-chat-search-box .icon {
   position: absolute;
+  background: var(--new-chat-muted);
   top: 50%;
   left: var(--new-chat-pad-x-input);
   width: var(--new-chat-icon-search);
@@ -198,4 +199,14 @@
 
 .new-chat-row-gone .new-chat-row-title {
   color: var(--new-chat-muted);
+}
+
+/* the button of the column while the picker is open: the frame draws it tinted, with the accent border and the accent plus */
+.assistant-page-button.chat-list-new[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-surface);
+}
+
+.assistant-page-button.chat-list-new[aria-expanded='true'] .icon {
+  background: var(--color-accent);
 }

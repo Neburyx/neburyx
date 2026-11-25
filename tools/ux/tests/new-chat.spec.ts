@@ -95,6 +95,12 @@ test.describe('The picker of a new chat on the Assistant page', () => {
     });
     expect(style).toEqual({ background: 'rgb(255, 255, 255)', border: 'rgb(202, 208, 218)', width: '1px', radius: '8px', shadow: true });
     expect(await box(page.locator('.assistant-page-thread'))).toEqual(before);
+    // the button is drawn in its open state, as the frame draws it: tinted, with the accent border and the accent plus
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    const open = await button.evaluate((element) => ({ background: getComputedStyle(element).backgroundColor, border: getComputedStyle(element).borderTopColor, plus: getComputedStyle(element.querySelector('.icon') as Element).backgroundColor }));
+    expect(open).toEqual({ background: 'rgb(234, 237, 247)', border: 'rgb(82, 100, 167)', plus: 'rgb(82, 100, 167)' });
+    const icon = await picker(page).locator('.new-chat-search-box .icon').evaluate((element) => ({ size: [element.getBoundingClientRect().width, element.getBoundingClientRect().height], color: getComputedStyle(element).backgroundColor }));
+    expect(icon).toEqual({ size: [14, 14], color: 'rgb(100, 109, 128)' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
@@ -160,6 +166,11 @@ test.describe('The picker of a new chat on the Assistant page', () => {
     await page.getByRole('button', { name: 'New chat' }).click();
     await expect(picker(page).getByRole('option').first()).toBeVisible();
     const card = await box(picker(page));
+    const opener = await box(page.getByRole('button', { name: 'New chat' }));
+    // there is no room under the button: the card went up over it, and stays inside the window on both sides
+    expect(card.y).toBeLessThan(opener.y + opener.height);
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(640);
     expect(card.y).toBeGreaterThanOrEqual(0);
     expect(card.y + card.height).toBeLessThanOrEqual(360);
     for (const part of ['.new-chat-heading', '.new-chat-search', '.new-chat-footer']) {
