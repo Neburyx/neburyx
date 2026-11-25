@@ -117,6 +117,7 @@ describe('the picker of a new chat: the list and the pick', () => {
     expect(screen.getByTestId('where').textContent).toBe('/assistant');
     await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.tryAgain }));
     expect(await within(dialog).findAllByRole('option')).toHaveLength(2);
+    expect(document.activeElement).toBe(within(dialog).getByRole('combobox'));
   });
 
   it('draws no row for an investigation that is not open, though the response carries one', async () => {
@@ -213,6 +214,8 @@ describe('the picker of a new chat: search, paging and the states of the list', 
       await userEvent.keyboard('{Enter}');
       await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(Math.min(205, page * 25)));
       if (page < 9) expect(document.activeElement).toBe(await within(dialog).findByRole('button', { name: NEW_CHAT_COPY.showMore }));
+      // the last page takes the control away: the focus is in the search box then, not on the page
+      else expect(document.activeElement).toBe(screen.getByRole('combobox', { name: NEW_CHAT_COPY.searchLabel }));
     }
     const titles = rowTitles();
     expect(titles).toHaveLength(205);
@@ -444,6 +447,61 @@ describe('the picker of a new chat: the keyboard path and the names a screen rea
     await userEvent.type(field(), 'case 5');
     await waitFor(() => expect(activeName()).toBeNull());
     await waitFor(() => expect(screen.getAllByRole('status').map((node) => node.textContent)).toContain('1 match'));
+  });
+});
+
+describe('the picker of a new chat: a search that is being read, a lookup that fails, the edge of the window', () => {
+  it('draws no highlight and picks nothing with the keys while a search is read, though the rows of the earlier list are still held', async () => {
+    const held = pagedClient(rowsOf(4), [], { lookupAssistantChats: NO_CHATS });
+    let release: (() => void) | undefined;
+    const client = fakeClient({
+      lookupAssistantChats: NO_CHATS,
+      listInvestigationPage: async (query, signal) => {
+        const answer = await held.client.listInvestigationPage(query, signal);
+        if (query.text === 'ca') await new Promise<void>((resolve) => (release = resolve));
+        return answer;
+      },
+    });
+    setup(client);
+    const dialog = await open();
+    await within(dialog).findAllByRole('option');
+    await userEvent.type(within(dialog).getByRole('combobox'), 'ca');
+    await within(dialog).findByText(NEW_CHAT_COPY.loading);
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    expect(within(dialog).getByRole('combobox').getAttribute('aria-activedescendant')).toBeNull();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByTestId('where').textContent).toBe('/assistant');
+    await act(async () => release?.());
+  });
+
+  it('asks the lookup for at most 100 ids at a time over pages whose first lookups failed, and then knows the chats', async () => {
+    const asked: number[] = [];
+    let calls = 0;
+    const held = pagedClient(rowsOf(130), [], {
+      lookupAssistantChats: async (ids) => {
+        asked.push(ids.length);
+        calls += 1;
+        return calls <= 4 ? { ok: false as const, failure: { code: 'NETWORK_UNAVAILABLE' as const } } : { ok: true as const, value: { withChat: [] } };
+      },
+    });
+    setup(held.client);
+    const dialog = await open();
+    await within(dialog).findAllByRole('option');
+    for (let page = 2; page <= 6; page += 1) {
+      await userEvent.click(await within(dialog).findByRole('button', { name: NEW_CHAT_COPY.showMore }));
+      await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(Math.min(130, page * 25)));
+    }
+    await waitFor(() => expect(asked.length).toBeGreaterThan(4));
+    expect(Math.max(...asked)).toBeLessThanOrEqual(100);
+  });
+
+  it('gives the focus back to the button after a press outside on text', async () => {
+    setup();
+    const dialog = await open();
+    await within(dialog).findAllByRole('option');
+    await userEvent.click(screen.getByText('outside'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New chat' })).toBe(document.activeElement));
   });
 });
 

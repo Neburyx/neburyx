@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ASSISTANT_CHAT_LOOKUP_IDS_MAX } from '@neburyx/contracts';
 import { useApiClient } from '../../api/client-context.js';
 
 /** What the picker knows of whether an investigation has a chat of the person: yes or no once the lookup has answered for it, and nothing while it has not or when it failed. */
@@ -18,16 +19,20 @@ export function useChatsOf(ids: readonly string[]): (id: string) => ChatKnowledg
     const fresh = ids.filter((id) => !asked.current.has(id));
     if (fresh.length === 0) return;
     for (const id of fresh) asked.current.add(id);
-    void client.lookupAssistantChats(fresh).then((result) => {
-      if (!mounted.current) return;
-      if (!result.ok) {
-        // asked again when the rows change
-        for (const id of fresh) asked.current.delete(id);
-        return;
-      }
-      const withChat = new Set(result.value.withChat.map((id) => id.toLowerCase()));
-      setKnown((held) => new Map([...held, ...fresh.map((id) => [id, withChat.has(id.toLowerCase())] as const)]));
-    });
+    // a call takes at most 100 ids, whatever failed before and is asked again with the new rows
+    for (let at = 0; at < fresh.length; at += ASSISTANT_CHAT_LOOKUP_IDS_MAX) {
+      const batch = fresh.slice(at, at + ASSISTANT_CHAT_LOOKUP_IDS_MAX);
+      void client.lookupAssistantChats(batch).then((result) => {
+        if (!mounted.current) return;
+        if (!result.ok) {
+          // asked again when the rows change
+          for (const id of batch) asked.current.delete(id);
+          return;
+        }
+        const withChat = new Set(result.value.withChat.map((id) => id.toLowerCase()));
+        setKnown((held) => new Map([...held, ...batch.map((id) => [id, withChat.has(id.toLowerCase())] as const)]));
+      });
+    }
   }, [client, key]);
   useEffect(() => {
     mounted.current = true;

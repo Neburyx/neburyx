@@ -28,6 +28,7 @@ const EMPTY: AssistantThreadResponse = { turns: [], earlierTurns: 0, previousThr
 /** The page with the column of the chats and the picker, over a client that records every request it is asked. */
 function setup(withChat: readonly string[]) {
   const requests: string[] = [];
+  const threads: string[] = [];
   const sent: AssistantTurnRequest[] = [];
   const known = [A, B];
   const { client } = knowing(known, {
@@ -37,20 +38,29 @@ function setup(withChat: readonly string[]) {
       sent.push(request);
       return { ok: true as const, value: REFUSE };
     },
-    assistantThread: async () => (requests.push('assistantThread'), { ok: true as const, value: EMPTY }),
+    assistantThread: async (investigationId) => (requests.push('assistantThread'), threads.push(investigationId), { ok: true as const, value: EMPTY }),
     clearAssistantThread: async () => (requests.push('clearAssistantThread'), { ok: true as const, value: { cleared: true } }),
     listAssistantThreads: async () => (requests.push('listAssistantThreads'), { ok: true as const, value: { items: [], nextCursor: null } }),
     listInvestigationPage: async () => (requests.push('listInvestigationPage'), { ok: true as const, value: listOf(known.map((entry) => listItemOf(entry.investigation))) }),
     lookupAssistantChats: async () => (requests.push('lookupAssistantChats'), { ok: true as const, value: { withChat: [...withChat] } }),
   } satisfies Partial<ApiClient>);
+  // every method the page calls is recorded, whether or not the test gives it an answer of its own
+  const calls: string[] = [];
+  const recording = new Proxy(client, {
+    get: (target, name) => {
+      const value: unknown = Reflect.get(target, name);
+      return typeof value === 'function' ? (...args: unknown[]) => (calls.push(String(name)), (value as (...given: unknown[]) => unknown).apply(target, args)) : value;
+    },
+  });
   const state = createClientState();
   const session = createAssistantSession(null);
-  const view = renderApp(`/assistant/${INVESTIGATION_A}`, client, state, undefined, undefined, undefined, undefined, undefined, createPanelRegistryFor(state));
+  const view = renderApp(`/assistant/${INVESTIGATION_A}`, recording, state, undefined, undefined, undefined, undefined, undefined, createPanelRegistryFor(state));
   unbinds.push(bindAssistantPanel(state, view.panels, session));
-  return { ...view, requests, sent, state };
+  return { ...view, requests, calls, threads, sent, state };
 }
 
-const WRITES = ['assistantTurn', 'clearAssistantThread'];
+/** What a landing may ask of the application: reads, and nothing else. */
+const READS = ['getMe', 'getSources', 'getProfile', 'getAiStatus', 'getPreferences', 'getInvestigation', 'getEntity', 'listAssistantThreads', 'listInvestigationPage', 'lookupAssistantChats', 'listInvestigations'];
 
 describe('the picker of a new chat on the Assistant page', () => {
   it('opens under the New chat button of the column, and a pick of another investigation shows that investigation on the page', async () => {
@@ -85,7 +95,8 @@ describe('the picker of a new chat on the Assistant page', () => {
     const row = await within(dialog).findByRole('option', { name: /kind-a C-1/u });
     await waitFor(() => expect(row.getAttribute('aria-disabled')).toBeNull());
     expect(within(row).getByText(NEW_CHAT_COPY.hasChat)).toBeTruthy();
-    const before = h.requests.length;
+    const before = h.calls.length;
+    const threadReadsBefore = h.threads.length;
     await userEvent.click(row);
     expect(await screen.findByText(ASSISTANT_COPY.sourceChanged)).toBeTruthy();
     // the landing never reads as an empty or a lost chat
@@ -95,8 +106,10 @@ describe('the picker of a new chat on the Assistant page', () => {
     expect(screen.queryByRole('button', { name: 'Is anything useful in the data?' })).toBeNull();
     await userEvent.type(screen.getByLabelText(ASSISTANT_COPY.fieldLabel), 'question{Enter}');
     expect(h.sent).toEqual([]);
-    // the visit writes nothing: no turn and no clearing of a stored chat
-    expect(h.requests.slice(before).filter((name) => WRITES.includes(name))).toEqual([]);
-    expect(h.requests.filter((name) => WRITES.includes(name))).toEqual([]);
+    // the visit writes nothing: every call after the pick is a read of the list, and the stored turns of the changed source are not read
+    const after = h.calls.slice(before);
+    expect(after.filter((name) => !READS.includes(name))).toEqual([]);
+    expect(h.threads.slice(threadReadsBefore)).toEqual([]);
+    expect(h.calls.filter((name) => ['assistantTurn', 'clearAssistantThread', 'saveDraft', 'putPreferences', 'openInvestigation', 'deleteInvestigation'].includes(name))).toEqual([]);
   });
 });

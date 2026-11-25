@@ -4,7 +4,6 @@ export const NEW_CHAT_COPY = {
   description: 'Pick the investigation this chat is about.',
   footer: 'A chat belongs to one investigation. Picking one that already has a chat opens it. Closed investigations are not listed.',
   loading: 'Loading open investigations…',
-  failed: 'The open investigations could not be read.',
   tryAgain: 'Try again',
   hasChat: 'Has a chat',
   startChat: 'Start chat ▸',

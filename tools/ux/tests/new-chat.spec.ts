@@ -133,6 +133,23 @@ test.describe('The picker of a new chat on the Assistant page', () => {
     await expect(picker(page)).toHaveCount(0);
   });
 
+  test('stays inside the window with a long list: the card ends above the bottom edge, the rows scroll inside it and the footer stays in view', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await routes(page);
+    await page.unroute((url) => url.pathname === '/v1/investigations' && url.searchParams.get('status') === 'open');
+    const many = Array.from({ length: 25 }, (_, index) => investigation(100 + index));
+    await page.route((url) => url.pathname === '/v1/investigations' && url.searchParams.get('status') === 'open', (route) => route.fulfill({ json: listBody(many) }));
+    await openPage(page);
+    await page.getByRole('button', { name: 'New chat' }).click();
+    await expect(picker(page).getByRole('option')).toHaveCount(25);
+    const card = await box(picker(page));
+    expect(card.y + card.height).toBeLessThanOrEqual(600);
+    const footer = await box(picker(page).locator('.new-chat-footer'));
+    expect(footer.y + footer.height).toBeLessThanOrEqual(600);
+    expect(await picker(page).locator('.new-chat-rows').evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
   test('does not start a chat on a gone source that has none, closes on Escape with the focus on the button, and never scrolls the page sideways', async ({ page }) => {
     await routes(page);
     await openPage(page);

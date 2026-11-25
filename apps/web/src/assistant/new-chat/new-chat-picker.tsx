@@ -26,7 +26,14 @@ export interface NewChatPickerProps {
 interface Place {
   readonly left: number;
   readonly top: number;
+  /** The height left under the button, in pixels, less the gap to the card and a margin to the edge of the window. */
+  readonly room: number;
 }
+
+/** The margin kept between the card and the bottom edge of the window, in pixels. */
+const EDGE_MARGIN = 16;
+/** The gap between the button and the card, in pixels (the same as `--new-chat-gap`). */
+const BUTTON_GAP = 12;
 
 /** The chip that says a source is gone, for a state that is not `available`. */
 const goneChipOf = (row: InvestigationListItem): string | undefined => (row.sourceState === 'removed' ? REMOVED_CHIP : row.sourceState === 'repointed' ? REPOINTED_CHIP : undefined);
@@ -86,16 +93,19 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   const [query, setQuery] = useState<string | undefined>(undefined);
   const list = useInvestigationList(client, { status: 'open', sourceId: undefined, text: query, limit: PAGE_SIZE });
   const { state } = list;
-  const rows = (state.items ?? []).filter((row) => row.status === 'open');
+  // while a search is read the rows of the earlier list are not drawn, so they cannot be highlighted or picked either
+  const waiting = state.items === undefined || state.loading;
+  const rows = waiting ? [] : (state.items ?? []).filter((row) => row.status === 'open');
   const chatOf = useChatsOf(rows.map((row) => row.id));
   const optionOf = (id: string): string => `${listId}-${id}`;
   /** The rows the highlight can stop on: those that can be picked. */
   const stops = rows.filter((row) => pickable(row, chatOf(row.id)));
+  const stopIds = stops.map((row) => row.id).join(',');
   // a search changes the list: the highlight goes to no row, and so does one whose row is no longer drawn
   useEffect(() => setActive(undefined), [query]);
   useEffect(() => {
-    if (active !== undefined && !stops.some((row) => row.id === active)) setActive(undefined);
-  }, [active, stops]);
+    if (active !== undefined && !stopIds.split(',').includes(active)) setActive(undefined);
+  }, [active, stopIds]);
   useEffect(() => {
     if (active !== undefined) document.getElementById(`${listId}-${active}`)?.scrollIntoView?.({ block: 'nearest' });
   }, [active, listId]);
@@ -103,7 +113,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   useLayoutEffect(() => {
     const place_ = (): void => {
       const box = anchor.current?.getBoundingClientRect();
-      if (box !== undefined) setPlace({ left: box.left, top: box.bottom });
+      if (box !== undefined) setPlace({ left: box.left, top: box.bottom, room: Math.max(0, window.innerHeight - box.bottom - BUTTON_GAP - EDGE_MARGIN) });
     };
     place_();
     window.addEventListener('resize', place_);
@@ -122,6 +132,11 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
     onClose();
     anchor.current?.focus();
   };
+
+  // a control that has the focus and goes (the last Show more, a retry that worked) leaves the focus in the search box, not on the page
+  useEffect(() => {
+    if (card.current !== null && document.activeElement === document.body) search.current?.focus();
+  }, [state.nextCursor, state.failure, state.loading]);
 
   const placed = place !== undefined;
   useEffect(() => {
@@ -147,6 +162,10 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
       const target = event.target;
       if (!(target instanceof Node) || card.current?.contains(target) === true || anchor.current?.contains(target) === true) return;
       onClose();
+      // the focus goes back to the button unless the press landed on something that takes it: the press itself moves the focus to the page after this, so it is given back once that has happened
+      window.setTimeout(() => {
+        if (document.activeElement === document.body || document.activeElement === null) anchor.current?.focus();
+      }, 0);
     };
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
@@ -166,7 +185,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
       aria-modal="false"
       aria-labelledby={titleId}
       className="new-chat"
-      style={{ left: place.left, top: place.top }}
+      style={{ left: place.left, top: place.top, maxHeight: place.room }}
       onMouseDown={(event) => {
         // a press on the text or a row of the picker leaves the focus where it is, so that the keys still reach it
         if (!(event.target instanceof Element) || event.target.closest('input, button') === null) event.preventDefault();
@@ -200,7 +219,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
             role="combobox"
             aria-expanded="true"
             aria-autocomplete="list"
-            aria-controls={listId}
+            aria-controls={waiting || rows.length === 0 ? undefined : listId}
             aria-activedescendant={active === undefined ? undefined : optionOf(active)}
             value={text}
             placeholder={NEW_CHAT_COPY.searchLabel}
@@ -242,7 +261,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
             ) : null}
           </div>
         ) : state.items === undefined || state.loading ? (
-          <p className="new-chat-note" role="status">{NEW_CHAT_COPY.loading}</p>
+          <p className="new-chat-note">{NEW_CHAT_COPY.loading}</p>
         ) : rows.length === 0 && state.nextCursor === null ? (
           <p className="new-chat-note">{query === undefined ? NEW_CHAT_COPY.empty : NEW_CHAT_COPY.noMatch}</p>
         ) : (
