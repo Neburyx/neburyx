@@ -38,7 +38,6 @@ async function openAssistantPage(page: Page): Promise<string> {
 
 test.describe('Select on graph across two windows', () => {
   test('highlights the element in the open graph window after it answers, and drops the highlight and the header chip when that window closes', async ({ page, context }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
     await routes(page);
     const id = await openAssistantPage(page);
     const graph = await context.newPage();
@@ -54,7 +53,6 @@ test.describe('Select on graph across two windows', () => {
   });
 
   test('says Selected with the notice when no graph window is open, and Open graph opens the investigation with the element selected', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
     await routes(page);
     const id = await openAssistantPage(page);
     await page.getByRole('button', { name: /^Sources: 1,/ }).click();

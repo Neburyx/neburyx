@@ -39,7 +39,7 @@ export function useWindowScope(): WindowScope | null {
   return principalId === undefined || investigationId === null || sourceId === null ? null : { principalId, investigationId, sourceId };
 }
 
-/** The channel of this window for the scope, from the first render after it is made; `undefined` before, and with no scope. @public: the selection across windows builds on it. */
+/** The channel of this window for the scope, from the first render after it is made; `undefined` before, and with no scope. */
 export function useWindowChannel(scope: WindowScope | null): WindowChannel | undefined {
   const [channel, setChannel] = useState<WindowChannel | undefined>(undefined);
   const principalId = scope?.principalId;
