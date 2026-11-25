@@ -19,3 +19,6 @@ export const NEW_CHAT_COPY = {
 
 /** The second line of a row: the case reference and the source, or the source alone when there is no case reference. */
 export const rowDetailOf = (caseRef: string | null, sourceAlias: string): string => (caseRef === null ? sourceAlias : `${caseRef} · ${sourceAlias}`);
+
+/** What is said to a screen reader when the list changes: the exact number of open investigations the filters select. */
+export const matchingText = (count: number, searching: boolean): string => (searching ? `${count} ${count === 1 ? 'match' : 'matches'}` : `${count} open ${count === 1 ? 'investigation' : 'investigations'}`);

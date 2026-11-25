@@ -8,7 +8,7 @@ import { useInvestigationList } from '../../investigations-page/use-investigatio
 import { SEARCH_DEBOUNCE_MS } from '../../patterns/start-entity.js';
 import { ASSISTANT_PATH } from '../../shell/navigation.js';
 import { REMOVED_CHIP, REPOINTED_CHIP } from '../../lifecycle/copy.js';
-import { NEW_CHAT_COPY, rowDetailOf } from './copy.js';
+import { matchingText, NEW_CHAT_COPY, rowDetailOf } from './copy.js';
 import { useChatsOf, type ChatKnowledge } from './use-chats-of.js';
 
 /** The rows a page of the list holds. */
@@ -37,12 +37,20 @@ const goneChipOf = (row: InvestigationListItem): string | undefined => (row.sour
  */
 const pickable = (row: InvestigationListItem, chat: ChatKnowledge): boolean => goneChipOf(row) === undefined || chat === 'yes';
 
-function PickerRow({ row, chat, onPick }: { readonly row: InvestigationListItem; readonly chat: ChatKnowledge; readonly onPick: () => void }) {
+function PickerRow({ row, chat, optionId, active, onPick }: { readonly row: InvestigationListItem; readonly chat: ChatKnowledge; readonly optionId: string; readonly active: boolean; readonly onPick: () => void }) {
   const chip = goneChipOf(row);
   const enabled = pickable(row, chat);
   const reason = useId();
   return (
-    <li role="option" aria-selected={false} aria-disabled={enabled ? undefined : true} aria-describedby={enabled || chip === undefined ? undefined : reason} className={enabled ? 'new-chat-row' : 'new-chat-row new-chat-row-gone'} onClick={onPick}>
+    <li
+      id={optionId}
+      role="option"
+      aria-selected={active}
+      aria-disabled={enabled ? undefined : true}
+      aria-describedby={enabled || chip === undefined ? undefined : reason}
+      className={`new-chat-row${enabled ? '' : ' new-chat-row-gone'}${active ? ' new-chat-row-active' : ''}`}
+      onClick={onPick}
+    >
       <span className="new-chat-row-text">
         <span className="new-chat-row-title">{row.title}</span>
         <span className="new-chat-row-detail">{rowDetailOf(row.caseRef, row.sourceAlias)}</span>
@@ -69,6 +77,8 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   const client = useApiClient();
   const navigate = useNavigate();
   const titleId = useId();
+  const listId = useId();
+  const [active, setActive] = useState<string | undefined>(undefined);
   const card = useRef<HTMLDivElement | null>(null);
   const search = useRef<HTMLInputElement | null>(null);
   const [place, setPlace] = useState<Place | undefined>(undefined);
@@ -78,6 +88,17 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   const { state } = list;
   const rows = (state.items ?? []).filter((row) => row.status === 'open');
   const chatOf = useChatsOf(rows.map((row) => row.id));
+  const optionOf = (id: string): string => `${listId}-${id}`;
+  /** The rows the highlight can stop on: those that can be picked. */
+  const stops = rows.filter((row) => pickable(row, chatOf(row.id)));
+  // a search changes the list: the highlight goes to no row, and so does one whose row is no longer drawn
+  useEffect(() => setActive(undefined), [query]);
+  useEffect(() => {
+    if (active !== undefined && !stops.some((row) => row.id === active)) setActive(undefined);
+  }, [active, stops]);
+  useEffect(() => {
+    if (active !== undefined) document.getElementById(`${listId}-${active}`)?.scrollIntoView?.({ block: 'nearest' });
+  }, [active, listId]);
 
   useLayoutEffect(() => {
     const place_ = (): void => {
@@ -134,10 +155,25 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
       className="new-chat"
       style={{ left: place.left, top: place.top }}
       onKeyDown={(event) => {
-        if (event.key !== 'Escape') return;
-        event.stopPropagation();
-        event.preventDefault();
-        close();
+        if (event.key === 'Escape') {
+          event.stopPropagation();
+          event.preventDefault();
+          close();
+          return;
+        }
+        if (event.key !== 'Tab' || card.current === null) return;
+        // the focus stays inside the picker until it closes
+        const inside = [...card.current.querySelectorAll<HTMLElement>('input, button:not(:disabled)')];
+        const first = inside[0];
+        const last = inside.at(-1);
+        if (first === undefined || last === undefined) return;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }}
     >
       <div className="new-chat-heading">
@@ -147,9 +183,43 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
       <div className="new-chat-search">
         <label className="new-chat-search-box">
           <span className="icon icon-find" aria-hidden="true" />
-          <input ref={search} type="search" value={text} placeholder={NEW_CHAT_COPY.searchLabel} aria-label={NEW_CHAT_COPY.searchLabel} onChange={(event) => setText(event.target.value)} />
+          <input
+            ref={search}
+            type="text"
+            role="combobox"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-controls={listId}
+            aria-activedescendant={active === undefined ? undefined : optionOf(active)}
+            value={text}
+            placeholder={NEW_CHAT_COPY.searchLabel}
+            aria-label={NEW_CHAT_COPY.searchLabel}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              const at = stops.findIndex((row) => row.id === active);
+              const to = (index: number): void => {
+                const row = stops[index];
+                if (row === undefined) return;
+                event.preventDefault();
+                setActive(row.id);
+              };
+              if (event.key === 'ArrowDown' && stops.length > 0) to(at < 0 || at === stops.length - 1 ? 0 : at + 1);
+              else if (event.key === 'ArrowUp' && stops.length > 0) to(at <= 0 ? stops.length - 1 : at - 1);
+              // Home and End move the highlight once there is one; with none they keep their place in the text
+              else if (event.key === 'Home' && at >= 0) to(0);
+              else if (event.key === 'End' && at >= 0) to(stops.length - 1);
+              else if (event.key === 'Enter' && at >= 0) {
+                event.preventDefault();
+                const row = stops[at];
+                if (row !== undefined) pick(row);
+              }
+            }}
+          />
         </label>
       </div>
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {state.items === undefined || state.loading || state.matching === undefined ? '' : matchingText(state.matching, query !== undefined)}
+      </p>
       <div className="new-chat-rows">
         {state.failure?.where === 'first' ? (
           <div className="new-chat-note">
@@ -165,9 +235,9 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
         ) : rows.length === 0 && state.nextCursor === null ? (
           <p className="new-chat-note">{query === undefined ? NEW_CHAT_COPY.empty : NEW_CHAT_COPY.noMatch}</p>
         ) : (
-          <ul role="listbox" aria-label={NEW_CHAT_COPY.listLabel} className="new-chat-list">
+          <ul id={listId} role="listbox" aria-label={NEW_CHAT_COPY.listLabel} className="new-chat-list">
             {rows.map((row) => (
-              <PickerRow key={row.id} row={row} chat={chatOf(row.id)} onPick={() => pick(row)} />
+              <PickerRow key={row.id} row={row} chat={chatOf(row.id)} optionId={optionOf(row.id)} active={row.id === active} onPick={() => pick(row)} />
             ))}
           </ul>
         )}

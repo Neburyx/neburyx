@@ -154,7 +154,7 @@ describe('the picker of a new chat: search, paging and the states of the list', 
     setup(client);
     const dialog = await open();
     await within(dialog).findAllByRole('option');
-    const search = within(dialog).getByRole('searchbox', { name: NEW_CHAT_COPY.searchLabel });
+    const search = within(dialog).getByRole('combobox', { name: NEW_CHAT_COPY.searchLabel });
     await userEvent.type(search, 'c');
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(held.recorded.pages).toHaveLength(1);
@@ -183,11 +183,11 @@ describe('the picker of a new chat: search, paging and the states of the list', 
     setup(client);
     const dialog = await open();
     await within(dialog).findAllByRole('option');
-    await userEvent.type(within(dialog).getByRole('searchbox'), 'zz');
-    expect(await within(dialog).findByRole('status')).toBeTruthy();
+    await userEvent.type(within(dialog).getByRole('combobox'), 'zz');
+    expect(await within(dialog).findByText(NEW_CHAT_COPY.loading)).toBeTruthy();
     expect(screen.queryAllByRole('option')).toHaveLength(0);
     await act(async () => hold?.());
-    await waitFor(() => expect(within(dialog).queryByRole('status')).toBeNull());
+    await waitFor(() => expect(within(dialog).queryByText(NEW_CHAT_COPY.loading)).toBeNull());
   });
 
   it('says there is no open investigation with no search, and that nothing matches for a search', async () => {
@@ -198,7 +198,7 @@ describe('the picker of a new chat: search, paging and the states of the list', 
     setup(pagedClient(rowsOf(3), [], { lookupAssistantChats: NO_CHATS }).client);
     dialog = await open();
     await within(dialog).findAllByRole('option');
-    await userEvent.type(within(dialog).getByRole('searchbox'), 'nothing like it');
+    await userEvent.type(within(dialog).getByRole('combobox'), 'nothing like it');
     expect(await within(dialog).findByText(NEW_CHAT_COPY.noMatch)).toBeTruthy();
   });
 
@@ -352,3 +352,98 @@ describe('the picker of a new chat: the chips and a source that cannot start a c
     expect(held.recorded.views).toEqual([]);
   });
 });
+
+describe('the picker of a new chat: the keyboard path and the names a screen reader hears', () => {
+  const mixed = rowsOf(5, (index) => (index === 1 ? { sourceState: 'removed' as const } : {}));
+  const idOf = (n: number): string => `0192f000-0000-7000-8000-${String(n).padStart(12, '0')}`;
+  const withChat = async () => ({ ok: true as const, value: { withChat: [] as string[] } });
+  const field = (): HTMLElement => screen.getByRole('combobox', { name: NEW_CHAT_COPY.searchLabel });
+  const activeName = (): string | null => {
+    const id = field().getAttribute('aria-activedescendant');
+    return id === null ? null : (document.getElementById(id)?.querySelector('.new-chat-row-title')?.textContent ?? null);
+  };
+
+  async function openMixed() {
+    setup(pagedClient(mixed, [], { lookupAssistantChats: withChat }).client);
+    const dialog = await open();
+    await within(dialog).findAllByRole('option');
+    await waitFor(() => expect(within(screen.getAllByRole('option')[0] as HTMLElement).queryByText(NEW_CHAT_COPY.startChat)).toBeTruthy());
+    return dialog;
+  }
+
+  it('opens as a labelled dialog with the focus in the search box, and the rows as the options of a listbox the box controls', async () => {
+    const dialog = await openMixed();
+    expect(document.activeElement).toBe(field());
+    expect(dialog.getAttribute('aria-labelledby')).toBe(within(dialog).getByRole('heading', { name: NEW_CHAT_COPY.title }).id);
+    expect(field().getAttribute('aria-controls')).toBe(within(dialog).getByRole('listbox', { name: NEW_CHAT_COPY.listLabel }).id);
+    expect(field().getAttribute('aria-activedescendant')).toBeNull();
+  });
+
+  it('moves the highlight over the rows that can be picked with ArrowDown and ArrowUp, wrapping at the ends and skipping a row whose source is gone', async () => {
+    await openMixed();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(activeName()).toBe('Case 1');
+    await userEvent.keyboard('{ArrowDown}');
+    expect(activeName()).toBe('Case 3');
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    expect(activeName()).toBe('Case 5');
+    await userEvent.keyboard('{ArrowDown}');
+    expect(activeName()).toBe('Case 1');
+    await userEvent.keyboard('{ArrowUp}');
+    expect(activeName()).toBe('Case 5');
+    expect(within(screen.getAllByRole('option')[4] as HTMLElement).getByText(NEW_CHAT_COPY.startChat)).toBeTruthy();
+    expect(screen.getAllByRole('option').filter((option) => option.getAttribute('aria-selected') === 'true')).toHaveLength(1);
+    expect(screen.getAllByRole('option')[1]?.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('takes Home and End to the first and the last row once there is a highlight, and leaves them to the text while there is none', async () => {
+    await openMixed();
+    await userEvent.type(field(), 'ab');
+    await userEvent.keyboard('{Home}');
+    expect(activeName()).toBeNull();
+    expect((field() as HTMLInputElement).selectionStart).toBe(0);
+    await userEvent.keyboard('{ArrowDown}{End}');
+    expect(activeName()).toBe('Case 5');
+    await userEvent.keyboard('{Home}');
+    expect(activeName()).toBe('Case 1');
+  });
+
+  it('picks the highlighted row with Enter, picks nothing with no highlight, and closes on Escape with the focus on the button', async () => {
+    await openMixed();
+    await userEvent.keyboard('{Enter}');
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByTestId('where').textContent).toBe('/assistant');
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByTestId('where').textContent).toBe(`/assistant/${idOf(3)}`);
+    await userEvent.click(screen.getByRole('button', { name: 'New chat' }));
+    await screen.findByRole('dialog');
+    await userEvent.keyboard('{Escape}');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New chat' }));
+  });
+
+  it('keeps the focus inside the picker: Tab goes from the search box to Show more and round again, Shift+Tab the other way', async () => {
+    setup(pagedClient(rowsOf(60), [], { lookupAssistantChats: withChat }).client);
+    const dialog = await open();
+    await within(dialog).findAllByRole('option');
+    const more = within(dialog).getByRole('button', { name: NEW_CHAT_COPY.showMore });
+    await userEvent.tab();
+    expect(document.activeElement).toBe(more);
+    await userEvent.tab();
+    expect(document.activeElement).toBe(field());
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(more);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('clears the highlight when a search changes the list, and tells a screen reader how many match, from the exact count of the answer', async () => {
+    await openMixed();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(activeName()).toBe('Case 1');
+    await waitFor(() => expect(screen.getByRole('status', { name: '' }).textContent).toBe('5 open investigations'));
+    await userEvent.type(field(), 'case 5');
+    await waitFor(() => expect(activeName()).toBeNull());
+    await waitFor(() => expect(screen.getAllByRole('status').map((node) => node.textContent)).toContain('1 match'));
+  });
+});
+
