@@ -79,6 +79,10 @@ function validKeys(keys: unknown): keys is readonly string[] {
   return textKeys(keys, 1);
 }
 
+function isRole(role: unknown): role is WindowRole {
+  return ROLES.some((known) => known === role);
+}
+
 function validRequestId(id: unknown): id is string {
   return typeof id === 'string' && id.length >= 1 && id.length <= MAX_REQUEST_ID_LENGTH;
 }
@@ -86,7 +90,7 @@ function validRequestId(id: unknown): id is string {
 /** What a message says when it is whole, of this scope and of the version: an object with exactly the members of its kind. Anything else is nothing. */
 export function readMessage(data: unknown, scope: WindowScope): { readonly windowId: string; readonly body: Body } | undefined {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return undefined;
-  const record = data as Record<string, unknown>;
+  const record: Record<string, unknown> = Object.fromEntries(Object.entries(data));
   const kind = record['kind'];
   if (kind !== 'hello' && kind !== 'presence' && kind !== 'select' && kind !== 'selected') return undefined;
   const names = Object.keys(record);
@@ -98,7 +102,7 @@ export function readMessage(data: unknown, scope: WindowScope): { readonly windo
   if (kind === 'presence') {
     const role = record['role'];
     const open = record['open'];
-    return ROLES.some((known) => known === role) && typeof open === 'boolean' ? { windowId, body: { kind, role: role as WindowRole, open } } : undefined;
+    return isRole(role) && typeof open === 'boolean' ? { windowId, body: { kind, role, open } } : undefined;
   }
   const requestId = record['requestId'];
   if (!validRequestId(requestId)) return undefined;
@@ -113,6 +117,7 @@ export function readMessage(data: unknown, scope: WindowScope): { readonly windo
 function browserFactory(name: string): ChannelLike | undefined {
   if (typeof BroadcastChannel === 'undefined') return undefined;
   try {
+    // the browser's event is a MessageEvent, of which this module reads `data` only
     return new BroadcastChannel(name) as unknown as ChannelLike;
   } catch {
     return undefined;
@@ -200,11 +205,11 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
     sayAll();
     publish();
   }, HEARTBEAT_MS);
-  const hidden = (event: Event): void => {
-    if ((event as PageTransitionEvent).persisted !== true) leave();
+  const hidden = (event: PageTransitionEvent): void => {
+    if (!event.persisted) leave();
   };
-  const shown = (event: Event): void => {
-    if ((event as PageTransitionEvent).persisted === true) sayAll();
+  const shown = (event: PageTransitionEvent): void => {
+    if (event.persisted) sayAll();
   };
   if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', hidden);
@@ -235,7 +240,8 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
       requests += 1;
       const requestId = `${windowId}:${requests}`;
       for (const [id, asked] of pending) if (now() > asked.until) pending.delete(id);
-      if (pending.size >= MAX_PENDING) pending.delete(pending.keys().next().value as string);
+      const oldest = pending.keys().next();
+      if (pending.size >= MAX_PENDING && !oldest.done) pending.delete(oldest.value);
       pending.set(requestId, { keys: [...keys], until: now() + ANSWER_WAIT_MS, answered: new Set() });
       post({ kind: 'select', requestId, keys: [...keys] });
       return requestId;

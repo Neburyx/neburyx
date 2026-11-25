@@ -67,6 +67,11 @@ export function useAnnounceWindow(role: WindowRole): void {
   useEffect(() => (channel === undefined ? undefined : channel.announce(role)), [channel, role]);
 }
 
+/** Whether this window has a channel for its scope. */
+export function useWindowChannelAvailable(): boolean {
+  return useWindowChannel(useWindowScope())?.available ?? false;
+}
+
 /** The roles other windows of the scope hold: empty where there is no channel. */
 export function useOtherWindowRoles(): ReadonlySet<WindowRole> {
   const channel = useWindowChannel(useWindowScope());

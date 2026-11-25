@@ -10,7 +10,7 @@ import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, word
 import { MaskingCard, NewThreadCard, StandingNote } from './thread-notices.js';
 import { StoredTurns } from './stored-turns.js';
 import { useAssistantSession } from './assistant-session.js';
-import { reloadThread } from './thread-reconcile.js';
+import { useReloadWhenRestored } from './use-reload-when-restored.js';
 import { PoppedOutNote } from './popped-out-note.js';
 import { NO_STORED_THREAD } from './stored-thread-state.js';
 import { boundElementsOf } from './stored-answer.js';
@@ -24,7 +24,7 @@ import { EmptyThread, PageHeader } from './page-parts.js';
 import { useAssistant } from './use-assistant.js';
 import { PopOutButton } from './pop-out-button.js';
 import { popOut } from '../windows/pop-out.js';
-import { useOtherWindowRoles } from '../windows/use-window-channel.js';
+import { useOtherWindowRoles, useWindowChannelAvailable } from '../windows/use-window-channel.js';
 
 function Chat() {
   return (
@@ -134,6 +134,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const [clearedNote, setClearedNote] = useState(false);
   const [popOutRefused, setPopOutRefused] = useState(false);
   const otherWindows = useOtherWindowRoles();
+  const channelAvailable = useWindowChannelAvailable();
   const pageElsewhere = otherWindows.has('assistant');
   const [showHere, setShowHere] = useState(false);
   const collapsed = !page && pageElsewhere && !showHere;
@@ -173,7 +174,9 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   };
   const pressPopOut = (): void => {
     if (investigationId === null) return;
-    setPopOutRefused(popOut(investigationId, { open: (url, name) => window.open(url, name), pageOpenElsewhere: () => pageElsewhere }) === 'refused');
+    const result = popOut(investigationId, { open: (url, name) => window.open(url, name), pageOpenElsewhere: () => pageElsewhere, channelAvailable: () => channelAvailable });
+    setPopOutRefused(result === 'refused');
+    if (result === 'unreachable') setShowHere(false);
   };
   const noteLostFocus = useCallback(() => {
     focusLost.current = true;
@@ -181,7 +184,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   useEffect(() => {
     if (!pageElsewhere) setShowHere(false);
   }, [pageElsewhere]);
-  // the thread is read again when the body comes back, so that the turns made in the other window are in it
+  useReloadWhenRestored(collapsed);
   useEffect(() => {
     if (collapsed) {
       wasCollapsed.current = true;
@@ -189,12 +192,11 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
     }
     if (!wasCollapsed.current) return;
     wasCollapsed.current = false;
-    if (investigationId !== null && session.stored.getState().kind === 'ready') void reloadThread(session, (signal) => client.assistantThread(investigationId, session.store.getState().mask, signal));
     if (focusLost.current) {
       focusLost.current = false;
       focusInside(field.current, null);
     }
-  }, [client, collapsed, investigationId, session]);
+  }, [collapsed]);
   const askToClear = (): void => {
     if (investigationId !== null && principalId !== undefined) setConfirming({ investigationId, principalId, epoch: session.store.getState().epoch });
   };

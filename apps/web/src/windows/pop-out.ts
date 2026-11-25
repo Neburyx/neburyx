@@ -9,6 +9,8 @@ export interface PopOutDeps {
   readonly open: (url: string, name: string) => Window | null;
   /** Whether the channel says a page of the investigation is open in another window. */
   readonly pageOpenElsewhere: () => boolean;
+  /** Whether the channel exists: without it the window this window opened is taken to still show the page. */
+  readonly channelAvailable: () => boolean;
 }
 
 /** The name a window holds when it shows the page of an investigation: the one name by which a second Pop out finds it. */
@@ -30,10 +32,10 @@ function emptyWindow(window: Window): boolean {
   }
 }
 
-/** Opens the page of the investigation in a window of its own, or focuses the one that shows it, and never reloads a page that is open. */
+/** Opens the page of the investigation in a window of its own, or focuses the one that shows it, and never reloads a page that is open. A window this window opened that no longer shows the page (the person went elsewhere in it) is used again for the page. */
 export function popOut(investigationId: string, deps: PopOutDeps): PopOutResult {
   const held = opened.get(investigationId);
-  if (held !== undefined && !held.closed) {
+  if (held !== undefined && !held.closed && (!deps.channelAvailable() || deps.pageOpenElsewhere())) {
     held.focus();
     return 'focused';
   }

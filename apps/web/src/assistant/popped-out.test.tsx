@@ -184,6 +184,38 @@ describe('the panel while the page of the chat is open in another window', () =>
     expect(body().hidden).toBe(false);
   });
 
+  it('reads again each time the window is shown after a failed read on the return, until one is answered, and then shows the turns made in the other window', async () => {
+    const calls: number[] = [];
+    const h = harness(async () => ok(REFUSE), 1000, async () => {
+      calls.push(calls.length);
+      if (calls.length === 2) return { ok: false, failure: { code: 'INTERNAL_ERROR', message: 'no', retryable: true, traceId: 'tr' } };
+      return ok(calls.length === 1 ? thread(1) : thread(1, 2));
+    });
+    render(h.tree());
+    await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading });
+    const stop = await pageOpens(window2());
+    await stop();
+    await waitFor(() => expect(calls.length).toBe(2));
+    expect(document.querySelectorAll('[data-stored-turn]').length + document.querySelectorAll('.assistant-stored-row').length).toBe(1);
+    await act(async () => void window.dispatchEvent(new Event('focus')));
+    await waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(3));
+    await waitFor(() => expect(document.querySelectorAll('[data-stored-turn]').length + document.querySelectorAll('.assistant-stored-row').length).toBeGreaterThan(1));
+  });
+
+  it('goes back to the note when Pop out cannot reach the window of the page after the chat was shown here, and says nothing more', async () => {
+    const blank = { closed: false, focus: vi.fn(), close: vi.fn(), location: { href: 'about:blank' } };
+    const open = vi.spyOn(window, 'open').mockReturnValue(blank as unknown as Window);
+    await panel();
+    await pageOpens(window2());
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.showHere }));
+    expect(note()).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.popOut }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(blank.close).toHaveBeenCalledTimes(1);
+    expect(note()).not.toBeNull();
+    expect(screen.queryByText(ASSISTANT_COPY.popOutRefused)).toBeNull();
+  });
+
   it('closes on Escape and on Close as the open panel does, and moves the focus to the composer when it is restored while the button has it', async () => {
     const h = harness(async () => ok(REFUSE));
     const closed = vi.fn();

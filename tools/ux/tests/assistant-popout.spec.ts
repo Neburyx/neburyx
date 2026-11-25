@@ -76,6 +76,21 @@ test.describe('Pop out of the Assistant panel', () => {
     expect(await popup.evaluate(() => (window as unknown as { marker: string }).marker)).toBe('still here');
   });
 
+  test('uses the window it opened for the page again when the person has left the page in it', async ({ page, context }) => {
+    await stubs(context);
+    const id = await openInvestigation(page);
+    await openPanel(page);
+    const popup = await popOut(page);
+    await popup.getByRole('navigation').getByRole('link', { name: 'Home' }).click();
+    await expect(popup).not.toHaveURL(/\/assistant\//);
+    await expect(panel(page).getByText(NOTE)).toBeHidden({ timeout: 10_000 });
+    const extra = page.waitForEvent('popup', { timeout: 1500 }).then(() => true, () => false);
+    await popOutButton(page).click();
+    expect(await extra).toBe(false);
+    await expect(popup).toHaveURL(new RegExp(`/assistant/${id}$`));
+    expect(context.pages()).toHaveLength(2);
+  });
+
   test('keeps the panel as it was for a page of another investigation', async ({ page, context }) => {
     await stubs(context);
     await openInvestigation(page);

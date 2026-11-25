@@ -69,14 +69,17 @@ describe('the Pop out button of the panel header', () => {
     expect(screen.queryByText(ASSISTANT_COPY.popOutRefused)).toBeNull();
   });
 
-  it('focuses the window it opened on a second press, and opens nothing and reloads nothing', async () => {
+  it('focuses the window it opened on a second press while the page shows in it, and opens nothing and reloads nothing', async () => {
     const page = fakeWindow();
     const open = vi.spyOn(window, 'open').mockReturnValue(page as unknown as Window);
     await panel();
     await userEvent.click(screen.getByRole('button', { name: 'Pop out' }));
+    const shown = createWindowChannel(SCOPE);
+    await act(async () => void shown.announce('assistant'));
     await userEvent.click(screen.getByRole('button', { name: 'Pop out' }));
     expect(open).toHaveBeenCalledTimes(1);
     expect(page.focus).toHaveBeenCalledTimes(1);
+    shown.close();
   });
 
   it('is pressed while a page of this investigation is open in another window, and finds that window by its name, with no address, on a press', async () => {

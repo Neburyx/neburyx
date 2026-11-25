@@ -65,18 +65,20 @@ export async function rereadThread(session: AssistantSession, read: (signal: Abo
 }
 
 /**
- * Reads the thread again for a panel that comes back after the page of the chat was open in another window, and shows what the server holds: the turns made there are in it, which `rereadThread` does not show when no clearing has happened. The live turns of this window stay as they are and are not listed twice. A read that fails, or is from before a clearing this session has heard of, changes nothing.
+ * Reads the thread again for a panel that comes back after the page of the chat was open in another window, and shows what the server holds: the turns made there are in it, which `rereadThread` does not show when no clearing has happened. The live turns of this window stay as they are and are not listed twice. A read that fails, or is from before a clearing this session has heard of, changes nothing; it says so by returning `false`, so that a caller can try again when the window is shown.
  */
-export async function reloadThread(session: AssistantSession, read: (signal: AbortSignal) => Promise<{ readonly ok: true; readonly value: AssistantThreadResponse } | { readonly ok: false }>): Promise<void> {
+export async function reloadThread(session: AssistantSession, read: (signal: AbortSignal) => Promise<{ readonly ok: true; readonly value: AssistantThreadResponse } | { readonly ok: false }>): Promise<boolean> {
   const controller = new AbortController();
   const epoch = session.store.getState().epoch;
   session.open.add(controller);
   const result = await read(controller.signal);
   session.open.delete(controller);
-  if (controller.signal.aborted || session.store.getState().epoch !== epoch || !result.ok) return;
+  if (controller.signal.aborted || session.store.getState().epoch !== epoch) return true;
+  if (!result.ok) return false;
   const taken = takeRead(session, result.value);
-  if (!taken.show) return;
+  if (!taken.show) return true;
   const live = new Set(session.store.getState().turns.flatMap((turn) => turn.turnIds ?? []));
   session.stored.setState({ kind: 'ready', thread: { ...taken.thread, turns: taken.thread.turns.filter((turn) => !live.has(turn.id)) } });
+  return true;
 }
 
