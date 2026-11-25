@@ -214,6 +214,11 @@ test.describe('Pop out of the Assistant panel', () => {
     const wide = panel(page).getByRole('button', { name: 'Wide' });
     const tip = () => wide.evaluate((element) => getComputedStyle(element, '::after').content);
     expect(await tip()).toBe('none');
+    await page.keyboard.press('Shift+Tab');
+    await expect(wide).toBeFocused();
+    await expect.poll(tip).toBe('"Wide"');
+    await page.keyboard.press('Tab');
+    await expect.poll(tip).toBe('none');
     const box = await wide.boundingBox();
     await page.mouse.move((box?.x ?? 0) + 5, (box?.y ?? 0) + 5);
     await expect.poll(tip).toBe('"Wide"');

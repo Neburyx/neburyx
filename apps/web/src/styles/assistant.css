@@ -862,7 +862,7 @@
   height: auto;
 }
 
-.assistant-panel[data-tips-quiet] .ask-head [data-tip]:is(:hover, :focus-visible)::after {
+.assistant-panel[data-tips-quiet] .ask-head [data-tip]:hover:not(:focus-visible)::after {
   content: none;
 }
 
