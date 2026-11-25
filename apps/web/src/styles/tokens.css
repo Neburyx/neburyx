@@ -97,8 +97,10 @@
   --new-chat-chip-pad-y: 3px;
   --new-chat-chip-pad-x: 8px;
   --new-chat-chip-radius: 4px;
+  --new-chat-icon-search: 14px;
   --new-chat-layer: 50;
-  --new-chat-max-rows: 60vh;
+  --new-chat-max-width: calc(100vw - 16px);
+  --new-chat-max-height: calc(100vh - 32px);
   --chat-list-width: 288px;
   --chat-list-surface: #fafbfc;
   --chat-list-rule: #e3e6ec;

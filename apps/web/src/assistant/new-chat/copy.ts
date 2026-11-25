@@ -7,6 +7,12 @@ export const NEW_CHAT_COPY = {
   failed: 'The open investigations could not be read.',
   tryAgain: 'Try again',
   listLabel: 'Open investigations',
+  searchLabel: 'Search open investigations',
+  empty: 'There is no open investigation.',
+  noMatch: 'No open investigation matches this text.',
+  showMore: 'Show more',
+  loadingMore: 'Loading…',
+  moreFailed: 'The next investigations could not be read.',
 } as const;
 
 /** The second line of a row: the case reference and the source, or the source alone when there is no case reference. */
