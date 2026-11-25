@@ -70,7 +70,7 @@ describe('the chat list column', () => {
   it('lists the chats under their groups, each with the title and the last question, selects the one shown and ends with the footnote', async () => {
     setup(async () => page([chat(1), chat(2, { lastQuestionAt: '2026-11-20T09:00:00.000Z' }), chat(3, { lastQuestionAt: '2026-10-01T09:00:00.000Z' })]), { shown: idOf(2) });
     const groups = await screen.findAllByRole('list');
-    expect(groups.map((group) => group.getAttribute('aria-labelledby')).map((id) => document.getElementById(id ?? '')?.textContent)).toEqual(['Today', 'Previous 7 days', 'Older']);
+    expect(groups.map((group) => group.getAttribute('aria-label'))).toEqual(['Today', 'Previous 7 days', 'Older']);
     expect(within(groups[0] as HTMLElement).getByText('Chat title 1')).toBeTruthy();
     expect(within(groups[1] as HTMLElement).getByText('Question 2')).toBeTruthy();
     const current = screen.getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'true');
@@ -383,7 +383,7 @@ describe('the chat list column: sentences, waiting, focus, lists and the search'
   it('gives each group a named list of its rows, so a screen reader hears the group and the count', async () => {
     setup(async () => page([chat(1), chat(2), chat(3, { lastQuestionAt: '2026-11-20T09:00:00.000Z' })]));
     const lists = await screen.findAllByRole('list', { name: /Today|Previous 7 days/ });
-    expect(lists.map((list) => list.getAttribute('aria-labelledby'))).toEqual(['chat-list-heading-today', 'chat-list-heading-previous7']);
+    expect(lists.map((list) => list.getAttribute('aria-label'))).toEqual(['Today', 'Previous 7 days']);
     expect(within(lists[0] as HTMLElement).getAllByRole('listitem')).toHaveLength(2);
     expect(screen.getByRole('list', { name: 'Previous 7 days' })).toBeTruthy();
   });

@@ -224,4 +224,15 @@ test.describe('The chat list column of the Assistant page', () => {
     await page.keyboard.press('Escape');
     await expect(tip).toHaveCount(0);
   });
+
+  test('gives each group list the accessible name of its group, as the browser computes it', async ({ page }) => {
+    await routes(page);
+    await openPage(page);
+    await expect(page.getByRole('list', { name: 'Today' })).toBeVisible();
+    await expect(page.locator('.chat-list-body').getByRole('list')).toHaveCount(3);
+    const cdp = await page.context().newCDPSession(page);
+    const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+    const names = nodes.filter((node) => node.role?.value === 'list').map((node) => String(node.name?.value ?? '')).filter((name) => name !== '');
+    expect(names).toEqual(['Today', 'Previous 7 days', 'Older']);
+  });
 });

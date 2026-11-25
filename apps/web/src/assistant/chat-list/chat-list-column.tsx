@@ -2,16 +2,16 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { REMOVED_CHIP, REPOINTED_CHIP } from '../../lifecycle/copy.js';
-import { failureWords } from '../../patterns/failure-words.js';
 import { SEARCH_DEBOUNCE_MS } from '../../patterns/start-entity.js';
 import { ASSISTANT_PATH } from '../../shell/navigation.js';
 import { useClientState } from '../../state/context.js';
 import { useStoreSelector } from '../../state/store.js';
 import { cuts } from '../cut-text.js';
+import { ListFailure } from '../list-failure.js';
 import { useAssistantSession } from '../assistant-session.js';
 import { groupChats } from './chat-groups.js';
 import { CHAT_LIST_COPY } from './copy.js';
-import { useChatList, type ChatListState, type ChatRow } from './use-chat-list.js';
+import { useChatList, type ChatRow } from './use-chat-list.js';
 
 /** The window in which a second sign that the window was shown does not read the list again. */
 const SHOWN_COALESCE_MS = 400;
@@ -77,24 +77,6 @@ function Row({ row, selected, onTip }: { readonly row: ChatRow; readonly selecte
         <span className="chat-list-row-question">{second}</span>
       </Link>
     </li>
-  );
-}
-
-/** A failure of the list in the product's words, with Try again when trying again can help. */
-function ListFailure({ failure, onRetry }: { readonly failure: NonNullable<ChatListState['firstFailure']>; readonly onRetry?: (() => void) | undefined }) {
-  const words = failureWords(failure, '');
-  return (
-    <div role="group" className="chat-list-failure">
-      <p role="alert">
-        {words.text}
-        {'traceId' in failure ? ` · trace ${failure.traceId}` : ''}
-      </p>
-      {onRetry !== undefined && words.action === 'try-again' ? (
-        <button type="button" className="chat-list-link" aria-label={CHAT_LIST_COPY.retryLabel} onClick={onRetry}>
-          {CHAT_LIST_COPY.retry}
-        </button>
-      ) : null}
-    </div>
   );
 }
 
@@ -234,8 +216,8 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
         {chats.first === 'failed' ? <ListFailure failure={chats.firstFailure ?? { code: 'UNEXPECTED_FAILURE' }} onRetry={reload} /> : null}
         {groups.map((grouped) => (
           <div key={grouped.group} className="chat-list-group">
-            <h2 id={`chat-list-heading-${grouped.group}`}>{CHAT_LIST_COPY.groups[grouped.group]}</h2>
-            <ul role="list" aria-labelledby={`chat-list-heading-${grouped.group}`}>
+            <h2>{CHAT_LIST_COPY.groups[grouped.group]}</h2>
+            <ul role="list" aria-label={CHAT_LIST_COPY.groups[grouped.group]}>
               {grouped.rows.map((row) => (
                 <Row key={row.investigationId} row={row} selected={row.investigationId === shownId} onTip={setTip} />
               ))}
