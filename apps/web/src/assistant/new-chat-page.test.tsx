@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AssistantThreadResponse, AssistantTurnRequest } from '@neburyx/contracts';
@@ -23,6 +23,8 @@ afterEach(() => {
 
 const A = { investigation: investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1', { caseRef: 'CASE-1' }), node: nodeOf('source-a', 'kind-a', 'A-1') };
 const B = { investigation: investigationOf(INVESTIGATION_B, 'source-b', 'kind-a', 'C-1', { sourceState: 'repointed' }), node: nodeOf('source-b', 'kind-a', 'C-1') };
+const INVESTIGATION_C = '0192f000-0000-7000-8000-0000000000c1';
+const C = { investigation: investigationOf(INVESTIGATION_C, 'source-a', 'kind-a', 'C-2'), node: nodeOf('source-a', 'kind-a', 'C-2') };
 const EMPTY: AssistantThreadResponse = { turns: [], earlierTurns: 0, previousThreadClearedAt: null };
 
 /** The page with the column of the chats and the picker, over a client that records every request it is asked. */
@@ -126,5 +128,81 @@ describe('the picker of a new chat on the Assistant page', () => {
     expect(after.filter((name) => !READS.includes(name))).toEqual([]);
     expect(h.threads.slice(threadReadsBefore)).toEqual([]);
     expect(h.calls.filter((name) => ['assistantTurn', 'clearAssistantThread', 'saveDraft', 'putPreferences', 'openInvestigation', 'deleteInvestigation'].includes(name))).toEqual([]);
+  });
+});
+
+describe('a pick of an investigation that has no chat, on the Assistant page', () => {
+  /** The page over three open investigations, none with a chat; once `asked` is set, the list of chats holds one for the investigation the question was asked in. */
+  function setupWithoutChats() {
+    const known = [A, B, C];
+    const state = { asked: false };
+    const { client } = knowing(known, {
+      getAiStatus: async () => ({ ok: true, value: aiStatus({ assistant: 800 }) }),
+      assistantTurn: async () => {
+        state.asked = true;
+        return { ok: true as const, value: REFUSE };
+      },
+      assistantThread: async () => ({ ok: true as const, value: EMPTY }),
+      listAssistantThreads: async () => ({
+        ok: true as const,
+        value: {
+          items: state.asked
+            ? [{ title: 'kind-a C-2', caseRef: null, sourceId: 'source-a', sourceAlias: 'source-a', sourceState: 'available' as const, investigationId: INVESTIGATION_C, lastQuestionAt: new Date().toISOString(), turns: 1, lastQuestion: 'a question', lastQuestionCut: false }]
+            : [],
+          nextCursor: null,
+        },
+      }),
+      listInvestigationPage: async () => ({ ok: true as const, value: listOf(known.map((entry) => listItemOf(entry.investigation))) }),
+      lookupAssistantChats: async () => ({ ok: true as const, value: { withChat: [] } }),
+    } satisfies Partial<ApiClient>);
+    const calls: string[] = [];
+    const recording = new Proxy(client, {
+      get: (target, name) => {
+        const value: unknown = Reflect.get(target, name);
+        return typeof value === 'function' ? (...args: unknown[]) => (calls.push(String(name)), (value as (...given: unknown[]) => unknown).apply(target, args)) : value;
+      },
+    });
+    const appState = createClientState();
+    const session = createAssistantSession(null);
+    const view = renderApp(`/assistant/${INVESTIGATION_A}`, recording, appState, undefined, undefined, undefined, undefined, undefined, createPanelRegistryFor(appState));
+    unbinds.push(bindAssistantPanel(appState, view.panels, session));
+    return { ...view, calls, state };
+  }
+
+  const rowsOf = (title: string) => [...document.querySelectorAll('.chat-list-row')].filter((row) => row.textContent?.includes(title));
+
+  it('shows the row of the picked investigation in the column at once, highlighted, with "No questions yet", and writes nothing: every call of the pick is a read', async () => {
+    const h = setupWithoutChats();
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    await userEvent.click(screen.getByRole('button', { name: CHAT_LIST_COPY.newChat }));
+    const dialog = await screen.findByRole('dialog', { name: NEW_CHAT_COPY.title });
+    const row = await within(dialog).findByRole('option', { name: /kind-a C-2/u });
+    await waitFor(() => expect(within(row).getByText(NEW_CHAT_COPY.startChat)).toBeTruthy());
+    const before = h.calls.length;
+    await userEvent.click(row);
+    expect(await screen.findByRole('heading', { name: 'kind-a C-2', level: 1 })).toBeTruthy();
+    await waitFor(() => expect(rowsOf('kind-a C-2')).toHaveLength(1));
+    const [current] = rowsOf('kind-a C-2');
+    expect(current?.textContent).toContain(CHAT_LIST_COPY.noQuestions);
+    expect(current?.closest('[aria-current="true"]') ?? current?.getAttribute('aria-current')).toBeTruthy();
+    expect(current?.tagName).not.toBe('A');
+    // the landing reads the list, the lookup and the stored thread of the chosen investigation (a read), and writes nothing
+    expect(h.calls.slice(before).filter((name) => ![...READS, 'assistantThread'].includes(name))).toEqual([]);
+    expect(h.calls.filter((name) => ['assistantTurn', 'clearAssistantThread', 'saveDraft', 'putPreferences', 'openInvestigation', 'deleteInvestigation'].includes(name))).toEqual([]);
+  });
+
+  it('keeps one row for the investigation when its first question is asked: the stored chat takes the place of the current row', async () => {
+    const h = setupWithoutChats();
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    await userEvent.click(screen.getByRole('button', { name: CHAT_LIST_COPY.newChat }));
+    await userEvent.click(await screen.findByRole('option', { name: /kind-a C-2/u }));
+    await screen.findByRole('heading', { name: 'kind-a C-2', level: 1 });
+    await waitFor(() => expect(rowsOf('kind-a C-2')).toHaveLength(1));
+    await userEvent.type(screen.getByLabelText(ASSISTANT_COPY.fieldLabel), 'a question{Enter}');
+    await waitFor(() => expect(h.state.asked).toBe(true));
+    await waitFor(() => expect(rowsOf('kind-a C-2').some((row) => row.textContent?.includes('a question'))).toBe(true), { timeout: 4000 });
+    expect(rowsOf('kind-a C-2')).toHaveLength(1);
+    expect(rowsOf('kind-a C-2')[0]?.textContent).not.toContain(CHAT_LIST_COPY.noQuestions);
+    await act(async () => undefined);
   });
 });
