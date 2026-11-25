@@ -15,6 +15,7 @@ import { PoppedOutNote } from './popped-out-note.js';
 import { NO_STORED_THREAD } from './stored-thread-state.js';
 import { boundElementsOf } from './stored-answer.js';
 import { useOpenAtEnd } from './open-at-end.js';
+import { useKeepPlaceWhileCollapsed } from './use-keep-place.js';
 import { useRefReads } from './stored-reads.js';
 import { useRereadWhenShown, useStoredThread } from './stored-thread.js';
 import { SummaryContext } from './summary-context.js';
@@ -157,6 +158,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const bound = useMemo(() => boundElementsOf(storedTurns.flatMap((turn) => (turn.answer === undefined ? [] : [turn.answer]))), [storedTurns]);
   const reads = useRefReads(bound, stored.kind === 'ready' && !off);
   useOpenAtEnd(body, stored.kind === 'ready' && !off && storedTurns.length > 0 && investigationId !== null ? `${investigationId}:${storedTurns[0]?.id ?? ''}` : undefined, turns.length);
+  useKeepPlaceWhileCollapsed(body, collapsed, storedTurns.length + turns.length);
   const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
   const pageEmpty = page && !unavailable && stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && notice?.kind !== 'access-lost' && notice?.kind !== 'masking-cleared';
   // the intro waits for the read of the earlier chat: while it is out, or about to start (the person, the investigation and the source are known and the assistant is available)

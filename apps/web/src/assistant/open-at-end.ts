@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 
 /** How near the end of the thread, in pixels, counts as being at the end. */
-const NEAR_END = 24;
+export const NEAR_END = 24;
 
 /**
  * Opens a stored chat at its latest turn and keeps it there while what is above it settles (the values of the earlier answers are read after it is drawn), until the person scrolls up or a turn of this window is sent: that turn is

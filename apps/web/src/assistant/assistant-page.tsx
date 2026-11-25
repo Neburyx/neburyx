@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import type { ApiClient } from '../api/client.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
@@ -64,7 +64,7 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
   // the picker belongs to the investigation the page is on: another one closes it
   useEffect(() => setPicking(false), [investigationId]);
   // the button is the column's: the picker says on it whether it is open (the frame draws the open state), without a change of the column. It is drawn only once the page is ready, and again with each investigation, so this runs after every render.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const button = newChat.current;
     if (button === null) return undefined;
     button.setAttribute('aria-haspopup', 'dialog');

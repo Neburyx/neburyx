@@ -10,8 +10,10 @@ const NOTE = 'The chat is open in another window';
 const STORE_LAG_MS = 900;
 
 /** The stored thread of the stub server: a turn answered through POST turns is in what the thread read returns, as on the real server. */
-async function stubs(context: BrowserContext): Promise<{ readonly turns: object[]; clear(): void }> {
-  const stored: object[] = [];
+const earlierTurn = (seq: number): object => ({ id: `0192f000-0000-7000-8000-${String(seq).padStart(12, '0')}`, seq, at: '2026-11-24T10:00:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 });
+
+async function stubs(context: BrowserContext, earlier = 0): Promise<{ readonly turns: object[]; clear(): void }> {
+  const stored: object[] = Array.from({ length: earlier }, (_, index) => earlierTurn(index + 1));
   await context.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
   await context.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: { ...EMPTY, turns: [...stored] } }));
   await context.route((url) => url.pathname === '/v1/assistant/turns', (route) => {
@@ -223,6 +225,42 @@ test.describe('Pop out of the Assistant panel', () => {
     await page.mouse.move((box?.x ?? 0) + 5, (box?.y ?? 0) + 5);
     await expect.poll(tip).toBe('"Wide"');
     await popup.close();
+  });
+
+  test('gives the thread its place back when the panel returns: at the end when it was at the end or a turn came, where the person left it otherwise', async ({ page, context }) => {
+    const server = await stubs(context, 60);
+    await openInvestigation(page);
+    await openPanel(page);
+    const body = panel(page).locator('.assistant-body');
+    await expect(storedRows(page)).toHaveCount(60);
+    const metrics = () => body.evaluate((element) => ({ top: element.scrollTop, room: element.scrollHeight - element.clientHeight - element.scrollTop, scrolls: element.scrollHeight > element.clientHeight }));
+    await expect.poll(async () => (await metrics()).room).toBeLessThanOrEqual(24);
+    expect((await metrics()).scrolls).toBe(true);
+    const other = await context.newPage();
+    const open = async (): Promise<void> => {
+      await other.goto(`/assistant/${/\/explore\/([0-9a-f-]{36})/.exec(page.url())?.[1] ?? ''}`);
+      await expect(panel(page).getByText(NOTE)).toBeVisible({ timeout: 10_000 });
+    };
+    // at the end before the collapse: at the end after it
+    await open();
+    await other.goto('about:blank');
+    await expect(panel(page).getByText(NOTE)).toBeHidden({ timeout: 10_000 });
+    await expect.poll(async () => (await metrics()).room).toBeLessThanOrEqual(24);
+    // scrolled up before the collapse and no turn came: the place is kept
+    await body.evaluate((element) => void (element.scrollTop = 300));
+    await expect.poll(async () => (await metrics()).top).toBe(300);
+    await open();
+    await other.goto('about:blank');
+    await expect(panel(page).getByText(NOTE)).toBeHidden({ timeout: 10_000 });
+    await expect.poll(async () => Math.abs((await metrics()).top - 300)).toBeLessThanOrEqual(2);
+    // scrolled up, and a turn came while the panel was collapsed: it opens at the latest
+    await open();
+    await ask(other, 'and this?');
+    await expect.poll(() => server.turns.length, { timeout: 8000 }).toBe(61);
+    await expect(storedRows(page)).toHaveCount(61, { timeout: 8000 });
+    await other.goto('about:blank');
+    await expect(panel(page).getByText(NOTE)).toBeHidden({ timeout: 10_000 });
+    await expect.poll(async () => (await metrics()).room, { timeout: 8000 }).toBeLessThanOrEqual(24);
   });
 
   test('is reached from the keyboard, and shows its tooltip and the note as the frames draw them', async ({ page, context }, info) => {

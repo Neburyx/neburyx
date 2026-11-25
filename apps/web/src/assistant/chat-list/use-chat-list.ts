@@ -3,6 +3,7 @@ import type { AssistantThreadListResponse } from '@neburyx/contracts';
 import type { ApiFailure } from '../../api/client.js';
 import { useApiClient } from '../../api/client-context.js';
 import { READ_WAIT_MS } from '../read-wait.js';
+import { SETTLE_RETRY_MS } from '../settle-retry.js';
 
 export type ChatRow = AssistantThreadListResponse['items'][number];
 
@@ -18,9 +19,6 @@ export interface ChatListState {
 
 /** The most pages a reread reads to give back the chats that were shown: each page is bounded by the server, so the reread is too. */
 const MAX_REREAD_PAGES = 10;
-
-/** How long to wait before each further read after a turn was answered and the list does not show it yet: the server may store the turn a moment after it answered. After the last wait the list is left as read. */
-const SETTLE_RETRY_MS: readonly number[] = [600, 1500, 3000];
 
 /** A list read longer ago than this is read again when the person points at it or moves into it: a tab switch or a click in a window that was already focused sends no event of its own. */
 const STALE_AFTER_MS = 3000;
