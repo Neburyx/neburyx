@@ -26,14 +26,27 @@ export interface NewChatPickerProps {
 interface Place {
   readonly left: number;
   readonly top: number;
-  /** The height left under the button, in pixels, less the gap to the card and a margin to the edge of the window. */
-  readonly room: number;
+  readonly maxHeight: number;
 }
 
-/** The margin kept between the card and the bottom edge of the window, in pixels. */
-const EDGE_MARGIN = 16;
-/** The gap between the button and the card, in pixels (the same as `--new-chat-gap`). */
-const BUTTON_GAP = 12;
+/** A length of the picker's tokens, in pixels. */
+function tokenPx(name: string, fallback: number): number {
+  const value = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * Where the card goes: under the button with the gap of the frame, as tall as the window leaves it. In a window too short for a card of the least height under the button (a short window, or a page at 200% zoom) the card goes up over the button instead, so that it
+ * stays inside the window with its heading, its search and its footer in view, and only its list of rows scrolls.
+ */
+function placeOf(box: DOMRect): Place {
+  const gap = tokenPx('--new-chat-gap', 12);
+  const edge = tokenPx('--new-chat-edge', 16);
+  const least = tokenPx('--new-chat-least-height', 300);
+  const below = window.innerHeight - box.bottom - gap - edge;
+  const top = below >= least ? box.bottom + gap : Math.max(edge, window.innerHeight - edge - least);
+  return { left: box.left, top, maxHeight: Math.max(0, window.innerHeight - top - edge) };
+}
 
 /** The chip that says a source is gone, for a state that is not `available`. */
 const goneChipOf = (row: InvestigationListItem): string | undefined => (row.sourceState === 'removed' ? REMOVED_CHIP : row.sourceState === 'repointed' ? REPOINTED_CHIP : undefined);
@@ -113,7 +126,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   useLayoutEffect(() => {
     const place_ = (): void => {
       const box = anchor.current?.getBoundingClientRect();
-      if (box !== undefined) setPlace({ left: box.left, top: box.bottom, room: Math.max(0, window.innerHeight - box.bottom - BUTTON_GAP - EDGE_MARGIN) });
+      if (box !== undefined) setPlace(placeOf(box));
     };
     place_();
     window.addEventListener('resize', place_);
@@ -185,7 +198,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
       aria-modal="false"
       aria-labelledby={titleId}
       className="new-chat"
-      style={{ left: place.left, top: place.top, maxHeight: place.room }}
+      style={{ left: place.left, top: place.top, maxHeight: place.maxHeight }}
       onMouseDown={(event) => {
         // a press on the text or a row of the picker leaves the focus where it is, so that the keys still reach it
         if (!(event.target instanceof Element) || event.target.closest('input, button') === null) event.preventDefault();

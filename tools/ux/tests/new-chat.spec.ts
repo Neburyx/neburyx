@@ -150,6 +150,29 @@ test.describe('The picker of a new chat on the Assistant page', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
+  test('keeps heading, search and footer in view down to a window of 640 by 360 (the page at 200% zoom): the card goes up over the button and only its rows scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 640, height: 360 });
+    await routes(page);
+    await page.unroute((url) => url.pathname === '/v1/investigations' && url.searchParams.get('status') === 'open');
+    const many = Array.from({ length: 25 }, (_, index) => investigation(100 + index));
+    await page.route((url) => url.pathname === '/v1/investigations' && url.searchParams.get('status') === 'open', (route) => route.fulfill({ json: listBody(many) }));
+    await openPage(page);
+    await page.getByRole('button', { name: 'New chat' }).click();
+    await expect(picker(page).getByRole('option').first()).toBeVisible();
+    const card = await box(picker(page));
+    expect(card.y).toBeGreaterThanOrEqual(0);
+    expect(card.y + card.height).toBeLessThanOrEqual(360);
+    for (const part of ['.new-chat-heading', '.new-chat-search', '.new-chat-footer']) {
+      const found = await box(picker(page).locator(part));
+      expect(found.y, part).toBeGreaterThanOrEqual(card.y);
+      expect(found.y + found.height, part).toBeLessThanOrEqual(card.y + card.height + 1);
+    }
+    const rows = picker(page).locator('.new-chat-rows');
+    expect(await rows.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    expect((await box(rows)).height).toBeGreaterThanOrEqual(100);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
   test('does not start a chat on a gone source that has none, closes on Escape with the focus on the button, and never scrolls the page sideways', async ({ page }) => {
     await routes(page);
     await openPage(page);

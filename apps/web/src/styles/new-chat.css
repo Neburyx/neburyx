@@ -6,7 +6,6 @@
   box-sizing: border-box;
   width: var(--new-chat-width);
   max-width: var(--new-chat-max-width);
-  margin-top: var(--new-chat-gap);
   overflow: hidden;
   border: var(--border-width) solid var(--new-chat-border);
   border-radius: var(--new-chat-radius);
