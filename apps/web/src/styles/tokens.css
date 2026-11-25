@@ -74,6 +74,13 @@
   --assistant-page-send-height: 34px;
   --assistant-page-note-height: 15px;
   --assistant-page-input-font: 14px;
+  --assistant-page-empty-gap: 14px;
+  --assistant-page-empty-title-line: 24px;
+  --assistant-page-empty-text-line: 22px;
+  --assistant-page-empty-text-lines: 44px;
+  --assistant-page-empty-text-max: var(--assistant-page-column);
+  --assistant-page-suggestion-height: 36px;
+  --assistant-page-suggestion-gap: 8px;
   --assistant-page-muted: var(--chat-list-muted);
   --assistant-page-compose-border: var(--color-tooltip-border);
   --assistant-page-send-surface: var(--color-surface-muted);

@@ -28,7 +28,7 @@ function Where() {
   return <p data-testid="where">{useLocation().pathname}</p>;
 }
 
-function setup(list: (query: Query, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantThreadListResponse>>, options: { shown?: string; onNewChat?: () => void } = {}) {
+function setup(list: (query: Query, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantThreadListResponse>>, options: { shown?: string; record?: typeof RECORD & { sourceState?: 'removed' | 'repointed' | 'available' }; empty?: boolean; onNewChat?: () => void } = {}) {
   const asked: Query[] = [];
   const client = fakeClient({
     listAssistantThreads: async (query, signal) => {
@@ -38,8 +38,9 @@ function setup(list: (query: Query, signal: AbortSignal | undefined) => Promise<
   });
   const state = createClientState();
   state.bindSource('demo');
-  if (options.shown !== undefined) state.show({ id: options.shown, sourceId: 'demo', record: RECORD, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+  if (options.shown !== undefined) state.show({ id: options.shown, sourceId: 'demo', record: options.record ?? RECORD, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
   const session = createAssistantSession(null);
+  if (options.empty === true) session.stored.setState({ kind: 'ready', thread: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
   render(
     <MemoryRouter initialEntries={['/assistant']}>
       <ApiClientProvider client={client}>
@@ -569,5 +570,79 @@ describe('the chat list column: a question that was cut', () => {
     await screen.findByText('Chat title 1');
     expect(screen.getByRole('link', { name: /Chat title 1/ }).querySelector('.chat-list-row-question')?.textContent).toBe('whether any o…');
     expect(screen.getByRole('link', { name: /Chat title 2/ }).querySelector('.chat-list-row-question')?.textContent).toBe('whole question');
+  });
+});
+
+describe('the chat list column: the investigation shown with no chat yet', () => {
+  const current = (): HTMLElement | null => screen.queryAllByRole('listitem').find((item) => item.textContent?.includes('No questions yet') && item.querySelector('a') === null) ?? null;
+
+  it('draws it as the current row under Today, not a link, and says no chats yet no more', async () => {
+    setup(async () => page([]), { shown: idOf(1), empty: true });
+    await waitFor(() => expect(current()).not.toBeNull());
+    expect(current()?.textContent).toContain('Suspicious linked accounts');
+    expect(current()?.querySelector('[aria-current="true"]')).not.toBeNull();
+    expect(screen.getByRole('list', { name: 'Today' })).toBeTruthy();
+    expect(screen.queryByText(CHAT_LIST_COPY.empty)).toBeNull();
+  });
+
+  it('draws it above the other chats of today, and never twice once the list has its real row', async () => {
+    let rows: Row[] = [chat(2)];
+    const { session } = setup(async () => page(rows), { shown: idOf(1), empty: true });
+    await waitFor(() => expect(current()).not.toBeNull());
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent?.slice(0, 20))[0]).toContain('Suspicious linked ac');
+    rows = [chat(1, { title: 'Suspicious linked accounts' }), chat(2)];
+    await act(async () => void window.dispatchEvent(new Event('focus')));
+    await waitFor(() => expect(current()).toBeNull());
+    expect(screen.getAllByText('Suspicious linked accounts')).toHaveLength(1);
+    expect(session).toBeTruthy();
+  });
+
+  it('is matched by the search only when its title matches', async () => {
+    setup(async () => page([]), { shown: idOf(1), empty: true });
+    await waitFor(() => expect(current()).not.toBeNull());
+    await userEvent.type(screen.getByRole('searchbox'), 'zz');
+    await screen.findByText(CHAT_LIST_COPY.noMatch);
+    expect(current()).toBeNull();
+    await userEvent.clear(screen.getByRole('searchbox'));
+    await userEvent.type(screen.getByRole('searchbox'), 'linked');
+    await waitFor(() => expect(current()).not.toBeNull());
+  });
+
+  it('is not drawn for a closed investigation, a source that was removed or re-pointed, a chat that has turns, or a list not read yet', async () => {
+    cleanup();
+    setup(async () => page([]), { shown: idOf(1), empty: true, record: { ...RECORD, status: 'closed' as never } });
+    await screen.findByText(CHAT_LIST_COPY.empty);
+    expect(current()).toBeNull();
+    cleanup();
+    setup(async () => page([]), { shown: idOf(1), empty: true, record: { ...RECORD, sourceState: 'removed' } });
+    await screen.findByText(CHAT_LIST_COPY.empty);
+    expect(current()).toBeNull();
+    cleanup();
+    setup(async () => page([]), { shown: idOf(1), empty: true, record: { ...RECORD, sourceState: 'repointed' } });
+    await screen.findByText(CHAT_LIST_COPY.empty);
+    expect(current()).toBeNull();
+    cleanup();
+    const { session } = setup(async () => page([chat(2)]), { shown: idOf(1) });
+    await act(async () => session.stored.setState({ kind: 'ready', thread: { turns: [{ id: idOf(9), seq: 1, at: '2026-11-23T09:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 0, steps: 0 }], earlierTurns: 0, previousThreadClearedAt: null } }));
+    await screen.findByText('Chat title 2');
+    expect(current()).toBeNull();
+  });
+
+  it('stays while the first question is out, and goes when the list has the real row', async () => {
+    let rows: Row[] = [];
+    const { session } = setup(async () => page(rows), { shown: idOf(1), empty: true });
+    await waitFor(() => expect(current()).not.toBeNull());
+    await act(async () => session.store.setState({ ...session.store.getState(), turns: [{ id: 1, message: 'x', outcome: { kind: 'pending', call: 'message' } }] }));
+    expect(current()).not.toBeNull();
+  });
+
+  it('draws none for a chat that already has turns, even while a question of this window is out, and does not carry the row over when the person switches to such a chat', async () => {
+    const { session, state } = setup(async () => page([chat(2)]), { shown: idOf(1), empty: true });
+    await waitFor(() => expect(current()).not.toBeNull());
+    state.show({ id: idOf(3), sourceId: 'demo', record: RECORD, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+    await act(async () => session.stored.setState({ kind: 'ready', thread: { turns: [{ id: idOf(9), seq: 1, at: '2026-11-23T09:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 0, steps: 0 }], earlierTurns: 0, previousThreadClearedAt: null } }));
+    await act(async () => session.store.setState({ ...session.store.getState(), turns: [{ id: 1, message: 'x', outcome: { kind: 'pending', call: 'message' } }] }));
+    await screen.findByText('Chat title 2');
+    expect(current()).toBeNull();
   });
 });

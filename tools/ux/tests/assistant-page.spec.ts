@@ -362,4 +362,62 @@ test.describe('The Assistant page', () => {
     expect(place.turnTop).toBeLessThan(place.bodyBottom);
     expect(place.room).toBeGreaterThan(50);
   });
+
+  test('centres the empty thread in the free area, as frame 5b-2 draws it: the mark 194.5 px under the header at 900 px, the same room above and below', async ({ page }) => {
+    await routes(page);
+    await openPage(page);
+    await expect(page.locator('.assistant-empty')).toBeVisible();
+    const found = await page.evaluate(() => {
+      const body = (document.querySelector('.assistant-surface-page .assistant-body') as HTMLElement).getBoundingClientRect();
+      const mark = (document.querySelector('.assistant-empty .assistant-empty-icon') as HTMLElement).getBoundingClientRect();
+      const line = (document.querySelector('.assistant-empty .assistant-empty-line') as HTMLElement).getBoundingClientRect();
+      const title = (document.querySelector('.assistant-empty h2') as HTMLElement).getBoundingClientRect();
+      const text = (document.querySelector('.assistant-empty > p') as HTMLElement).getBoundingClientRect();
+      const first = (document.querySelector('.assistant-empty-suggestions button') as HTMLElement).getBoundingClientRect();
+      const last = [...document.querySelectorAll('.assistant-empty-suggestions button')].at(-1)?.getBoundingClientRect() as DOMRect;
+      return { bodyTop: body.top, bodyBottom: body.bottom, markTop: mark.top, titleTop: title.top, titleHeight: title.height, textTop: text.top, textHeight: text.height, firstTop: first.top, firstHeight: first.height, lastBottom: last.bottom, lineTop: line.top, lineHeight: line.height, lineBottom: line.bottom };
+    });
+    expect(found.markTop - found.bodyTop).toBeCloseTo(found.bodyBottom - found.lineBottom, 0);
+    if ((page.viewportSize()?.height ?? 0) === 900) {
+      expect(found.markTop).toBeCloseTo(64 + 194.5, 0);
+      expect(found.titleTop).toBeCloseTo(64 + 256.5, 0);
+      expect(found.titleHeight).toBeCloseTo(24, 0);
+      expect(found.textTop).toBeCloseTo(64 + 294.5, 0);
+      expect(found.textHeight).toBeCloseTo(44, 0);
+      expect(found.firstTop).toBeCloseTo(64 + 352.5, 0);
+      expect(found.firstHeight).toBeCloseTo(36, 0);
+      expect(found.lastBottom - found.firstTop).toBeCloseTo(124, 0);
+      expect(found.lineTop).toBeCloseTo(64 + 490.5, 0);
+      expect(found.lineHeight).toBeCloseTo(15, 0);
+    }
+  });
+
+  test('draws the investigation shown as the current row of the list while it has no chat, and the real row replaces it after the first question', async ({ page }) => {
+    let chats: unknown[] = [];
+    await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
+    await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: EMPTY }));
+    await page.route((url) => url.pathname === '/v1/assistant/threads', (route) => route.fulfill({ json: { items: chats, nextCursor: null } }));
+    await page.route((url) => url.pathname === '/v1/assistant/turns', (route) => {
+      const id = new URL(page.url()).pathname.split('/').pop() ?? '';
+      chats = [{ investigationId: id, title: 'Account AC-1', caseRef: null, sourceId: 'banking-demo', sourceAlias: 'banking-demo', sourceState: 'available', lastQuestionAt: new Date().toISOString(), turns: 1, lastQuestion: 'show them as a table', lastQuestionCut: false }];
+      return route.fulfill({ json: TABLE });
+    });
+    await openPage(page);
+    const today = page.getByRole('list', { name: 'Today' });
+    await expect(today.getByRole('listitem')).toHaveCount(1);
+    await expect(today.getByRole('listitem')).toContainText('No questions yet');
+    await expect(today.getByRole('link')).toHaveCount(0);
+    await expect(today.locator('[aria-current="true"]')).toHaveCount(1);
+    await page.getByRole('searchbox', { name: 'Search chats' }).fill('zzqx');
+    await expect(page.getByText('No chats match your search.')).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Today' })).toHaveCount(0);
+    await page.getByRole('searchbox', { name: 'Search chats' }).fill('');
+    await expect(today.getByRole('listitem')).toHaveCount(1);
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
+    await expect(today.getByRole('listitem')).toHaveCount(1);
+    await expect(today.getByRole('link')).toHaveCount(1);
+    await expect(today.getByRole('listitem')).toContainText('show them as a table');
+  });
 });

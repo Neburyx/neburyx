@@ -1625,6 +1625,36 @@
   text-align: center;
 }
 
+/* the page centres its empty thread in the free area, as frame 5b-2 draws it; the lift is for the panel, whose composer is taller */
+.assistant-surface-page .assistant-empty {
+  gap: var(--assistant-page-empty-gap);
+  padding: 0;
+}
+
+.assistant-surface-page .assistant-empty h2 {
+  line-height: var(--assistant-page-empty-title-line);
+}
+
+.assistant-surface-page .assistant-empty p {
+  max-width: var(--assistant-page-empty-text-max);
+  min-height: var(--assistant-page-empty-text-lines);
+  line-height: var(--assistant-page-empty-text-line);
+}
+
+.assistant-surface-page .assistant-empty-suggestions {
+  gap: var(--assistant-page-suggestion-gap);
+  margin: 0;
+}
+
+.assistant-surface-page .assistant-empty-suggestions button {
+  min-height: var(--assistant-page-suggestion-height);
+}
+
+.assistant-surface-page .assistant-empty .assistant-empty-line {
+  min-height: 0;
+  line-height: var(--assistant-page-note-height);
+}
+
 .assistant-empty h2 {
   margin: 0;
   font-size: var(--font-size-heading-2);

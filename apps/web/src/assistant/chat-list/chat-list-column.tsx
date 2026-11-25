@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { REMOVED_CHIP, REPOINTED_CHIP } from '../../lifecycle/copy.js';
+import { isSourceChanged } from '../../state/investigation-state.js';
 import { SEARCH_DEBOUNCE_MS } from '../../patterns/start-entity.js';
 import { ASSISTANT_PATH } from '../../shell/navigation.js';
 import { useClientState } from '../../state/context.js';
@@ -56,9 +57,28 @@ function tipOf(link: HTMLElement, byFocus: boolean): RowTip | undefined {
   return { text, left: box.left, top: above ? box.top - TIP_GAP : box.bottom + TIP_GAP, above, byFocus, href: link.getAttribute('href') };
 }
 
-function Row({ row, selected, onTip }: { readonly row: ChatRow; readonly selected: boolean; readonly onTip: (tip: RowTip | undefined) => void }) {
+function Row({ row, selected, current = false, onTip }: { readonly row: ChatRow; readonly selected: boolean; readonly current?: boolean; readonly onTip: (tip: RowTip | undefined) => void }) {
   const chip = row.sourceState === 'removed' ? REMOVED_CHIP : row.sourceState === 'repointed' ? REPOINTED_CHIP : undefined;
   const second = row.turns === 0 ? CHAT_LIST_COPY.noQuestions : `${row.lastQuestion ?? ''}${row.lastQuestion !== null && row.lastQuestionCut ? '…' : ''}`;
+  const inside = (
+    <>
+      <span className="chat-list-row-title">
+        <span className="chat-list-row-name">{row.title}</span>
+        {chip === undefined ? null : <span className="chat-list-chip">{chip}</span>}
+      </span>
+      <span className="chat-list-row-question">{second}</span>
+    </>
+  );
+  // the current row of an investigation that has no chat yet is not a link: there is no chat to open, and the page already shows it
+  if (current) {
+    return (
+      <li>
+        <div className="chat-list-row chat-list-row-selected" aria-current="true">
+          {inside}
+        </div>
+      </li>
+    );
+  }
   return (
     <li>
       <Link
@@ -70,11 +90,7 @@ function Row({ row, selected, onTip }: { readonly row: ChatRow; readonly selecte
         onFocus={(event) => onTip(tipOf(event.currentTarget, true))}
         onBlur={() => onTip(undefined)}
       >
-        <span className="chat-list-row-title">
-          <span className="chat-list-row-name">{row.title}</span>
-          {chip === undefined ? null : <span className="chat-list-chip">{chip}</span>}
-        </span>
-        <span className="chat-list-row-question">{second}</span>
+        {inside}
       </Link>
     </li>
   );
@@ -85,6 +101,9 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
   const state = useClientState();
   const session = useAssistantSession();
   const shownId = useStoreSelector(state.investigation, (investigation) => investigation.id);
+  const record = useStoreSelector(state.investigation, (investigation) => investigation.record);
+  const stored = useStoreSelector(session.stored, (held) => held);
+  const liveTurns = useStoreSelector(session.store, (held) => held.turns.length);
   const epoch = useStoreSelector(session.store, (held) => held.epoch);
   const [text, setText] = useState('');
   const [query, setQuery] = useState<string | undefined>(undefined);
@@ -171,10 +190,32 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
     loadMore();
   };
 
-  const groups = groupChats(chats.rows, now());
+  // the investigation shown, while it has no chat in the list: a row of this page only, never written or sent, replaced by the real row once the list has it
+  const needle = query?.toLowerCase();
+  const asking = liveTurns > 0;
+  const noChatYet = stored.kind === 'ready' && stored.thread.turns.length === 0 && stored.thread.earlierTurns === 0;
+  // a question sent in a chat that had no turn keeps its current row until the real row comes; a question sent in a chat that already had turns never draws one
+  const startedEmpty = useRef<string | null>(null);
+  useEffect(() => {
+    if (shownId === null) startedEmpty.current = null;
+    else if (noChatYet) startedEmpty.current = shownId;
+    else if (startedEmpty.current !== shownId) startedEmpty.current = null;
+  }, [shownId, noChatYet]);
+  const showCurrent = shownId !== null && record !== null && record.status === 'open' && !isSourceChanged(record.sourceState) && chats.first === 'ready' && (noChatYet || (asking && startedEmpty.current === shownId)) && !chats.rows.some((row) => row.investigationId === shownId) && (needle === undefined || record.title.toLowerCase().includes(needle));
+  const grouped = groupChats(chats.rows, now());
+  const current: ChatRow | undefined =
+    showCurrent && shownId !== null && record !== null
+      ? { investigationId: shownId, title: record.title, caseRef: record.caseRef, sourceId: '', sourceAlias: '', sourceState: 'available', lastQuestionAt: now().toISOString(), turns: 0, lastQuestion: null, lastQuestionCut: false }
+      : undefined;
+  const groups =
+    current === undefined
+      ? grouped
+      : grouped.some((entry) => entry.group === 'today')
+        ? grouped.map((entry) => (entry.group === 'today' ? { ...entry, rows: [current, ...entry.rows] } : entry))
+        : [{ group: 'today' as const, rows: [current] }, ...grouped];
   const arrows = (event: KeyboardEvent<HTMLElement>): void => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    const links = [...(body.current?.querySelectorAll<HTMLAnchorElement>('.chat-list-row') ?? [])];
+    const links = [...(body.current?.querySelectorAll<HTMLAnchorElement>('a.chat-list-row') ?? [])];
     const at = links.findIndex((link) => link === document.activeElement);
     if (at < 0) return;
     const next = links[at + (event.key === 'ArrowDown' ? 1 : -1)];
@@ -183,7 +224,7 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
     next.focus();
   };
   const searching = query !== undefined;
-  const empty = chats.first === 'ready' && chats.rows.length === 0;
+  const empty = chats.first === 'ready' && chats.rows.length === 0 && !showCurrent;
 
   return (
     <aside className="chat-list" aria-label={CHAT_LIST_COPY.label} onPointerEnter={refreshIfOld} onFocusCapture={(event) => (event.currentTarget.contains(event.relatedTarget as Node | null) ? undefined : refreshIfOld())}>
@@ -219,7 +260,7 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
             <h2>{CHAT_LIST_COPY.groups[grouped.group]}</h2>
             <ul role="list" aria-label={CHAT_LIST_COPY.groups[grouped.group]}>
               {grouped.rows.map((row) => (
-                <Row key={row.investigationId} row={row} selected={row.investigationId === shownId} onTip={setTip} />
+                <Row key={row.investigationId} row={row} selected={row.investigationId === shownId} current={showCurrent && row.investigationId === shownId} onTip={setTip} />
               ))}
             </ul>
           </div>

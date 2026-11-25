@@ -90,6 +90,22 @@ describe('the route that lists the caller’s chats', () => {
     expect(byId.get(idOf(2))).toMatchObject({ lastQuestion: 'A question asked with a heavy step', lastQuestionCut: false, turns: 2 });
   });
 
+  it('cuts a long question at a word, never inside one, and a question with no space in its first 200 code points at the 200th', async () => {
+    const { store, call } = await rig(0);
+    const words = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
+    await store.append(turn(1, { question: words }), 0);
+    await store.append(turn(2, { question: 'x'.repeat(300) }), 0);
+    await store.append(turn(3, { question: `${'a'.repeat(199)} b` + ' tail'.repeat(10) }), 0);
+    const byId = new Map((await call()).items.map((item) => [item.investigationId, item]));
+    const first = byId.get(idOf(1));
+    expect(first?.lastQuestionCut).toBe(true);
+    expect([...(first?.lastQuestion ?? '')].length).toBeLessThanOrEqual(200);
+    expect(words.startsWith(first?.lastQuestion ?? '?')).toBe(true);
+    expect(words.charAt((first?.lastQuestion ?? '').length)).toBe(' ');
+    expect([...(byId.get(idOf(2))?.lastQuestion ?? '')].length).toBe(200);
+    expect(byId.get(idOf(3))?.lastQuestion).toBe('a'.repeat(199));
+  });
+
   it('lists a thread that has no turn yet with zero turns, no question and the epoch as its date', async () => {
     const { store, call } = await rig(0);
     store.threads.set(`${idOf(5)}:${PERSON}`, { id: crypto.randomUUID(), investigationId: idOf(5), userId: PERSON, turns: [] });

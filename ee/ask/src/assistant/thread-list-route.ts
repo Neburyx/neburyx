@@ -22,9 +22,14 @@ const LIST_FAILED = 'assistant-thread.list-failed';
 
 const positionSchema = z.strictObject({ p: z.string(), s: z.string(), k: z.string(), i: z.string() });
 
+/** The question as the list shows it: whole when it fits, else its first 200 code points ended at the last whole word (at the 200th code point when it has no space to end at), with the flag that it was cut. */
 const cut = (text: string): { readonly text: string; readonly cut: boolean } => {
   const points = [...text];
-  return points.length <= CHAT_LAST_QUESTION_MAX ? { text, cut: false } : { text: points.slice(0, CHAT_LAST_QUESTION_MAX).join(''), cut: true };
+  if (points.length <= CHAT_LAST_QUESTION_MAX) return { text, cut: false };
+  const head = points.slice(0, CHAT_LAST_QUESTION_MAX);
+  const next = points[CHAT_LAST_QUESTION_MAX];
+  const space = next !== undefined && /\S/u.test(next) ? head.findLastIndex((point) => /\s/u.test(point)) : -1;
+  return { text: (space > 0 ? head.slice(0, space) : head).join('').trimEnd(), cut: true };
 };
 
 const searchKeyOf = (text: string | undefined): string => createHash('sha256').update(text?.toLowerCase() ?? '').digest('hex');

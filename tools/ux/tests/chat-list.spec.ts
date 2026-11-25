@@ -149,7 +149,7 @@ test.describe('The chat list column of the Assistant page', () => {
   test('names a list for each group, so the rows are announced as list items', async ({ page }) => {
     await routes(page);
     await openPage(page);
-    await expect(page.getByRole('list', { name: 'Today' }).getByRole('listitem')).toHaveCount(2);
+    await expect(page.getByRole('list', { name: 'Today' }).getByRole('listitem')).toHaveCount(3);
     await expect(page.getByRole('list', { name: 'Previous 7 days' }).getByRole('listitem')).toHaveCount(2);
     await expect(page.getByRole('list', { name: 'Older' }).getByRole('listitem')).toHaveCount(2);
   });
