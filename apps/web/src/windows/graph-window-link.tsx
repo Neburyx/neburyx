@@ -3,7 +3,7 @@ import { useClientState, useVisibleGraph } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import { elementKey } from '../state/keys.js';
 import { useStoreSelector } from '../state/store.js';
-import { CHAT_SELECTION_NOTE, chatSelectionOf } from './chat-selection.js';
+import { CHAT_SELECTION_NOTE, chatSelectionOf, noteKeyOf } from './chat-selection.js';
 import { useAnnounceWindow, useWindowChannel, useWindowScope } from './use-window-channel.js';
 
 /**
@@ -28,7 +28,7 @@ export function GraphWindowLink() {
       if (keys.length !== 1 || key === undefined) return;
       const drawn = drawnKeys(latest.current).has(key);
       if (drawn) {
-        chat.setState(key);
+        chat.setState(noteKeyOf(key, latest.current.nodes));
         state.presentation.select([key]);
       }
       channel.sendSelectionResult(requestId, drawn ? [key] : []);

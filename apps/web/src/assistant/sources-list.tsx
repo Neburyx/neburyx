@@ -29,6 +29,7 @@ export function SourcesList({
   const focusAfterShowAll = useRef<string | undefined>(undefined);
   const rows = groupSources(entries);
   const lines = useRef(new Map<number, HTMLButtonElement>());
+  const items = useRef(new Map<number, HTMLLIElement>());
   /** The number the list was asked to show: its row (or the line of its group) is marked, besides having the focus, so that a pointer user sees where it is too. */
   const [marked, setMarked] = useState<number | undefined>(undefined);
   const target = focusRequest?.number;
@@ -39,6 +40,18 @@ export function SourcesList({
     onFocusHandled();
   }, [target, focusRequest?.tick, onFocusHandled]);
   const hasGroup = rows.some((row) => row.kind === "group");
+  /** The row the page has just given a state (pressed, highlighted, selected, not on the canvas) is brought whole into view, notice included, and only as far as it takes: where it is whole already nothing moves. */
+  const stated = rowStateOf === undefined ? undefined : entries.find((entry) => {
+    const kind = rowStateOf(entry)?.kind;
+    return kind !== undefined && kind !== "idle" && kind !== "pending";
+  });
+  const statedNumber = stated?.number;
+  const statedKind = stated === undefined ? undefined : rowStateOf?.(stated)?.kind;
+  useEffect(() => {
+    if (statedNumber === undefined) return;
+    const item = items.current.get(statedNumber);
+    if (item !== undefined && typeof item.scrollIntoView === "function") item.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [statedNumber, statedKind]);
   const flip = (held: ReadonlySet<string>, id: string): ReadonlySet<string> => {
     const next = new Set(held);
     if (!next.delete(id)) next.add(id);
@@ -47,7 +60,10 @@ export function SourcesList({
   const rowOf = (entry: CitationEntry, nested: boolean) => {
     const rowState = rowStateOf?.(entry);
     return (
-    <li key={entry.key} className={nested ? "assistant-source-member" : undefined}>
+    <li key={entry.key} className={nested ? "assistant-source-member" : undefined} ref={(item) => {
+      if (item === null) items.current.delete(entry.number);
+      else items.current.set(entry.number, item);
+    }}>
       <button
         type="button"
         className="assistant-source-row"

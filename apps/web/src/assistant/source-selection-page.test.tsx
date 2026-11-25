@@ -103,6 +103,30 @@ function graphWindow(has: readonly string[]) {
 
 const KEY_HELD = JSON.stringify(['node', 'source-a', 'kind-a', 'A-1']);
 
+describe('keeping the pressed row whole in view', () => {
+  it('scrolls the row and its notice into view only as far as needed (nearest, never centred), once the row holds a state, and not before', async () => {
+    const scroll = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, writable: true, value: scroll });
+    await page();
+    expect(scroll).not.toHaveBeenCalled();
+    await userEvent.click(row(1));
+    await waitFor(() => expect(within(row(1)).getByText(ASSISTANT_COPY.selected)).toBeTruthy());
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    const item = scroll.mock.contexts.at(-1) as HTMLElement;
+    expect(item.tagName).toBe('LI');
+    expect(item.textContent).toContain(ASSISTANT_COPY.noGraphWindow);
+  });
+
+  it('does the same when the press is made from the keyboard', async () => {
+    const scroll = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, writable: true, value: scroll });
+    await page();
+    row(1).focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }));
+  });
+});
+
 describe('Select on graph on the Assistant page', () => {
   it('presses a row from the keyboard as from a click, and carries the state text in the row’s accessible name, apart from the marked shade', async () => {
     await page();

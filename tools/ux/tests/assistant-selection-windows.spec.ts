@@ -13,10 +13,10 @@ const ANSWER: AssistantTurnAnswer = {
   calls: 2,
 };
 
-async function routes(page: Page): Promise<void> {
+async function routes(page: Page, answer: AssistantTurnAnswer = ANSWER): Promise<void> {
   await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
   await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: EMPTY }));
-  await page.route((url) => url.pathname === '/v1/assistant/turns', (route) => route.fulfill({ json: ANSWER }));
+  await page.route((url) => url.pathname === '/v1/assistant/turns', (route) => route.fulfill({ json: answer }));
 }
 
 async function openAssistantPage(page: Page): Promise<string> {
@@ -61,5 +61,20 @@ test.describe('Select on graph across two windows', () => {
     await expect(page).toHaveURL(new RegExp(`/explore/${id}$`));
     expect(page.url()).not.toContain('AC-1');
     await expect(page.getByText('1 selected')).toBeVisible();
+  });
+
+  test('keeps the pressed row and its notice whole above the composer when the row is at the fold', async ({ page }) => {
+    const long: AssistantTurnAnswer = { ...ANSWER, blocks: [{ kind: 'sentences', sentences: Array.from({ length: 9 }, (_, index) => ({ text: `Sentence ${index + 1} of a long answer that takes room in the thread so that the list of sources starts low on the page.`, cites: ['n1'] })) }] } as AssistantTurnAnswer;
+    await page.setViewportSize({ width: 1440, height: 560 });
+    await routes(page, long);
+    await openAssistantPage(page);
+    await page.getByRole('button', { name: /^Sources: 1,/ }).click();
+    const notice = page.getByText('No graph window is open for this investigation, so nothing was highlighted.');
+    await expect(notice).toBeVisible();
+    const row = await page.getByRole('button', { name: /^Sources: 1,/ }).boundingBox();
+    const box = await notice.boundingBox();
+    const composer = await page.locator('.assistant-compose').boundingBox();
+    const head = await page.locator('.assistant-page-head').boundingBox();
+    expect(row && box && composer && head ? row.y >= head.y + head.height - 1 && box.y + box.height <= composer.y + 1 : false).toBe(true);
   });
 });

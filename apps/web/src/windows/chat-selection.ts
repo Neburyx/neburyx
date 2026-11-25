@@ -1,3 +1,5 @@
+import type { GraphNode } from '@neburyx/contracts';
+import { elementKey } from '../state/keys.js';
 import type { ClientState } from '../state/client-state.js';
 import { createStore, type Store } from '../state/store.js';
 
@@ -14,3 +16,6 @@ export function chatSelectionOf(state: ClientState): Store<string | undefined> {
   held.set(state, made);
   return made;
 }
+
+/** The key a note is put under: the key itself when it is an entity of the graph, none for a relationship or for a key the graph does not hold. */
+export const noteKeyOf = (key: string, nodes: readonly GraphNode[]): string | undefined => (nodes.some((node) => elementKey(node.ref) === key) ? key : undefined);
