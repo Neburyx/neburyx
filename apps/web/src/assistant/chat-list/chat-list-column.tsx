@@ -177,14 +177,22 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
   // after Show more the button is gone: focus goes to the first row that was not there before (the page stays where it is for a pointer)
   useLayoutEffect(() => {
     const wait = added.current;
-    if (chats.more === 'failed' || chats.first === 'loading') added.current = undefined;
+    if (chats.more === 'failed') added.current = undefined;
     if (wait === undefined || chats.more !== 'idle' || chats.first === 'loading') return;
     added.current = undefined;
+    // the focus goes only where it was lost: the button that was pressed is gone, or still there; a person who moved on to another control keeps it
+    const active = document.activeElement;
+    const lost = active === null || active === document.body || active.closest('.chat-list-more') !== null;
+    if (!lost) return;
     const fresh = chats.rows.find((row) => !wait.before.has(row.investigationId));
     if (fresh === undefined) return;
     const link = [...(body.current?.querySelectorAll<HTMLAnchorElement>('.chat-list-row') ?? [])].find((candidate) => candidate.getAttribute('href') === `${ASSISTANT_PATH}/${encodeURIComponent(fresh.investigationId)}`);
     link?.focus({ preventScroll: !wait.byKeyboard });
   }, [chats.rows, chats.more, chats.first]);
+  // a wish for focus after Show more belongs to the search it was made in
+  useEffect(() => {
+    added.current = undefined;
+  }, [query]);
   const showMore = (event: MouseEvent<HTMLButtonElement>): void => {
     added.current = { before: new Set(chats.rows.map((row) => row.investigationId)), byKeyboard: event.detail === 0 };
     loadMore();
@@ -227,7 +235,7 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
   const empty = chats.first === 'ready' && chats.rows.length === 0 && !showCurrent;
 
   return (
-    <aside className="chat-list" aria-label={CHAT_LIST_COPY.label} onPointerEnter={refreshIfOld} onFocusCapture={(event) => (event.currentTarget.contains(event.relatedTarget as Node | null) ? undefined : refreshIfOld())}>
+    <aside className="chat-list" aria-label={CHAT_LIST_COPY.label} onPointerEnter={refreshIfOld} onFocusCapture={(event) => (event.currentTarget.contains(event.relatedTarget as Node | null) || (event.target as Element).closest('.chat-list-more') !== null ? undefined : refreshIfOld())}>
       <button ref={newChatRef} type="button" className="assistant-page-button chat-list-new" disabled={onNewChat === undefined} onClick={onNewChat}>
         <span className="icon icon-plus" aria-hidden="true" />
         {CHAT_LIST_COPY.newChat}
@@ -268,7 +276,7 @@ export function ChatListColumn({ onNewChat, newChatRef, now = () => new Date() }
         {empty && chats.nextCursor === null ? (
           <p className="chat-list-note">{searching ? CHAT_LIST_COPY.noMatch : CHAT_LIST_COPY.empty}</p>
         ) : null}
-        {chats.nextCursor !== null && chats.first !== 'loading' ? (
+        {chats.nextCursor !== null && (chats.first !== 'loading' || chats.rows.length > 0) ? (
           <div className="chat-list-more">
             {chats.rows.length === 0 ? <p className="chat-list-note">{CHAT_LIST_COPY.moreMayExist}</p> : null}
             {chats.more === 'failed' && chats.moreFailure !== undefined ? <ListFailure failure={chats.moreFailure} /> : null}

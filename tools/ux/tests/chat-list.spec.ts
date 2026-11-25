@@ -246,4 +246,29 @@ test.describe('The chat list column of the Assistant page', () => {
     await page.getByRole('link', { name: /Chat title 1/ }).hover();
     await expect(page.locator('.assistant-table-tip')).toContainText(`${cutText}…`);
   });
+
+  const manyChats = Array.from({ length: 33 }, (_, index) => row(index + 1, index < 10 ? 0 : index < 20 ? 3 : 30));
+  const pagedRoutes = (page: Page) => routes(page, [{ items: manyChats.slice(0, 25), nextCursor: '1' }, { items: manyChats.slice(25), nextCursor: null }]);
+  const focusedRow = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.closest('.chat-list-row')?.querySelector('.chat-list-row-name')?.textContent ?? `none:${document.activeElement?.tagName}`);
+
+  for (const how of ['mouse click', 'Enter']) {
+    for (const waited of [false, true]) {
+      test(`moves the focus to the first new row after Show more on the last page by ${how}${waited ? ', after the list was read longer ago than the refresh limit' : ''}`, async ({ page }) => {
+        await pagedRoutes(page);
+        await openPage(page);
+        const more = page.getByRole('button', { name: 'Show more' });
+        await expect(more).toBeVisible();
+        if (waited) await page.waitForTimeout(3400);
+        if (how === 'Enter') {
+          await more.focus();
+          await page.keyboard.press('Enter');
+        } else {
+          await more.click();
+        }
+        await expect(page.getByRole('link', { name: /Chat title 26/ })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+        await expect.poll(() => focusedRow(page)).toBe('Chat title 26');
+      });
+    }
+  }
 });

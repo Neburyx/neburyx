@@ -44,15 +44,22 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
   const lastRead = useRef(Date.now());
   /** How many chats of the list with no search were read: the list that comes back when a search is cleared keeps that many. */
   const plainCount = useRef(0);
+  /** Show more was pressed while the first page was being read again (a pointer entering the column starts such a read just before the press): the next page is read once that read has answered. */
+  const wantMore = useRef(false);
+  /** A read of the first page was asked for and has not answered: set at once by the ask, so that a press on Show more made before the read has begun waits for it too. */
+  const refreshing = useRef(false);
 
   useEffect(() => {
     generation.current += 1;
     const mine = generation.current;
     const controller = new AbortController();
     // a reread for the same search keeps as many pages as were shown; a new search starts from its first page
-    const keep = query === undefined ? plainCount.current : lastQuery.current === query ? held.current.rows.length : 0;
+    const previousQuery = lastQuery.current;
+    const keep = query === undefined ? plainCount.current : previousQuery === query ? held.current.rows.length : 0;
     lastQuery.current = query;
-    setState((current) => ({ ...current, first: 'loading', firstFailure: undefined, more: 'idle', moreFailure: undefined }));
+    // a press on Show more that waits for this read keeps showing Loading…; one made for another search is let go
+    if (query !== previousQuery) wantMore.current = false;
+    setState((current) => ({ ...current, first: 'loading', firstFailure: undefined, more: wantMore.current ? 'loading' : 'idle', moreFailure: undefined }));
     const search = query === undefined ? {} : { q: query };
     // a read that gets no answer in time is given up: its late answer is dropped, and the person sees the failure with Try again
     const giveUp = window.setTimeout(() => {
@@ -60,7 +67,9 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
       generation.current += 1;
       controller.abort();
       lastRead.current = Date.now();
-      setState((current) => ({ ...current, first: 'failed', firstFailure: { code: 'NETWORK_UNAVAILABLE' } }));
+      wantMore.current = false;
+      refreshing.current = false;
+      setState((current) => ({ ...current, first: 'failed', firstFailure: { code: 'NETWORK_UNAVAILABLE' }, more: 'idle' }));
     }, READ_WAIT_MS);
     void (async () => {
       let result = await client.listAssistantThreads(search, controller.signal);
@@ -80,9 +89,11 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
       }
       window.clearTimeout(giveUp);
       if (mine !== generation.current) return;
+      refreshing.current = false;
       lastRead.current = Date.now();
       if (query === undefined && result.ok) plainCount.current = result.value.items.length;
       const wait = waiting.current;
+      if (!result.ok) wantMore.current = false;
       if (wait !== undefined && !result.ok) waiting.current = undefined;
       if (wait !== undefined && result.ok) {
         const row = result.value.items.find((item) => item.investigationId === wait.investigationId);
@@ -93,7 +104,7 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
           retry.current = window.setTimeout(() => setReloads((count) => count + 1), delay);
         }
       }
-      setState((current) => (result.ok ? { rows: result.value.items, nextCursor: result.value.nextCursor, first: 'ready', firstFailure: undefined, more: 'idle', moreFailure: undefined } : { ...current, first: 'failed', firstFailure: result.failure }));
+      setState((current) => (result.ok ? { rows: result.value.items, nextCursor: result.value.nextCursor, first: 'ready', firstFailure: undefined, more: wantMore.current && result.value.nextCursor !== null ? 'loading' : 'idle', moreFailure: undefined } : { ...current, first: 'failed', firstFailure: result.failure, more: 'idle' }));
     })();
     return () => {
       generation.current += 1;
@@ -106,7 +117,8 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
   const reload = useCallback(() => setReloads((count) => count + 1), []);
 
   const refreshIfOld = useCallback(() => {
-    if (held.current.first !== 'ready' || Date.now() - lastRead.current < STALE_AFTER_MS) return;
+    if (held.current.first !== 'ready' || held.current.more !== 'idle' || Date.now() - lastRead.current < STALE_AFTER_MS) return;
+    refreshing.current = true;
     setReloads((count) => count + 1);
   }, []);
 
@@ -116,9 +128,14 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
     setReloads((count) => count + 1);
   }, []);
 
-  const loadMore = useCallback(() => {
+  const fetchMore = useCallback((fromWait: boolean) => {
     const current = held.current;
-    if (current.nextCursor === null || current.more === 'loading') return;
+    if (current.nextCursor === null || (current.more === 'loading' && !fromWait)) return;
+    if ((current.first === 'loading' || refreshing.current) && !fromWait) {
+      wantMore.current = true;
+      setState((now) => ({ ...now, more: 'loading', moreFailure: undefined }));
+      return;
+    }
     const cursor = current.nextCursor;
     const mine = generation.current;
     setState((now) => ({ ...now, more: 'loading', moreFailure: undefined }));
@@ -138,6 +155,15 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
       }
     });
   }, [client, query]);
+
+  const loadMore = useCallback(() => fetchMore(false), [fetchMore]);
+
+  // the press that waited for a read of the first page: made once that read has answered
+  useEffect(() => {
+    if (state.first !== 'ready' || !wantMore.current) return;
+    wantMore.current = false;
+    if (held.current.nextCursor !== null) fetchMore(true);
+  }, [state.first, fetchMore]);
 
   return { state, reload, turnAnswered, refreshIfOld, loadMore };
 }

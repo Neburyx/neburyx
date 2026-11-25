@@ -645,4 +645,70 @@ describe('the chat list column: the investigation shown with no chat yet', () =>
     await screen.findByText('Chat title 2');
     expect(current()).toBeNull();
   });
+
+  it('keeps Show more in place when the pointer enters a list that was read a while ago, so the press is not lost, and puts the focus on the first new row', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { asked } = setup(async (query) => (query.cursor === undefined ? page([chat(1)], 'c1') : page([chat(2, { lastQuestionAt: '2026-11-20T09:00:00.000Z' })])));
+      const button = await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore });
+      vi.setSystemTime(Date.now() + 4000);
+      await userEvent.click(button);
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: /Chat title 2/ })));
+      expect(asked.some((query) => query.cursor === 'c1')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows Loading… on a disabled Show more from the press to the next page, also when the press comes while a read of the first page is out', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      let release: () => void = () => undefined;
+      let held = false;
+      setup(async (query) => {
+        if (query.cursor !== undefined) return page([chat(2, { lastQuestionAt: '2026-11-20T09:00:00.000Z' })]);
+        if (held) await new Promise<void>((resolve) => (release = resolve));
+        return page([chat(1)], 'c1');
+      });
+      const button = await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore });
+      held = true;
+      vi.setSystemTime(Date.now() + 4000);
+      await userEvent.hover(button);
+      await userEvent.click(button);
+      const waiting = screen.getByRole('button', { name: CHAT_LIST_COPY.loadingMore }) as HTMLButtonElement;
+      expect(waiting.disabled).toBe(true);
+      held = false;
+      await act(async () => release());
+      await screen.findByText('Chat title 2');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets a press that waits for a read go when the person changes the search: no extra page and no focus moved', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      let release: () => void = () => undefined;
+      let held = false;
+      const { asked } = setup(async (query) => {
+        if (query.cursor !== undefined) return page([chat(2, { lastQuestionAt: '2026-11-20T09:00:00.000Z' })]);
+        if (held && query.q === undefined) await new Promise<void>((resolve) => (release = resolve));
+        return page([chat(1)], query.q === undefined ? 'c1' : null);
+      });
+      const button = await screen.findByRole('button', { name: CHAT_LIST_COPY.showMore });
+      held = true;
+      vi.setSystemTime(Date.now() + 4000);
+      await userEvent.hover(button);
+      await userEvent.click(button);
+      await userEvent.type(screen.getByRole('searchbox'), 'ab');
+      await waitFor(() => expect(asked.some((query) => query.q === 'ab')).toBe(true));
+      held = false;
+      await act(async () => release());
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(asked.some((query) => query.cursor !== undefined)).toBe(false);
+      expect((document.activeElement as HTMLElement | null)?.classList.contains('chat-list-row') ?? false).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
