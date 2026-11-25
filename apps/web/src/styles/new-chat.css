@@ -1,0 +1,102 @@
+.new-chat {
+  position: fixed;
+  z-index: var(--new-chat-layer);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: var(--new-chat-width);
+  max-width: calc(100vw - var(--space-16));
+  max-height: calc(100vh - var(--space-32));
+  margin-top: var(--new-chat-gap);
+  overflow: hidden;
+  border: var(--border-width) solid var(--new-chat-border);
+  border-radius: var(--new-chat-radius);
+  background: var(--color-surface);
+  box-shadow: var(--new-chat-shadow);
+  color: var(--color-text);
+}
+
+.new-chat:focus-visible {
+  outline: none;
+}
+
+.new-chat-heading {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-14) var(--new-chat-pad-x) var(--space-10);
+}
+
+.new-chat-heading h2 {
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-semibold);
+}
+
+.new-chat-heading p,
+.new-chat-footer {
+  margin: 0;
+  color: var(--new-chat-muted);
+  font-size: var(--font-size-small);
+}
+
+.new-chat-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.new-chat-list {
+  display: block;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.new-chat-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  padding: var(--new-chat-row-pad-y) var(--new-chat-pad-x);
+  cursor: pointer;
+}
+
+.new-chat-row:hover {
+  background: var(--color-accent-surface);
+}
+
+.new-chat-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.new-chat-row-title {
+  overflow: hidden;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-chat-row-detail {
+  overflow: hidden;
+  color: var(--new-chat-muted);
+  font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-chat-note {
+  margin: 0;
+  padding: var(--space-12) var(--new-chat-pad-x);
+  color: var(--new-chat-muted);
+  font-size: var(--font-size-small);
+}
+
+.new-chat-footer {
+  flex: none;
+  padding: var(--space-10) var(--new-chat-pad-x) var(--space-12);
+  border-top: var(--border-width) solid var(--new-chat-rule);
+}

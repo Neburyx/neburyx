@@ -8,6 +8,8 @@ export interface ListFilters {
   readonly deleted?: boolean;
   readonly sourceId: string | undefined;
   readonly text: string | undefined;
+  /** How many rows a page holds; absent, the server's default. */
+  readonly limit?: number;
 }
 
 interface ListState {
@@ -76,7 +78,7 @@ function reduceList(state: ListState, action: Action): ListState {
   }
 }
 
-const querySoFar = (filters: ListFilters): InvestigationPageQuery => ({ ...(filters.deleted === true ? { deleted: true } : { status: filters.status }), ...(filters.sourceId === undefined ? {} : { sourceId: filters.sourceId }), ...(filters.text === undefined ? {} : { text: filters.text }) });
+const querySoFar = (filters: ListFilters): InvestigationPageQuery => ({ ...(filters.deleted === true ? { deleted: true } : { status: filters.status }), ...(filters.sourceId === undefined ? {} : { sourceId: filters.sourceId }), ...(filters.text === undefined ? {} : { text: filters.text }), ...(filters.limit === undefined ? {} : { limit: filters.limit }) });
 
 export interface InvestigationList {
   readonly state: ListState;
@@ -95,7 +97,7 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
   const moreInFlight = useRef(false);
   const latest = useRef(state);
   latest.current = state;
-  const { status, sourceId, text, deleted } = filters;
+  const { status, sourceId, text, deleted, limit } = filters;
 
   const loadFirst = useCallback(() => {
     generation.current += 1;
@@ -105,12 +107,12 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
     const abort = new AbortController();
     controller.current = abort;
     dispatch({ type: 'first-started' });
-    void client.listInvestigationPage(querySoFar({ status, sourceId, text, deleted }), abort.signal).then((result) => {
+    void client.listInvestigationPage(querySoFar({ status, sourceId, text, deleted, ...(limit === undefined ? {} : { limit }) }), abort.signal).then((result) => {
       if (generation.current !== mine) return;
       if (result.ok) dispatch({ type: 'first-answered', items: result.value.items, matching: result.value.matching.value, savedViews: result.value.counts.savedViews.count.value, nextCursor: result.value.nextCursor, retentionDays: result.value.retention.deletedInvestigationsDays });
       else dispatch({ type: 'failed', where: 'first', failure: result.failure });
     });
-  }, [client, status, sourceId, text, deleted]);
+  }, [client, status, sourceId, text, deleted, limit]);
 
   useEffect(() => {
     loadFirst();
@@ -131,14 +133,14 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
     const mine = generation.current;
     const cursor = held.nextCursor;
     dispatch({ type: 'more-started' });
-    void client.listInvestigationPage({ ...querySoFar({ status, sourceId, text, deleted }), cursor }, controller.current?.signal).then((result) => {
+    void client.listInvestigationPage({ ...querySoFar({ status, sourceId, text, deleted, ...(limit === undefined ? {} : { limit }) }), cursor }, controller.current?.signal).then((result) => {
       if (generation.current !== mine) return;
       moreInFlight.current = false;
       if (result.ok) dispatch({ type: 'more-answered', items: result.value.items, matching: result.value.matching.value, nextCursor: result.value.nextCursor });
       else if (result.failure.code === 'CURSOR_INVALIDATED') loadFirst();
       else dispatch({ type: 'failed', where: 'more', failure: result.failure });
     });
-  }, [client, status, sourceId, text, deleted, loadFirst]);
+  }, [client, status, sourceId, text, deleted, limit, loadFirst]);
 
   return {
     state,

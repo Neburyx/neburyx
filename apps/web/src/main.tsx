@@ -75,6 +75,7 @@ import './styles/views.css';
 import './styles/investigations.css';
 import './styles/ask.css';
 import './styles/assistant.css';
+import './styles/new-chat.css';
 import './styles/summary.css';
 import './styles/tour.css';
 
