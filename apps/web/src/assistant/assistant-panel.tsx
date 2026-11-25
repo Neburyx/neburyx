@@ -20,6 +20,9 @@ import { TurnView, stepSentenceOf } from './turn-cards.js';
 import { useSuggestions } from './suggestions.js';
 import { EmptyThread, PageHeader } from './page-parts.js';
 import { useAssistant } from './use-assistant.js';
+import { PopOutButton } from './pop-out-button.js';
+import { popOut } from '../windows/pop-out.js';
+import { useOtherWindowRoles } from '../windows/use-window-channel.js';
 
 function Chat() {
   return (
@@ -127,6 +130,9 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const principalId = usePrincipalIdWhenProvided();
   const [confirming, setConfirming] = useState<{ readonly investigationId: string; readonly principalId: string; readonly epoch: number } | undefined>(undefined);
   const [clearedNote, setClearedNote] = useState(false);
+  const [popOutRefused, setPopOutRefused] = useState(false);
+  const otherWindows = useOtherWindowRoles();
+  const pageElsewhere = otherWindows.has('assistant');
   const clearButton = useRef<HTMLButtonElement>(null);
   const off = stored.kind === 'off';
   const available = availability === 'available' && !off;
@@ -158,6 +164,10 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
     session.clear({});
     session.stored.setState({ kind: 'ready', thread: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
     setClearedNote(true);
+  };
+  const pressPopOut = (): void => {
+    if (investigationId === null) return;
+    setPopOutRefused(popOut(investigationId, { open: (url, name) => window.open(url, name), pageOpenElsewhere: () => pageElsewhere }) === 'refused');
   };
   const askToClear = (): void => {
     if (investigationId !== null && principalId !== undefined) setConfirming({ investigationId, principalId, epoch: session.store.getState().epoch });
@@ -221,6 +231,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
             <p>{model.title}</p>
           </div>
           <WideButton />
+          <PopOutButton pressed={pageElsewhere} onPress={pressPopOut} />
           {hasThread ? (
             <button ref={clearButton} type="button" className="assistant-clear" aria-label={ASSISTANT_COPY.clearChat} data-tip={ASSISTANT_COPY.clearChat} disabled={pending} onClick={askToClear}>
               <TrashIcon />
@@ -231,6 +242,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
           </button>
         </header>
       )}
+      {popOutRefused ? <p className="ask-note assistant-popout-refused" role="status">{ASSISTANT_COPY.popOutRefused}</p> : null}
       <p className="visually-hidden" role="status" aria-live="polite">
         {clearedNote ? ASSISTANT_COPY.cleared : announced}
       </p>

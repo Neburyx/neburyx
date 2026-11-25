@@ -486,6 +486,7 @@
 }
 
 .assistant-panel .ask-head {
+  position: relative;
   gap: var(--space-8);
   padding: var(--space-10) var(--space-16);
 }
@@ -778,6 +779,39 @@
 .assistant-clear-icon {
   width: var(--space-14);
   height: var(--space-14);
+}
+
+/* Pop out: the button is a header icon like Wide; its tooltip is the dark two-line one of the frame, under the header's right edge */
+.assistant-popout {
+  display: inline-flex;
+}
+
+.assistant-popout-icon {
+  width: var(--space-14);
+  height: var(--space-14);
+}
+
+.assistant-popout-tip {
+  position: absolute;
+  top: var(--assistant-popout-tip-top);
+  right: calc(-1 * var(--border-width));
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-10);
+  border-radius: var(--radius-small);
+  background: var(--color-text);
+  box-shadow: var(--shadow-tooltip-dark);
+  color: var(--color-tooltip-dark-text);
+  font-size: var(--font-size-small);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.assistant-popout-tip strong {
+  color: var(--color-surface);
+  font-weight: var(--font-weight-medium);
 }
 
 /* the confirmation of Clear chat: a scrim over the whole window and a dialog centred on it */

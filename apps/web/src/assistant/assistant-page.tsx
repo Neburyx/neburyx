@@ -16,6 +16,7 @@ import { ChatListColumn } from './chat-list/chat-list-column.js';
 import { NewChatPicker } from './new-chat/new-chat-picker.js';
 import { assistantSessionOf, AssistantSessionProvider } from './assistant-session.js';
 import { ASSISTANT_COPY } from './copy.js';
+import { useAssistantPageWindow } from '../windows/assistant-window.js';
 
 function Message({ title, text, children }: { readonly title: string; readonly text?: string; readonly children?: React.ReactNode }) {
   return (
@@ -73,6 +74,7 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
       button.removeAttribute('aria-haspopup');
     };
   });
+  useAssistantPageWindow();
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT}>{status.sourceId === undefined ? null : <AttemptedSource sourceId={status.sourceId} />}</Message>;
   const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
   if (failure !== undefined) {

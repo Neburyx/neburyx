@@ -27,11 +27,13 @@ export interface WindowChannel {
   close(): void;
 }
 
+/** @public: the selection across windows builds on it. */
 export interface SelectionRequest {
   readonly requestId: string;
   readonly keys: readonly string[];
 }
 
+/** @public: the selection across windows builds on it. */
 export interface SelectionResult {
   readonly requestId: string;
   readonly onCanvas: readonly string[];

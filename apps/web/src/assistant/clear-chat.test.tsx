@@ -56,7 +56,7 @@ describe('the Clear chat button', () => {
     await typeAndSend('who?');
     const header = screen.getByRole('banner');
     const names = [...header.querySelectorAll('button')].map((entry) => entry.getAttribute('aria-label'));
-    expect(names.slice(0, 2)).toEqual([ASSISTANT_COPY.clearChat, ASSISTANT_COPY.close]);
+    expect(names.slice(0, 3)).toEqual([ASSISTANT_COPY.popOut, ASSISTANT_COPY.clearChat, ASSISTANT_COPY.close]);
     expect(button()).toHaveProperty('disabled', true);
     await act(async () => gate.resolve(ok(REFUSE)));
     await waitFor(() => expect(button()).toHaveProperty('disabled', false));
@@ -64,10 +64,10 @@ describe('the Clear chat button', () => {
 });
 
 describe('the names of the header icon buttons', () => {
-  it('are also each button\'s tip, so the header says them the same way', async () => {
+  it('are also each button\'s tip, so the header says them the same way (Pop out shows its own two-line tooltip)', async () => {
     await withStoredThread();
     const header = screen.getByRole('banner');
-    const buttons = [...header.querySelectorAll('button')];
+    const buttons = [...header.querySelectorAll('button')].filter((entry) => entry.getAttribute('aria-label') !== ASSISTANT_COPY.popOut);
     expect(buttons.length).toBeGreaterThanOrEqual(2);
     for (const entry of buttons) expect([entry.getAttribute('data-tip'), entry.getAttribute('aria-label')]).toEqual([entry.getAttribute('aria-label'), entry.getAttribute('aria-label')]);
     expect(buttons.map((entry) => entry.getAttribute('data-tip'))).toEqual(expect.arrayContaining([ASSISTANT_COPY.clearChat, ASSISTANT_COPY.close]));

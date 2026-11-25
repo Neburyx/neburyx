@@ -54,6 +54,12 @@ async function openAssistant(windowWidth: number, canvasWidth: number, extra: re
 }
 
 describe('the Assistant panel drawn by the panel host', () => {
+  it('draws the header icons in the order of the frame: Wide, Pop out, Close', async () => {
+    const { box } = await openAssistant(1400, 1000);
+    const names = [...box(ASSISTANT_PANEL_ID).querySelectorAll('.ask-head button')].map((button) => button.getAttribute('aria-label'));
+    expect(names).toEqual(['Wide', 'Pop out', 'Close']);
+  });
+
   it('reaches the limit of a narrow window by End on its handle, starting below it, where the Wide button is disabled and not pressed', async () => {
     const { state, box, wide } = await openAssistant(600, 544);
     act(() => state.presentation.setPanelSize(ASSISTANT_PANEL_ID, 300));
