@@ -112,6 +112,8 @@ describe('Select on graph on the Assistant page', () => {
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(row(1).getAttribute('aria-label')).toContain(ASSISTANT_COPY.highlightedInGraph));
     expect(row(1).getAttribute('data-selection')).toBe('highlighted');
+    expect(row(1).getAttribute('title')).toBe(ASSISTANT_COPY.highlightedInGraph);
+    expect(row(1).getAttribute('aria-label')?.endsWith(ASSISTANT_COPY.highlightedInGraph)).toBe(true);
     expect(row(1).hasAttribute('data-marked')).toBe(false);
   });
 
@@ -186,6 +188,7 @@ describe('Select on graph on the Assistant page', () => {
     const before = h.made();
     await userEvent.click(row(1));
     await waitFor(() => expect(within(row(1)).getByText(ASSISTANT_COPY.notOnCanvas)).toBeTruthy());
+    expect(row(1).getAttribute('aria-label')?.endsWith(ASSISTANT_COPY.notOnCanvas)).toBe(true);
     expect(screen.queryByText(ASSISTANT_COPY.highlightedInGraph)).toBeNull();
     expect(screen.queryByRole('button', { name: ASSISTANT_COPY.openGraph })).toBeNull();
     expect(h.made()).toBe(before);

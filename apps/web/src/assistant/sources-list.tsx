@@ -59,7 +59,7 @@ export function SourcesList({
           focusAfterShowAll.current = undefined;
           button.focus();
         }}
-        title={statusOf(entry)}
+        title={rowState === undefined ? statusOf(entry) : rowState.text}
         data-selection={rowState === undefined || rowState.kind === "idle" ? undefined : rowState.kind}
         aria-label={`${ASSISTANT_COPY.sources}: ${entry.number}, ${labelOf(entry)}. ${rowState === undefined ? statusOf(entry) : rowState.text}`}
         onClick={() => onPress(entry)}
