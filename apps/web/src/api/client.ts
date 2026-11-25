@@ -65,6 +65,8 @@ import {
   ASSISTANT_CLEAR_OUTCOME_HEADER,
   ASSISTANT_CLEAR_OUTCOME_UNKNOWN,
   assistantThreadClearResponseSchema,
+  assistantThreadListResponseSchema,
+  type AssistantThreadListResponse,
   assistantThreadResponseSchema,
   type AssistantTurnAnswer,
   type AssistantThreadClearResponse,
@@ -223,6 +225,8 @@ export interface ApiClient {
   assistantThread(investigationId: string, mask: boolean, signal?: AbortSignal): Promise<ApiResult<AssistantThreadResponse>>;
   /** Deletes the caller's own thread of the investigation and the text of the model calls of their runs of it. */
   clearAssistantThread(investigationId: string, signal?: AbortSignal): Promise<ApiResult<AssistantThreadClearResponse>>;
+  /** One page of the caller's own chats, newest last question first; `q` keeps the chats whose title or last question holds the text, and `cursor` is the `nextCursor` of the page before. */
+  listAssistantThreads(query: { readonly limit?: number; readonly cursor?: string; readonly q?: string }, signal?: AbortSignal): Promise<ApiResult<AssistantThreadListResponse>>;
   /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
   summarize(request: SummaryRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SummaryResponse>>;
   /** Copies the storable sentences of a summary into the AI notes of the investigation's draft, with the draft's version the caller holds. */
@@ -442,6 +446,14 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const result = await request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread/clear`, assistantThreadClearResponseSchema, signal, 'POST', {}, { onErrorHeaders: (headers) => void (unknown = headers.get(ASSISTANT_CLEAR_OUTCOME_HEADER) === ASSISTANT_CLEAR_OUTCOME_UNKNOWN) });
       // an error that says the commit may have happened is a failure after which what the server did is not known, like a lost response
       return !result.ok && unknown ? failed('UNEXPECTED_FAILURE') : result;
+    },
+    listAssistantThreads: (query, signal) => {
+      const parameters = new URLSearchParams();
+      if (query.limit !== undefined) parameters.set('limit', String(query.limit));
+      if (query.cursor !== undefined) parameters.set('cursor', query.cursor);
+      if (query.q !== undefined) parameters.set('q', query.q);
+      const text = parameters.toString();
+      return request(fetcher, `/v1/assistant/threads${text === '' ? '' : `?${text}`}`, assistantThreadListResponseSchema, signal);
     },
     assistantThread: (investigationId, mask, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread${mask ? '?mask=true' : ''}`, assistantThreadResponseSchema, signal),
     copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
