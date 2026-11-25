@@ -37,7 +37,7 @@ for (const [name, path] of PAGES) {
       expect(await styleOf(page.locator('aside.sidebar'), ['padding-top', 'padding-right', 'padding-bottom', 'padding-left']), 'sidebar padding').toEqual({ 'padding-top': '32px', 'padding-right': '16px', 'padding-bottom': '24px', 'padding-left': '16px' });
       await expectBox('brand', page.locator('.brand'), { x: 16, y: 32, width: 176, height: 29 });
       const items = page.locator('aside.sidebar nav a');
-      // The frames list Home, Investigations, Assistant, Patterns and Sources, in that order, 48 px apart from y 101 (frame 5a: the items at 0, 48, 96, 144 and 192 under the list at y 101).
+      // Frame 5a lists Home, Investigations, Assistant, Patterns and Sources, in that order, 40 px high and 48 px apart from y 101.
       await expect(items).toHaveText(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources']);
       for (let index = 0; index < 5; index += 1) await expectBox(`navigation item ${index + 1}`, items.nth(index), { x: 16, y: 101 + 48 * index, width: 176, height: 40 });
     });

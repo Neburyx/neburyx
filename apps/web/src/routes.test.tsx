@@ -35,7 +35,7 @@ describe('routes and navigation', () => {
     expect(screen.queryByText('This screen is not built yet.')).toBeNull();
   });
 
-  it('shows the four links in the navigation of every other page, in order', () => {
+  it('shows the five links in the navigation of every other page, in order', () => {
     renderAt('/sources');
     expect(within(screen.getByRole('navigation')).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources']);
   });
