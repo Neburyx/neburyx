@@ -65,7 +65,9 @@ import {
   ASSISTANT_CLEAR_OUTCOME_HEADER,
   ASSISTANT_CLEAR_OUTCOME_UNKNOWN,
   assistantThreadClearResponseSchema,
+  assistantChatLookupResponseSchema,
   assistantThreadListResponseSchema,
+  type AssistantChatLookupResponse,
   type AssistantThreadListResponse,
   assistantThreadResponseSchema,
   type AssistantTurnAnswer,
@@ -227,6 +229,8 @@ export interface ApiClient {
   clearAssistantThread(investigationId: string, signal?: AbortSignal): Promise<ApiResult<AssistantThreadClearResponse>>;
   /** One page of the caller's own chats, newest last question first; `q` keeps the chats whose title or last question holds the text, and `cursor` is the `nextCursor` of the page before. */
   listAssistantThreads(query: { readonly limit?: number; readonly cursor?: string; readonly q?: string }, signal?: AbortSignal): Promise<ApiResult<AssistantThreadListResponse>>;
+  /** Which of the investigations named (1 to 100, each once) the caller has a chat for, in the order named; ids only. */
+  lookupAssistantChats(investigationIds: readonly string[], signal?: AbortSignal): Promise<ApiResult<AssistantChatLookupResponse>>;
   /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
   summarize(request: SummaryRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SummaryResponse>>;
   /** Copies the storable sentences of a summary into the AI notes of the investigation's draft, with the draft's version the caller holds. */
@@ -455,6 +459,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const text = parameters.toString();
       return request(fetcher, `/v1/assistant/threads${text === '' ? '' : `?${text}`}`, assistantThreadListResponseSchema, signal);
     },
+    lookupAssistantChats: (investigationIds, signal) => request(fetcher, '/v1/assistant/threads/lookup', assistantChatLookupResponseSchema, signal, 'POST', { investigationIds }),
     assistantThread: (investigationId, mask, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread${mask ? '?mask=true' : ''}`, assistantThreadResponseSchema, signal),
     copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
     readAiNotes: (investigationId, mask, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes?mask=${mask ? 'true' : 'false'}`, aiNotesResponseSchema, signal),

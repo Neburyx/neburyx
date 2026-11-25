@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { InvestigationListItem } from '@neburyx/contracts';
+import { REMOVED_CHIP, REPOINTED_CHIP } from '../../lifecycle/copy.js';
 import type { ApiResult } from '../../api/client.js';
 import { ApiClientProvider } from '../../api/client-context.js';
 import { fakeClient } from '../../api/fake-client.js';
@@ -31,7 +32,9 @@ function Host() {
   );
 }
 
-function setup(client = pagedClient(rowsOf(3)).client) {
+const NO_CHATS = async () => ({ ok: true as const, value: { withChat: [] } });
+
+function setup(client = pagedClient(rowsOf(3), [], { lookupAssistantChats: NO_CHATS }).client) {
   render(
     <MemoryRouter initialEntries={['/assistant']}>
       <ApiClientProvider client={client}>
@@ -52,12 +55,13 @@ const open = async () => {
 describe('the picker of a new chat: the list and the pick', () => {
   it('asks for the open investigations, 25 at a time, and draws one row for each with its title and under it the case reference and the source, under the heading, the line and the footer of the frame', async () => {
     const rows = rowsOf(3, (index) => (index === 1 ? { caseRef: 'REF-2026-1048' } : {}));
-    const recorded = pagedClient(rows);
+    const recorded = pagedClient(rows, [], { lookupAssistantChats: NO_CHATS });
     setup(recorded.client);
     const dialog = await open();
     const options = await within(dialog).findAllByRole('option');
     expect(recorded.recorded.pages[0]).toEqual({ status: 'open', limit: 25 });
-    expect(options.map((option) => option.textContent)).toEqual(['Case 1Source source-a', 'Case 2REF-2026-1048 · Source source-b', 'Case 3Source source-a']);
+    expect(options.map((option) => option.querySelector('.new-chat-row-title')?.textContent)).toEqual(['Case 1', 'Case 2', 'Case 3']);
+    expect(options.map((option) => option.querySelector('.new-chat-row-detail')?.textContent)).toEqual(['Source source-a', 'REF-2026-1048 · Source source-b', 'Source source-a']);
     expect(within(dialog).getByText(NEW_CHAT_COPY.description)).toBeTruthy();
     expect(within(dialog).getByText(NEW_CHAT_COPY.footer)).toBeTruthy();
   });
@@ -98,8 +102,9 @@ describe('the picker of a new chat: the list and the pick', () => {
   it('says it is loading while the first page is read, and shows the failure with a retry when the read fails, navigating nowhere', async () => {
     let answers = 0;
     const failure: ApiResult<never> = { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } };
-    const good = pagedClient(rowsOf(2)).client;
+    const good = pagedClient(rowsOf(2), [], { lookupAssistantChats: NO_CHATS }).client;
     const client = fakeClient({
+      lookupAssistantChats: NO_CHATS,
       listInvestigationPage: async (query, signal) => {
         answers += 1;
         if (answers === 1) return failure;
@@ -118,6 +123,7 @@ describe('the picker of a new chat: the list and the pick', () => {
     const rows: InvestigationListItem[] = rowsOf(3, (index) => (index === 1 ? { status: 'closed' as const } : {}));
     const held = pagedClient(rows).client;
     const client = fakeClient({
+      lookupAssistantChats: NO_CHATS,
       listInvestigationPage: async () => {
         const [opened, closed] = await Promise.all([held.listInvestigationPage({ status: 'open' }), held.listInvestigationPage({ status: 'closed' })]);
         if (!opened.ok || !closed.ok) return opened;
@@ -135,9 +141,10 @@ describe('the picker of a new chat: search, paging and the states of the list', 
   const rowTitles = (): string[] => screen.queryAllByRole('option').map((option) => option.querySelector('.new-chat-row-title')?.textContent ?? '');
 
   it('searches after the debounce with the trimmed text of two characters or more, asks for the whole list for fewer, and draws only the newest answer', async () => {
-    const held = pagedClient(rowsOf(6));
+    const held = pagedClient(rowsOf(6), [], { lookupAssistantChats: NO_CHATS });
     const releases: (() => void)[] = [];
     const client = fakeClient({
+      lookupAssistantChats: NO_CHATS,
       listInvestigationPage: async (query, signal) => {
         const answer = await held.client.listInvestigationPage(query, signal);
         if (query.text === 'ca') await new Promise<void>((resolve) => releases.push(resolve));
@@ -163,9 +170,10 @@ describe('the picker of a new chat: search, paging and the states of the list', 
   });
 
   it('says it is loading while a search is read, with no row of the earlier list drawn as its answer', async () => {
-    const held = pagedClient(rowsOf(4));
+    const held = pagedClient(rowsOf(4), [], { lookupAssistantChats: NO_CHATS });
     let hold: (() => void) | undefined;
     const client = fakeClient({
+      lookupAssistantChats: NO_CHATS,
       listInvestigationPage: async (query, signal) => {
         const answer = await held.client.listInvestigationPage(query, signal);
         if (query.text === 'zz') await new Promise<void>((resolve) => (hold = resolve));
@@ -183,11 +191,11 @@ describe('the picker of a new chat: search, paging and the states of the list', 
   });
 
   it('says there is no open investigation with no search, and that nothing matches for a search', async () => {
-    setup(pagedClient([]).client);
+    setup(pagedClient([], [], { lookupAssistantChats: NO_CHATS }).client);
     let dialog = await open();
     expect(await within(dialog).findByText(NEW_CHAT_COPY.empty)).toBeTruthy();
     cleanup();
-    setup(pagedClient(rowsOf(3)).client);
+    setup(pagedClient(rowsOf(3), [], { lookupAssistantChats: NO_CHATS }).client);
     dialog = await open();
     await within(dialog).findAllByRole('option');
     await userEvent.type(within(dialog).getByRole('searchbox'), 'nothing like it');
@@ -195,7 +203,7 @@ describe('the picker of a new chat: search, paging and the states of the list', 
   });
 
   it('pages by the cursor over eight pages, 25 rows at a time with no cap, with no row twice and the focus on the control that reads more', async () => {
-    const held = pagedClient(rowsOf(205));
+    const held = pagedClient(rowsOf(205), [], { lookupAssistantChats: NO_CHATS });
     setup(held.client);
     const dialog = await open();
     await within(dialog).findAllByRole('option');
@@ -214,7 +222,7 @@ describe('the picker of a new chat: search, paging and the states of the list', 
   });
 
   it('keeps the rows and says so when a read of more fails, and reads that page again from the control', async () => {
-    const held = pagedClient(rowsOf(60));
+    const held = pagedClient(rowsOf(60), [], { lookupAssistantChats: NO_CHATS });
     let failNext = true;
     const client = fakeClient({
       listInvestigationPage: async (query, signal) => {
@@ -236,7 +244,7 @@ describe('the picker of a new chat: search, paging and the states of the list', 
   });
 
   it('starts again from the first page when the server no longer accepts the cursor', async () => {
-    const held = pagedClient(rowsOf(60));
+    const held = pagedClient(rowsOf(60), [], { lookupAssistantChats: NO_CHATS });
     let refused = false;
     const client = fakeClient({
       listInvestigationPage: async (query, signal) => {
@@ -257,3 +265,90 @@ describe('the picker of a new chat: search, paging and the states of the list', 
   });
 });
 
+describe('the picker of a new chat: the chips and a source that cannot start a chat', () => {
+  const ids = (n: number): string => `0192f000-0000-7000-8000-${String(n).padStart(12, '0')}`;
+  const rowsWith = (overrides: (index: number) => Partial<InvestigationListItem>): InvestigationListItem[] => rowsOf(5, overrides);
+  /** Rows 1 to 5: 1 has a chat, 2 has a removed source and no chat, 3 has a repointed source and a chat, 4 has a repointed source and no chat, 5 has an available source and no chat. */
+  const mixed = rowsWith((index) => (index === 1 ? { sourceState: 'removed' as const } : index === 2 || index === 3 ? { sourceState: 'repointed' as const } : {}));
+  const withChat = [ids(1), ids(3)];
+
+  function mixedSetup(lookup: (asked: readonly string[]) => Promise<ApiResult<{ withChat: string[] }>>) {
+    const asked: (readonly string[])[] = [];
+    const client = pagedClient(mixed, [], {
+      lookupAssistantChats: async (idsAsked) => {
+        asked.push(idsAsked);
+        return lookup(idsAsked);
+      },
+    }).client;
+    setup(client);
+    return asked;
+  }
+  const rowFor = (title: string): HTMLElement => screen.getByRole('option', { name: new RegExp(title, 'u') });
+
+  it('asks the lookup once for the ids drawn, shows "Has a chat" for the rows it names and the chip of a source that is gone, with both for a gone source that has a chat', async () => {
+    const asked = mixedSetup(async () => ({ ok: true, value: { withChat } }));
+    const dialog = await open();
+    await waitFor(() => expect(within(rowFor('Case 1')).getByText(NEW_CHAT_COPY.hasChat)).toBeTruthy());
+    expect(asked).toEqual([[ids(1), ids(2), ids(3), ids(4), ids(5)]]);
+    expect(within(rowFor('Case 2')).queryByText(NEW_CHAT_COPY.hasChat)).toBeNull();
+    expect(within(rowFor('Case 2')).getByText(REMOVED_CHIP)).toBeTruthy();
+    expect(within(rowFor('Case 3')).getByText(NEW_CHAT_COPY.hasChat)).toBeTruthy();
+    expect(within(rowFor('Case 3')).getByText(REPOINTED_CHIP)).toBeTruthy();
+    expect(within(rowFor('Case 4')).getByText(REPOINTED_CHIP)).toBeTruthy();
+    expect(within(rowFor('Case 4')).queryByText(NEW_CHAT_COPY.hasChat)).toBeNull();
+    expect(within(rowFor('Case 5')).getByText(NEW_CHAT_COPY.startChat)).toBeTruthy();
+    expect(within(dialog).getAllByRole('option')).toHaveLength(5);
+  });
+
+  it('does not pick a gone source that has no chat, says why to a screen reader, and picks a gone source that has a chat as any other row', async () => {
+    mixedSetup(async () => ({ ok: true, value: { withChat } }));
+    await open();
+    await waitFor(() => expect(within(rowFor('Case 1')).getByText(NEW_CHAT_COPY.hasChat)).toBeTruthy());
+    const stuck = rowFor('Case 2');
+    expect(stuck.getAttribute('aria-disabled')).toBe('true');
+    expect(stuck.getAttribute('aria-describedby')).toBe(within(stuck).getByText(REMOVED_CHIP).id);
+    await userEvent.click(stuck);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByTestId('where').textContent).toBe('/assistant');
+    await userEvent.click(rowFor('Case 3'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByTestId('where').textContent).toBe(`/assistant/${ids(3)}`);
+  });
+
+  it('keeps a gone source unpickable and claiming nothing while the lookup has not answered and when it failed, and a source that is available can still be picked', async () => {
+    let release: (() => void) | undefined;
+    mixedSetup(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } });
+        }),
+    );
+    await open();
+    await screen.findAllByRole('option');
+    for (const title of ['Case 2', 'Case 3', 'Case 4']) {
+      expect(rowFor(title).getAttribute('aria-disabled')).toBe('true');
+      expect(within(rowFor(title)).queryByText(NEW_CHAT_COPY.hasChat)).toBeNull();
+      expect(within(rowFor(title)).queryByText(NEW_CHAT_COPY.startChat)).toBeNull();
+    }
+    expect(within(rowFor('Case 5')).queryByText(NEW_CHAT_COPY.hasChat)).toBeNull();
+    await act(async () => release?.());
+    for (const title of ['Case 2', 'Case 3']) expect(rowFor(title).getAttribute('aria-disabled')).toBe('true');
+    await userEvent.click(rowFor('Case 5'));
+    expect(screen.getByTestId('where').textContent).toBe(`/assistant/${ids(5)}`);
+  });
+
+  it('asks the lookup once for each page that Show more reads, and writes nothing: every request of the picker is a read', async () => {
+    const asked: (readonly string[])[] = [];
+    const held = pagedClient(rowsOf(60), [], { lookupAssistantChats: async (idsAsked) => (asked.push(idsAsked), { ok: true as const, value: { withChat: [] } }) });
+    setup(held.client);
+    const dialog = await open();
+    await within(dialog).findAllByRole('option');
+    await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.showMore }));
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(50));
+    await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.showMore }));
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(60));
+    expect(asked.map((page) => page.length)).toEqual([25, 25, 10]);
+    expect(new Set(asked.flat()).size).toBe(60);
+    expect(held.recorded.views).toEqual([]);
+  });
+});

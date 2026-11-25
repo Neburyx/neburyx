@@ -142,3 +142,52 @@
   font-size: var(--font-size-small);
   cursor: pointer;
 }
+
+.new-chat-row-marks {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+  margin-left: auto;
+}
+
+.new-chat-chip {
+  padding: var(--new-chat-chip-pad-y) var(--new-chat-chip-pad-x);
+  border-radius: var(--new-chat-chip-radius);
+  background: var(--color-surface-muted);
+  color: var(--new-chat-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.new-chat-chip-gone {
+  background: var(--color-caution-surface);
+  color: var(--color-caution-text);
+}
+
+.new-chat-start {
+  display: none;
+  color: var(--color-accent);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.new-chat-row:hover .new-chat-start,
+.new-chat-row-active .new-chat-start {
+  display: inline;
+}
+
+.new-chat-row-gone {
+  color: var(--new-chat-muted);
+  cursor: default;
+}
+
+.new-chat-row-gone:hover {
+  background: transparent;
+}
+
+.new-chat-row-gone .new-chat-row-title {
+  color: var(--new-chat-muted);
+}

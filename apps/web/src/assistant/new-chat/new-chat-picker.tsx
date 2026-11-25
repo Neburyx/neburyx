@@ -7,7 +7,9 @@ import { canRetry, FailureNotice } from '../../failure-notice.js';
 import { useInvestigationList } from '../../investigations-page/use-investigation-list.js';
 import { SEARCH_DEBOUNCE_MS } from '../../patterns/start-entity.js';
 import { ASSISTANT_PATH } from '../../shell/navigation.js';
+import { REMOVED_CHIP, REPOINTED_CHIP } from '../../lifecycle/copy.js';
 import { NEW_CHAT_COPY, rowDetailOf } from './copy.js';
+import { useChatsOf, type ChatKnowledge } from './use-chats-of.js';
 
 /** The rows a page of the list holds. */
 const PAGE_SIZE = 25;
@@ -26,6 +28,42 @@ interface Place {
   readonly top: number;
 }
 
+/** The chip that says a source is gone, for a state that is not `available`. */
+const goneChipOf = (row: InvestigationListItem): string | undefined => (row.sourceState === 'removed' ? REMOVED_CHIP : row.sourceState === 'repointed' ? REPOINTED_CHIP : undefined);
+
+/**
+ * Whether a row can be picked: one whose source is available always; one whose source is gone only when it has a chat, which the page then shows as it shows an investigation whose source has changed. While the lookup has not answered, or failed, a row whose source is gone is
+ * not pickable and claims nothing.
+ */
+const pickable = (row: InvestigationListItem, chat: ChatKnowledge): boolean => goneChipOf(row) === undefined || chat === 'yes';
+
+function PickerRow({ row, chat, onPick }: { readonly row: InvestigationListItem; readonly chat: ChatKnowledge; readonly onPick: () => void }) {
+  const chip = goneChipOf(row);
+  const enabled = pickable(row, chat);
+  const reason = useId();
+  return (
+    <li role="option" aria-selected={false} aria-disabled={enabled ? undefined : true} aria-describedby={enabled || chip === undefined ? undefined : reason} className={enabled ? 'new-chat-row' : 'new-chat-row new-chat-row-gone'} onClick={onPick}>
+      <span className="new-chat-row-text">
+        <span className="new-chat-row-title">{row.title}</span>
+        <span className="new-chat-row-detail">{rowDetailOf(row.caseRef, row.sourceAlias)}</span>
+      </span>
+      <span className="new-chat-row-marks">
+        {chat === 'yes' ? <span className="new-chat-chip">{NEW_CHAT_COPY.hasChat}</span> : null}
+        {chip === undefined ? null : (
+          <span id={reason} className="new-chat-chip new-chat-chip-gone">
+            {chip}
+          </span>
+        )}
+        {chat === 'no' && chip === undefined ? (
+          <span className="new-chat-start" aria-hidden="true">
+            {NEW_CHAT_COPY.startChat}
+          </span>
+        ) : null}
+      </span>
+    </li>
+  );
+}
+
 /** The picker of a new chat (frame 5b-1): the person's open investigations, and a pick opens the chat of the one chosen. */
 export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   const client = useApiClient();
@@ -39,6 +77,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   const list = useInvestigationList(client, { status: 'open', sourceId: undefined, text: query, limit: PAGE_SIZE });
   const { state } = list;
   const rows = (state.items ?? []).filter((row) => row.status === 'open');
+  const chatOf = useChatsOf(rows.map((row) => row.id));
 
   useLayoutEffect(() => {
     const place_ = (): void => {
@@ -80,6 +119,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   }, [anchor, onClose]);
 
   const pick = (row: InvestigationListItem): void => {
+    if (!pickable(row, chatOf(row.id))) return;
     close();
     void navigate(`${ASSISTANT_PATH}/${encodeURIComponent(row.id)}`);
   };
@@ -127,12 +167,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
         ) : (
           <ul role="listbox" aria-label={NEW_CHAT_COPY.listLabel} className="new-chat-list">
             {rows.map((row) => (
-              <li key={row.id} role="option" aria-selected={false} className="new-chat-row" onClick={() => pick(row)}>
-                <span className="new-chat-row-text">
-                  <span className="new-chat-row-title">{row.title}</span>
-                  <span className="new-chat-row-detail">{rowDetailOf(row.caseRef, row.sourceAlias)}</span>
-                </span>
-              </li>
+              <PickerRow key={row.id} row={row} chat={chatOf(row.id)} onPick={() => pick(row)} />
             ))}
           </ul>
         )}

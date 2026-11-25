@@ -552,3 +552,20 @@ describe('the clearing of an assistant thread', () => {
     expect(await createApiClient(answer({ [ASSISTANT_CLEAR_OUTCOME_HEADER]: 'rolled-back' })).clearAssistantThread('inv-1')).toEqual({ ok: false, failure: internal.error });
   });
 });
+
+describe('the lookup of the chats of the caller', () => {
+  it('posts the ids to the lookup route and returns the ids that have a chat, and refuses an answer that holds more than ids', async () => {
+    const asked: { url: string; init: RequestInit | undefined }[] = [];
+    const id = '0192f000-0000-7000-8000-000000000001';
+    const client = createApiClient(async (input, init) => {
+      asked.push({ url: input, init });
+      return new Response(JSON.stringify({ withChat: [id] }));
+    });
+    expect(await client.lookupAssistantChats([id, '0192f000-0000-7000-8000-000000000002'])).toEqual({ ok: true, value: { withChat: [id] } });
+    expect(asked[0]?.url).toBe('/v1/assistant/threads/lookup');
+    expect(asked[0]?.init?.method).toBe('POST');
+    expect(JSON.parse(String(asked[0]?.init?.body))).toEqual({ investigationIds: [id, '0192f000-0000-7000-8000-000000000002'] });
+    const more = createApiClient(async () => new Response(JSON.stringify({ withChat: [id], title: 'x' })));
+    expect(await more.lookupAssistantChats([id])).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+});

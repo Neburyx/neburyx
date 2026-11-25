@@ -6,6 +6,8 @@ export const NEW_CHAT_COPY = {
   loading: 'Loading open investigations…',
   failed: 'The open investigations could not be read.',
   tryAgain: 'Try again',
+  hasChat: 'Has a chat',
+  startChat: 'Start chat ▸',
   listLabel: 'Open investigations',
   searchLabel: 'Search open investigations',
   empty: 'There is no open investigation.',
