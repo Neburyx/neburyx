@@ -110,6 +110,32 @@ describe('the thread of a window while another window shows the chat', () => {
     }
   });
 
+  it('ends the waits quietly when a read fails, and reads again when the window is shown', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let reads = 0;
+      let failing = false;
+      const h = harness(async () => ok(REFUSE), 1000, async () => {
+        reads += 1;
+        return failing ? { ok: false, failure: { code: 'INTERNAL_ERROR', message: 'no', retryable: true, traceId: 'tr' } } : ok(thread(1));
+      });
+      render(h.tree());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+      failing = true;
+      const before = reads;
+      const other = window2();
+      await act(async () => other.announceThreadChanged());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+      expect(reads).toBe(before + 1);
+      failing = false;
+      await act(async () => void window.dispatchEvent(new Event('focus')));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+      expect(reads).toBeGreaterThan(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('starts again from the newest notice and does not run two waits at once', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
