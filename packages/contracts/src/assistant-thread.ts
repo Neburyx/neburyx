@@ -223,12 +223,12 @@ export const assistantThreadListItemSchema = chatInvestigationSchema.omit({ id: 
   lastQuestionAt: z.iso.datetime(),
   /** How many turns the thread holds; 0 for a thread that has none yet. */
   turns: wholeCount,
-  /** The newest stored question of the thread, cut to its first `CHAT_LAST_QUESTION_MAX` code points; null when no turn has one. */
+  /** The newest stored question of the thread, cut to at most its first `CHAT_LAST_QUESTION_MAX` code points at the last whole word (at the code point itself when it has no space); null when no turn has one. */
   lastQuestion: z
     .string()
     .refine((value) => [...value].length <= CHAT_LAST_QUESTION_MAX, { message: 'at most 200 code points' })
     .nullable(),
-  /** True when the stored question was longer than `lastQuestion`, which then ends where it was cut: a client shows an ellipsis after it. */
+  /** True when the stored question was longer than `lastQuestion`, which then ends at the word where it was cut: a client shows an ellipsis after it. */
   lastQuestionCut: z.boolean(),
 });
 
