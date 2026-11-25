@@ -37,6 +37,8 @@ export interface Scene {
   readonly selection: ReadonlySet<string>;
   /** The keys of the drawn entities that are pinned: they cannot be dragged. */
   readonly pinned: ReadonlySet<string>;
+  /** The text drawn under the entity another window selected, while that selection stands: the key of the drawn entity and the words. Never drawn for a relationship or for a key that is not drawn. */
+  readonly noted?: { readonly key: string; readonly text: string } | undefined;
   /** The key of the drawn element the walk is at, which the drawing rings; undefined when the walk is off. */
   readonly focused?: string | undefined;
   /** False while a menu holds the focus: the walk's element is still told and revealed, and its ring is not drawn, so that one ring shows at a time. */

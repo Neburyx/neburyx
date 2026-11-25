@@ -9,7 +9,7 @@ import { aggregateKey, aggregateLinkKey, type AggregateNode } from '../workspace
 import { BOX_HEIGHT, BOX_WIDTH, REMAINDER_RADIUS, REMAINDER_RING_STEP } from './layout-constants.js';
 
 /** Every loaded entity must have a position; a relationship whose entity is not loaded cannot be drawn between two entities, so it is left out of the drawing and counted in `omitted`. */
-export function buildScene(graph: LoadedGraph, positions: ReadonlyMap<string, Position>, profile: SourceProfile | undefined, selection: ReadonlySet<string>, tool: PointerTool, source: string | null, view: Scene['view'] = 'fit', pins: ReadonlySet<string> = new Set(), focused: string | undefined = undefined, focusRing = true, aggregates: readonly AggregateNode[] = []): Scene {
+export function buildScene(graph: LoadedGraph, positions: ReadonlyMap<string, Position>, profile: SourceProfile | undefined, selection: ReadonlySet<string>, tool: PointerTool, source: string | null, view: Scene['view'] = 'fit', pins: ReadonlySet<string> = new Set(), focused: string | undefined = undefined, focusRing = true, aggregates: readonly AggregateNode[] = [], noted: { readonly key: string; readonly text: string } | undefined = undefined): Scene {
   const entities = graph.nodes.map((node) => {
     const id = elementKey(node.ref);
     const position = positions.get(id);
@@ -21,7 +21,7 @@ export function buildScene(graph: LoadedGraph, positions: ReadonlyMap<string, Po
   const drawn = drawnKeys(graph);
   const remainders = aggregateItems(aggregates, positions);
   const walkable = new Set([...drawn, ...remainders.entities.map((entity) => entity.id)]);
-  return { entities: [...entities, ...remainders.entities], relationships: [...relationships, ...remainders.relationships], profile, source, tool, selection: new Set([...selection].filter((key) => drawn.has(key))), pinned: new Set([...pins].filter((key) => drawn.has(key))), focused: focused !== undefined && walkable.has(focused) ? focused : undefined, focusRing, omitted: notDrawable.length, view };
+  return { entities: [...entities, ...remainders.entities], relationships: [...relationships, ...remainders.relationships], profile, source, tool, selection: new Set([...selection].filter((key) => drawn.has(key))), pinned: new Set([...pins].filter((key) => drawn.has(key))), focused: focused !== undefined && walkable.has(focused) ? focused : undefined, focusRing, omitted: notDrawable.length, view, ...(noted !== undefined && entities.some((entity) => entity.id === noted.key) ? { noted } : {}) };
 }
 
 const ANGLE_STEPS = 24;

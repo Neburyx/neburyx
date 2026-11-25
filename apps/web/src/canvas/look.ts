@@ -56,3 +56,6 @@ export const CARD_GLYPH_INSET = 10;
 export const CARD_STACK_PADDING = 7;
 export const CARD_STACK_OPACITY = 0.18;
 export const CARD_FONT_SIZE = 12;
+
+/** The colour of the note under the entity another window selected: the accent of the page. */
+export const NOTE_COLOR = '#5264a7';

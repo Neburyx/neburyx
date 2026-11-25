@@ -8,7 +8,7 @@ import { pinBadgeUri } from './pin-badge.js';
 import { styleBadgeUri } from './style-badge.js';
 import type { StyleLook } from './style-look.js';
 import { createHoverTip, type HoverTip } from './hover-tip.js';
-import { STYLE_BADGE_SIZE, STYLE_COLOR_OUTLINE_WIDTH, STYLE_LARGER_FACTOR, STYLE_TONE_COLORS, CAPTION_COLOR, CARD_BADGE_OFFSET, CARD_BADGE_SIZE, CARD_GLYPH_INSET, CARD_FONT_SIZE, CARD_HEIGHT, CARD_STACK_OPACITY, CARD_STACK_PADDING, CARD_WIDTH, AGGREGATE_WIDTH, CAPTION_KNOCKOUT, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
+import { STYLE_BADGE_SIZE, STYLE_COLOR_OUTLINE_WIDTH, STYLE_LARGER_FACTOR, STYLE_TONE_COLORS, CAPTION_COLOR, CARD_BADGE_OFFSET, CARD_BADGE_SIZE, CARD_GLYPH_INSET, CARD_FONT_SIZE, CARD_HEIGHT, CARD_STACK_OPACITY, CARD_STACK_PADDING, CARD_WIDTH, AGGREGATE_WIDTH, CAPTION_KNOCKOUT, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, NOTE_COLOR, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
 import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
@@ -26,6 +26,7 @@ import { snapshotScale, SnapshotUnavailable, type SnapshotBounds } from './snaps
 const POINTER = { userPanningEnabled: true, userZoomingEnabled: true, boxSelectionEnabled: false, autoungrabify: false, autounselectify: true };
 
 const CAPTION_BUDGET_MS = 4;
+const NOTE_GAP = 6;
 const SNAPSHOT_SETTLE_FRAMES = 2;
 // the data flags that draw a selection, a focus or the walk's ring; a picture shows none of them
 const MARKS = ['selected', 'focused', 'touched', 'ringed'] as const;
@@ -151,6 +152,24 @@ export const STYLE: StylesheetJson = [
       'underlay-shape': 'round-rectangle',
     },
   },
+  // The note another window's selection puts under an entity, below its caption: hidden with the captions when the canvas is zoomed out, on a clear fill so that no relationship line runs through its words.
+  {
+    selector: 'node[note != ""]',
+    style: {
+      label: 'data(note)',
+      'text-wrap': 'none',
+      'text-valign': 'bottom',
+      'text-halign': 'center',
+      'text-margin-y': CAPTION_TOP + CAPTION_HEIGHT - NODE_DIAMETER + NOTE_GAP,
+      'font-family': 'Inter, system-ui, sans-serif',
+      'font-size': LABEL_FONT_SIZE,
+      'font-weight': 400,
+      color: NOTE_COLOR,
+      'text-background-color': CAPTION_KNOCKOUT,
+      'text-background-opacity': 1,
+      'text-background-padding': '2px',
+    },
+  },
   { selector: 'edge[?remainder]', style: { width: 1, 'line-style': 'dashed', 'line-dash-pattern': DASH_PATTERN, 'target-arrow-shape': 'none' } },
   { selector: 'edge[origin = "unknown"]', style: { 'line-style': 'dotted', 'line-dash-pattern': DOT_PATTERN } },
   {
@@ -185,7 +204,9 @@ export const STYLE: StylesheetJson = [
   { selector: 'edge[?aggregate][?single]', style: { width: EDGE_WIDTH } },
   // Below the zoom where captions are read an entity is drawn with its glyph and badge only, and a relationship without its label, except one that is selected, joins a selected entity or has the walk's ring, and an aggregate's count; the one under the pointer is told in the page's own text (the hover tip).
   { selector: 'node.far', style: { 'background-image-opacity': [1, 0, 1] } },
+  { selector: 'node.far[note != ""]', style: { 'text-opacity': 0, 'text-background-opacity': 0 } },
   { selector: 'node.far[?selected], node.far[?focused]', style: { 'background-image-opacity': [1, 1, 1] } },
+  { selector: 'node.far[?selected][note != ""]', style: { 'text-opacity': 1, 'text-background-opacity': 1 } },
   { selector: 'edge.far', style: { label: 'data(badge)' } },
   { selector: 'edge.far[?selected], edge.far[?focused], edge.far[?touched]', style: { label: 'data(label)' } },
   { selector: 'edge[?selected]', style: { 'line-color': DERIVED_COLOR, 'target-arrow-color': DERIVED_COLOR, width: EDGE_WIDTH + SELECTED_LINE_EXTRA } },
@@ -812,6 +833,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           if (element.data('focused') !== focused) element.data('focused', focused);
           const ringed = focused && scene.focusRing !== false;
           if (element.data('ringed') !== ringed) element.data('ringed', ringed);
+          if (element.isNode()) {
+            const note = scene.noted !== undefined && scene.noted.key === item.id ? scene.noted.text : '';
+            if (element.data('note') !== note) element.data('note', note);
+          }
         }
       });
       if (hovered !== undefined && !wantedEntities.has(hovered)) hovered = undefined;

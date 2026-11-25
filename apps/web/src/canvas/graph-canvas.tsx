@@ -9,6 +9,7 @@ import { StateError } from '../state/errors.js';
 import { drawnKeys, partitionEdges } from '../state/loaded-graph.js';
 import { elementKey } from '../state/keys.js';
 import { useStoreSelector } from '../state/store.js';
+import { CHAT_SELECTION_NOTE, chatSelectionOf } from '../windows/chat-selection.js';
 import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
@@ -81,6 +82,8 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const tool = useStoreSelector(state.presentation.view, (current) => current.tool);
   const walking = useStoreSelector(state.presentation.view, (current) => current.walking);
   const focused = useStoreSelector(state.presentation.view, (current) => current.focused);
+  const chatKey = useStoreSelector(chatSelectionOf(state), (key) => key);
+  const noted = useMemo(() => (chatKey === undefined || selection.size !== 1 || !selection.has(chatKey) ? undefined : { key: chatKey, text: CHAT_SELECTION_NOTE }), [chatKey, selection]);
   const moveNote = useStoreSelector(state.presentation.view, (current) => current.moveNote);
   const menuOpen = useStoreSelector(state.presentation.view, (current) => current.openMenu !== undefined);
   const source = useStoreSelector(state.investigation, (current) => current.sourceId);
@@ -101,7 +104,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     const drawnNodes = new Set(graph.nodes.map((node) => elementKey(node.ref)));
     return allAggregates.filter((aggregate) => drawnNodes.has(aggregate.nodeKey) && !offEntityTypes.has(aggregate.neighborType));
   }, [allAggregates, graph, loadedGraph, offEntityTypes, inFocus]);
-  const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, true, aggregates), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, aggregates]);
+  const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, true, aggregates, noted), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, aggregates, noted]);
   // A menu holding the focus only takes the ring off the walk element: the scene is the same one, so the drawing that follows is not a sign that the renderer works again.
   const grouped = useMemo(() => groupScene(drawn, loadedGraph, groups, profile), [drawn, loadedGraph, groups, profile]);
   const cardPlaces = useRef<ReadonlyMap<string, Position>>(new Map());

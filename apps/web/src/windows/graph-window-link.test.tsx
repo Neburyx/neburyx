@@ -12,6 +12,7 @@ import { createAssistantSession } from '../assistant/assistant-session.js';
 import { REFUSE } from '../assistant/assistant-kit.js';
 import type { AssistantTurnRequest } from '@neburyx/contracts';
 import { createWindowChannel, type WindowChannel, type WindowScope } from './window-channel.js';
+import { CHAT_SELECTION_NOTE, chatSelectionOf } from './chat-selection.js';
 
 class FakeBroadcastChannel {
   static readonly all = new Map<string, Set<FakeBroadcastChannel>>();
@@ -189,5 +190,60 @@ describe('the follow-up referent', () => {
     } finally {
       unbind();
     }
+  });
+});
+
+describe('the note under the element a chat selected', () => {
+  async function drawn() {
+    const { client } = knowing([A]);
+    const state = createClientState();
+    const renderer = stubFactory();
+    renderApp(`/explore/${INVESTIGATION_A}`, client, state, undefined, renderer.create);
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    const sender = createWindowChannel(SCOPE);
+    opened.push(sender);
+    const stop = sender.announce('assistant');
+    const answers: unknown[] = [];
+    sender.onSelectionResult((result) => answers.push(result));
+    const noted = () => renderer.made[0]?.scenes.at(-1)?.noted;
+    return { state, sender, stop, answers, noted };
+  }
+
+  it('is drawn under the element a selection from the chat window selected, and announced politely, with the key as the only thing the chat gave', async () => {
+    const h = await drawn();
+    expect(h.noted()).toBeUndefined();
+    h.sender.sendSelection([KEY]);
+    await waitFor(() => expect(h.answers).toHaveLength(1));
+    expect(chatSelectionOf(h.state).getState()).toBe(KEY);
+    await waitFor(() => expect(h.noted()).toEqual({ key: KEY, text: CHAT_SELECTION_NOTE }));
+    const status = await screen.findByText(new RegExp(CHAT_SELECTION_NOTE));
+    expect(status.getAttribute('role')).toBe('status');
+  });
+
+  it('goes when anything else is selected on this canvas', async () => {
+    const h = await drawn();
+    h.sender.sendSelection([KEY]);
+    await waitFor(() => expect(h.noted()?.key).toBe(KEY));
+    act(() => h.state.presentation.select([]));
+    await waitFor(() => expect(h.noted()).toBeUndefined());
+    expect(chatSelectionOf(h.state).getState()).toBeUndefined();
+    expect(screen.queryByText(new RegExp(CHAT_SELECTION_NOTE))).toBeNull();
+  });
+
+  it('goes when the chat window that selected it closes', async () => {
+    const h = await drawn();
+    h.sender.sendSelection([KEY]);
+    await waitFor(() => expect(h.noted()?.key).toBe(KEY));
+    h.stop();
+    await waitFor(() => expect(h.noted()).toBeUndefined());
+    expect(chatSelectionOf(h.state).getState()).toBeUndefined();
+  });
+
+  it('is not drawn for an element the canvas does not hold, and a selection of that kind leaves no note behind', async () => {
+    const h = await drawn();
+    h.sender.sendSelection([OTHER_KEY]);
+    await waitFor(() => expect(h.answers).toHaveLength(1));
+    expect(chatSelectionOf(h.state).getState()).toBeUndefined();
+    expect(h.noted()).toBeUndefined();
   });
 });
