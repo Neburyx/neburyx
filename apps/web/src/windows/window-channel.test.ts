@@ -252,7 +252,7 @@ describe('the answer to a selection', () => {
     const own = vi.fn();
     graphs[0]?.onSelectionResult(own);
     const requestId = page.sendSelection(['k1', 'k2']);
-    expect(heard).toHaveBeenCalledWith({ requestId, onCanvas: ['k2'] });
+    expect(heard).toHaveBeenCalledWith({ windowId: expect.any(String), requestId, onCanvas: ['k2'] });
     expect(own).not.toHaveBeenCalled();
   });
 
@@ -264,7 +264,7 @@ describe('the answer to a selection', () => {
     expect(heard).not.toHaveBeenCalled();
     graph.sendSelectionResult(requestId, ['k1', 'k9']);
     expect(heard).toHaveBeenCalledTimes(1);
-    expect(heard).toHaveBeenLastCalledWith({ requestId, onCanvas: ['k1'] });
+    expect(heard).toHaveBeenLastCalledWith({ windowId: expect.any(String), requestId, onCanvas: ['k1'] });
     graph.sendSelectionResult(requestId, ['k2']);
     expect(heard).toHaveBeenCalledTimes(1);
     const late = page.sendSelection(['k1']) as string;
@@ -295,7 +295,7 @@ describe('the answer to a selection', () => {
     const { page, heard } = round((graph, { requestId, keys }) => graph.sendSelectionResult(requestId, graph === undefined ? [] : keys), 2);
     const requestId = page.sendSelection(['k1']);
     expect(heard).toHaveBeenCalledTimes(2);
-    expect(heard).toHaveBeenNthCalledWith(1, { requestId, onCanvas: ['k1'] });
+    expect(heard).toHaveBeenNthCalledWith(1, { windowId: expect.any(String), requestId, onCanvas: ['k1'] });
   });
 
   it('keeps one window that has nothing on its canvas from hiding the keys another reports', () => {
@@ -336,6 +336,40 @@ describe('the answer to a selection', () => {
     const requestId = page.sendSelection(['k1']) as string;
     graph.sendSelectionResult(requestId, ['k1']);
     expect(heard).not.toHaveBeenCalled();
+  });
+});
+
+describe('the windows that answered and the windows that are open', () => {
+  it('names the window that answered, and the ids of the open windows by role say which windows are left when one closes', () => {
+    const h = hub();
+    const [page, first, second] = [make(h), make(h), make(h)];
+    const stops = [first.announce('graph'), second.announce('graph')];
+    const answered: string[] = [];
+    page.onSelectionResult((result) => answered.push(result.windowId));
+    first.onSelection(({ requestId }) => first.sendSelectionResult(requestId, ['k1']));
+    second.onSelection(({ requestId }) => second.sendSelectionResult(requestId, []));
+    page.sendSelection(['k1']);
+    const graphs = page.openWindows.getState().get('graph');
+    expect(graphs?.size).toBe(2);
+    expect(answered).toHaveLength(2);
+    expect(answered.every((id) => graphs?.has(id))).toBe(true);
+    stops[0]?.();
+    expect(page.openWindows.getState().get('graph')?.size).toBe(1);
+    stops[1]?.();
+    expect(page.openWindows.getState().size).toBe(0);
+    expect(page.others.getState().size).toBe(0);
+  });
+
+  it('keeps the same map while it does not change, and holds none where there is no channel', () => {
+    const h = hub();
+    const [a, b] = [make(h), make(h)];
+    b.announce('assistant');
+    const before = a.openWindows.getState();
+    vi.advanceTimersByTime(HEARTBEAT_MS * 3);
+    expect(a.openWindows.getState()).toBe(before);
+    vi.stubGlobal('BroadcastChannel', undefined);
+    expect(createWindowChannel(SCOPE).openWindows.getState().size).toBe(0);
+    vi.unstubAllGlobals();
   });
 });
 

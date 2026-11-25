@@ -16,6 +16,8 @@ export interface WindowChannel {
   announce(role: WindowRole): () => void;
   /** The roles held by other windows of the scope; this window's own never count. The set is the same object while it does not change. */
   readonly others: ReadableStore<ReadonlySet<WindowRole>>;
+  /** The ids of the other windows of the scope that hold each role, as `others` has the roles; an id is random and says nothing of the window. The map is the same object while it does not change. */
+  readonly openWindows: ReadableStore<ReadonlyMap<WindowRole, ReadonlySet<string>>>;
   /** Sends the keys of the selected elements to the other windows of the scope: keys, never content. Returns the id of the request, which an answer carries back; `undefined` where the channel is unavailable or the keys are not valid (1 to 100 keys, each non-empty text of at most 200 characters), when nothing is sent. */
   sendSelection(keys: readonly string[]): string | undefined;
   /** Hears the selections of other windows of the scope; the returned function stops listening. */
@@ -35,6 +37,8 @@ export interface WindowSelection {
 
 /** @public: the selection across windows builds on it. */
 export interface WindowSelectionResult {
+  /** The window that answered: one of the ids of `openWindows` while it is open. */
+  readonly windowId: string;
   readonly requestId: string;
   readonly onCanvas: readonly string[];
 }
@@ -61,6 +65,7 @@ const MAX_PENDING = 50;
 const CHANNEL_PREFIX = 'neburyx-windows';
 const ROLES: readonly WindowRole[] = ['graph', 'assistant'];
 const NO_ROLES: ReadonlySet<WindowRole> = new Set();
+const NO_WINDOWS: ReadonlyMap<WindowRole, ReadonlySet<string>> = new Map();
 
 type Body = { readonly kind: 'hello' } | { readonly kind: 'presence'; readonly role: WindowRole; readonly open: boolean } | { readonly kind: 'select'; readonly requestId: string; readonly keys: readonly string[] } | { readonly kind: 'selected'; readonly requestId: string; readonly onCanvas: readonly string[] };
 
@@ -130,7 +135,15 @@ function newWindowId(): string {
 
 function unavailable(): WindowChannel {
   const others = createStore<ReadonlySet<WindowRole>>(NO_ROLES);
-  return { available: false, announce: () => () => undefined, others, sendSelection: () => undefined, onSelection: () => () => undefined, sendSelectionResult: () => undefined, onSelectionResult: () => () => undefined, close: () => undefined };
+  const openWindows = createStore<ReadonlyMap<WindowRole, ReadonlySet<string>>>(NO_WINDOWS);
+  return { available: false, announce: () => () => undefined, others, openWindows, sendSelection: () => undefined, onSelection: () => () => undefined, sendSelectionResult: () => undefined, onSelectionResult: () => () => undefined, close: () => undefined };
+}
+
+function sameWindows(a: ReadonlyMap<WindowRole, ReadonlySet<string>>, b: ReadonlyMap<WindowRole, ReadonlySet<string>>): boolean {
+  return a.size === b.size && [...a].every(([role, ids]) => {
+    const other = b.get(role);
+    return other !== undefined && other.size === ids.size && [...ids].every((id) => other.has(id));
+  });
 }
 
 function sameRoles(a: ReadonlySet<WindowRole>, b: ReadonlySet<WindowRole>): boolean {
@@ -144,6 +157,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
   const now = deps.now ?? Date.now;
   const windowId = newWindowId();
   const others = createStore<ReadonlySet<WindowRole>>(NO_ROLES);
+  const openWindows = createStore<ReadonlyMap<WindowRole, ReadonlySet<string>>>(NO_WINDOWS);
   const heard = new Map<string, Map<WindowRole, number>>();
   const mine = new Map<WindowRole, number>();
   const listeners = new Set<(request: WindowSelection) => void>();
@@ -170,6 +184,9 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
       if (roles.size === 0) heard.delete(id);
     }
     if (!sameRoles(live, others.getState())) others.setState(live.size === 0 ? NO_ROLES : live);
+    const byRole = new Map<WindowRole, Set<string>>();
+    for (const [id, roles] of heard) for (const role of roles.keys()) byRole.set(role, (byRole.get(role) ?? new Set<string>()).add(id));
+    if (!sameWindows(byRole, openWindows.getState())) openWindows.setState(byRole.size === 0 ? NO_WINDOWS : byRole);
   };
   const say = (role: WindowRole, open: boolean): void => post({ kind: 'presence', role, open });
   const sayAll = (): void => {
@@ -190,7 +207,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
       if (asked === undefined || now() > asked.until || asked.answered.has(message.windowId)) return;
       asked.answered.add(message.windowId);
       const onCanvas = body.onCanvas.filter((key) => asked.keys.includes(key));
-      for (const listener of [...resultListeners]) listener({ requestId: body.requestId, onCanvas });
+      for (const listener of [...resultListeners]) listener({ windowId: message.windowId, requestId: body.requestId, onCanvas });
     }
     else {
       const roles = heard.get(message.windowId) ?? new Map<WindowRole, number>();
@@ -220,6 +237,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
   return {
     available: true,
     others,
+    openWindows,
     announce(role) {
       mine.set(role, (mine.get(role) ?? 0) + 1);
       say(role, true);
