@@ -199,6 +199,27 @@ test.describe('Pop out of the Assistant panel', () => {
     await expect(line).toBeHidden({ timeout: 10_000 });
   });
 
+  test('does not show the tip of Wide when the header moves under a pointer that has not moved, and shows it when the pointer moves onto it', async ({ page, context }) => {
+    const server = await stubs(context);
+    await openInvestigation(page);
+    await openPanel(page);
+    await ask(page, 'what is here?');
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    await expect.poll(() => server.turns.length).toBe(1);
+    const clear = panel(page).getByRole('button', { name: 'Clear chat' });
+    await expect(clear).toBeVisible();
+    const [popup] = await Promise.all([page.waitForEvent('popup'), popOutButton(page).click()]);
+    await expect(panel(page).getByText(NOTE)).toBeVisible();
+    await expect(clear).toBeHidden();
+    const wide = panel(page).getByRole('button', { name: 'Wide' });
+    const tip = () => wide.evaluate((element) => getComputedStyle(element, '::after').content);
+    expect(await tip()).toBe('none');
+    const box = await wide.boundingBox();
+    await page.mouse.move((box?.x ?? 0) + 5, (box?.y ?? 0) + 5);
+    await expect.poll(tip).toBe('"Wide"');
+    await popup.close();
+  });
+
   test('is reached from the keyboard, and shows its tooltip and the note as the frames draw them', async ({ page, context }, info) => {
     await stubs(context);
     await openInvestigation(page);

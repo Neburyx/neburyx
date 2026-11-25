@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { ASSISTANT_COPY } from './copy.js';
 
 function PopOutIcon() {
@@ -13,6 +13,8 @@ function PopOutIcon() {
 export function PopOutButton({ pressed, onPress }: { readonly pressed: boolean; readonly onPress: () => void }) {
   const [shown, setShown] = useState(false);
   const tipId = useId();
+  // the header moves when the panel collapses or comes back: the tip is not kept for a pointer that is no longer on the button
+  useEffect(() => setShown(false), [pressed]);
   return (
     <span className="assistant-popout">
       <button

@@ -266,6 +266,23 @@ describe('the panel while the page of the chat is open in another window', () =>
     });
   });
 
+  it('holds back the tips of the header buttons after the header moved, until the pointer moves, and hides the Pop out tip', async () => {
+    await panel();
+    const root = document.querySelector('.assistant-panel') as HTMLElement;
+    await userEvent.hover(screen.getByRole('button', { name: ASSISTANT_COPY.popOut }));
+    expect(screen.queryByRole('tooltip')).not.toBeNull();
+    expect(root.getAttribute('data-tips-quiet')).toBeNull();
+    const stop = await pageOpens(window2());
+    expect(root.getAttribute('data-tips-quiet')).toBe('true');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await act(async () => void window.dispatchEvent(new Event('pointermove')));
+    expect(root.getAttribute('data-tips-quiet')).toBeNull();
+    await stop();
+    expect(root.getAttribute('data-tips-quiet')).toBe('true');
+    await act(async () => void window.dispatchEvent(new Event('pointermove')));
+    expect(root.getAttribute('data-tips-quiet')).toBeNull();
+  });
+
   it('closes on Escape and on Close as the open panel does, and moves the focus to the composer when it is restored while the button has it', async () => {
     const h = harness(async () => ok(REFUSE));
     const closed = vi.fn();

@@ -25,6 +25,7 @@ import { useAssistant } from './use-assistant.js';
 import { PopOutButton } from './pop-out-button.js';
 import { PopOutNote } from './pop-out-notes.js';
 import { usePopOutNote } from './use-pop-out-note.js';
+import { useQuietTipsAfterLayoutChange } from './use-quiet-tips.js';
 import { popOut } from '../windows/pop-out.js';
 import { useOtherWindowRoles, useWindowChannelAvailable } from '../windows/use-window-channel.js';
 
@@ -140,6 +141,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const popOutNote = usePopOutNote(pageElsewhere);
   const [showHere, setShowHere] = useState(false);
   const collapsed = !page && pageElsewhere && !showHere;
+  const tipsQuiet = useQuietTipsAfterLayoutChange(collapsed);
   const wasCollapsed = useRef(false);
   const focusLost = useRef(false);
   const clearButton = useRef<HTMLButtonElement>(null);
@@ -250,6 +252,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
     <div
       className={page ? 'ask-panel assistant-panel assistant-surface-page' : 'ask-panel assistant-panel'}
       data-popped-out={collapsed ? 'true' : undefined}
+      data-tips-quiet={tipsQuiet ? 'true' : undefined}
       onKeyDown={(event) => {
         if (page || event.key !== 'Escape') return;
         event.preventDefault();
