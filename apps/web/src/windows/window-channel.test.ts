@@ -274,6 +274,16 @@ describe('the answer to a selection', () => {
     expect(h.sent.at(-1)?.data).toMatchObject({ kind: 'selected', requestId: late });
   });
 
+  it('forgets the oldest selection waiting for an answer once 50 are waiting', () => {
+    const { page, graphs, heard } = round(() => undefined);
+    const ids = Array.from({ length: 51 }, () => page.sendSelection(['k1']) as string);
+    const graph = graphs[0] as WindowChannel;
+    graph.sendSelectionResult(ids[0] as string, ['k1']);
+    expect(heard).not.toHaveBeenCalled();
+    graph.sendSelectionResult(ids[50] as string, ['k1']);
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
+
   it('is never answered when no window answers, so no highlight is to be claimed', () => {
     const { page, heard } = round(() => undefined);
     page.sendSelection(['k1']);
