@@ -90,7 +90,12 @@ export interface InvestigationList {
 }
 
 /** The pages of the caller's investigations for the filters given. A change of the filters reads the first page again and ignores what an earlier read answers late; the rows on screen stay until the new ones come. */
-export function useInvestigationList(client: ApiClient, filters: ListFilters): InvestigationList {
+/** How a list is read: `readWaitMs`, when given, is how long a read may wait for an answer before it is given up as a failure with Try again; absent, a read waits as long as the request does. */
+export interface ListReadOptions {
+  readonly readWaitMs?: number;
+}
+
+export function useInvestigationList(client: ApiClient, filters: ListFilters, options: ListReadOptions = {}): InvestigationList {
   const [state, dispatch] = useReducer(reduceList, INITIAL);
   const generation = useRef(0);
   const controller = useRef<AbortController | undefined>(undefined);
@@ -98,6 +103,15 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
   const latest = useRef(state);
   latest.current = state;
   const { status, sourceId, text, deleted, limit } = filters;
+  const { readWaitMs } = options;
+
+  const giveUpRead = useCallback((mine: number, where: 'first' | 'more') => {
+    if (generation.current !== mine) return;
+    generation.current += 1;
+    moreInFlight.current = false;
+    controller.current?.abort();
+    dispatch({ type: 'failed', where, failure: { code: 'NETWORK_UNAVAILABLE' } });
+  }, []);
 
   const loadFirst = useCallback(() => {
     generation.current += 1;
@@ -107,12 +121,15 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
     const abort = new AbortController();
     controller.current = abort;
     dispatch({ type: 'first-started' });
+    // a read that gets no answer in time is given up: its late answer is dropped and the failure is shown
+    const giveUp = readWaitMs === undefined ? undefined : window.setTimeout(() => giveUpRead(mine, 'first'), readWaitMs);
     void client.listInvestigationPage(querySoFar({ status, sourceId, text, deleted, ...(limit === undefined ? {} : { limit }) }), abort.signal).then((result) => {
+      window.clearTimeout(giveUp);
       if (generation.current !== mine) return;
       if (result.ok) dispatch({ type: 'first-answered', items: result.value.items, matching: result.value.matching.value, savedViews: result.value.counts.savedViews.count.value, nextCursor: result.value.nextCursor, retentionDays: result.value.retention.deletedInvestigationsDays });
       else dispatch({ type: 'failed', where: 'first', failure: result.failure });
     });
-  }, [client, status, sourceId, text, deleted, limit]);
+  }, [client, status, sourceId, text, deleted, limit, readWaitMs, giveUpRead]);
 
   useEffect(() => {
     loadFirst();
@@ -133,14 +150,16 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
     const mine = generation.current;
     const cursor = held.nextCursor;
     dispatch({ type: 'more-started' });
+    const giveUp = readWaitMs === undefined ? undefined : window.setTimeout(() => giveUpRead(mine, 'more'), readWaitMs);
     void client.listInvestigationPage({ ...querySoFar({ status, sourceId, text, deleted, ...(limit === undefined ? {} : { limit }) }), cursor }, controller.current?.signal).then((result) => {
+      window.clearTimeout(giveUp);
       if (generation.current !== mine) return;
       moreInFlight.current = false;
       if (result.ok) dispatch({ type: 'more-answered', items: result.value.items, matching: result.value.matching.value, nextCursor: result.value.nextCursor });
       else if (result.failure.code === 'CURSOR_INVALIDATED') loadFirst();
       else dispatch({ type: 'failed', where: 'more', failure: result.failure });
     });
-  }, [client, status, sourceId, text, deleted, limit, loadFirst]);
+  }, [client, status, sourceId, text, deleted, limit, readWaitMs, giveUpRead, loadFirst]);
 
   return {
     state,

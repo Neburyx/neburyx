@@ -14,6 +14,8 @@ export const NEW_CHAT_COPY = {
   showMore: 'Show more',
   loadingMore: 'Loading…',
   moreFailed: 'The next investigations could not be read.',
+  lookupFailed: 'Whether these investigations have a chat could not be read.',
+  lookupTryAgain: 'Try again to check for chats',
 } as const;
 
 /** The second line of a row: the case reference and the source, or the source alone when there is no case reference. */

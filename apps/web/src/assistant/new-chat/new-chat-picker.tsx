@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import type { InvestigationListItem } from '@neburyx/contracts';
 import { useApiClient } from '../../api/client-context.js';
-import { canRetry, FailureNotice } from '../../failure-notice.js';
+import { canRetry } from '../../failure-notice.js';
+import { READ_WAIT_MS } from '../read-wait.js';
+import { ListFailure } from '../list-failure.js';
 import { useInvestigationList } from '../../investigations-page/use-investigation-list.js';
 import { SEARCH_DEBOUNCE_MS } from '../../patterns/start-entity.js';
 import { ASSISTANT_PATH } from '../../shell/navigation.js';
@@ -106,12 +108,12 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   const [place, setPlace] = useState<Place | undefined>(undefined);
   const [text, setText] = useState('');
   const [query, setQuery] = useState<string | undefined>(undefined);
-  const list = useInvestigationList(client, { status: 'open', sourceId: undefined, text: query, limit: PAGE_SIZE });
+  const list = useInvestigationList(client, { status: 'open', sourceId: undefined, text: query, limit: PAGE_SIZE }, { readWaitMs: READ_WAIT_MS });
   const { state } = list;
   // while a search is read the rows of the earlier list are not drawn, so they cannot be highlighted or picked either
   const waiting = state.items === undefined || state.loading;
   const rows = waiting ? [] : (state.items ?? []).filter((row) => row.status === 'open');
-  const chatOf = useChatsOf(rows.map((row) => row.id));
+  const { chatOf, failed: lookupFailed, retry: retryLookup } = useChatsOf(rows.map((row) => row.id));
   const optionOf = (id: string): string => `${listId}-${id}`;
   /** The rows the highlight can stop on: those that can be picked. */
   const stops = rows.filter((row) => pickable(row, chatOf(row.id)));
@@ -268,7 +270,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
       <div className="new-chat-rows">
         {state.failure?.where === 'first' ? (
           <div className="new-chat-note">
-            <FailureNotice failure={state.failure.failure} />
+            <ListFailure failure={state.failure.failure} />
             {canRetry(state.failure.failure) ? (
               <button type="button" className="secondary" onClick={list.retry}>
                 {NEW_CHAT_COPY.tryAgain}
@@ -295,6 +297,14 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
           </div>
         ) : null}
       </div>
+      {lookupFailed && !waiting ? (
+        <div className="new-chat-note">
+          <p role="alert">{NEW_CHAT_COPY.lookupFailed}</p>
+          <button type="button" className="secondary" aria-label={NEW_CHAT_COPY.lookupTryAgain} onClick={retryLookup}>
+            {NEW_CHAT_COPY.tryAgain}
+          </button>
+        </div>
+      ) : null}
       <p className="new-chat-footer">{NEW_CHAT_COPY.footer}</p>
     </div>,
     document.body,
