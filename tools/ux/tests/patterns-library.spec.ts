@@ -138,8 +138,8 @@ test.describe('the patterns library page', () => {
     await expect(page.getByRole('tab')).toHaveText(['My patterns · 2', 'Shared with me · 1', 'Built-in · 3']);
   });
 
-  test('has a Patterns item in the sidebar between Investigations and Sources, current on the page', async ({ page }) => {
-    await expect(page.getByRole('navigation').getByRole('link')).toHaveText(['Home', 'Investigations', 'Patterns', 'Sources']);
+  test('has a Patterns item in the sidebar between Assistant and Sources, current on the page', async ({ page }) => {
+    await expect(page.getByRole('navigation').getByRole('link')).toHaveText(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources']);
     await expect(page.getByRole('navigation').getByRole('link', { name: 'Patterns' })).toHaveAttribute('aria-current', 'page');
   });
 });
