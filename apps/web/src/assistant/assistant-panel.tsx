@@ -132,7 +132,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const principalId = usePrincipalIdWhenProvided();
   const [confirming, setConfirming] = useState<{ readonly investigationId: string; readonly principalId: string; readonly epoch: number } | undefined>(undefined);
   const [clearedNote, setClearedNote] = useState(false);
-  const [popOutRefused, setPopOutRefused] = useState(false);
+  const [popOutNote, setPopOutNote] = useState<'refused' | 'unreachable' | undefined>(undefined);
   const otherWindows = useOtherWindowRoles();
   const channelAvailable = useWindowChannelAvailable();
   const pageElsewhere = otherWindows.has('assistant');
@@ -175,7 +175,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   const pressPopOut = (): void => {
     if (investigationId === null) return;
     const result = popOut(investigationId, { open: (url, name) => window.open(url, name), pageOpenElsewhere: () => pageElsewhere, channelAvailable: () => channelAvailable });
-    setPopOutRefused(result === 'refused');
+    setPopOutNote(result === 'refused' || result === 'unreachable' ? result : undefined);
     if (result === 'unreachable') setShowHere(false);
   };
   const noteLostFocus = useCallback(() => {
@@ -273,7 +273,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
           </div>
         </header>
       )}
-      {popOutRefused ? <p className="ask-note assistant-popout-refused" role="status">{ASSISTANT_COPY.popOutRefused}</p> : null}
+      {popOutNote === undefined ? null : <p className="ask-note assistant-popout-refused" role="status">{popOutNote === 'refused' ? ASSISTANT_COPY.popOutRefused : ASSISTANT_COPY.popOutUnreachable}</p>}
       <p className="visually-hidden" role="status" aria-live="polite">
         {clearedNote ? ASSISTANT_COPY.cleared : announced}
       </p>

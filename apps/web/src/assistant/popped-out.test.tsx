@@ -202,7 +202,7 @@ describe('the panel while the page of the chat is open in another window', () =>
     await waitFor(() => expect(document.querySelectorAll('[data-stored-turn]').length + document.querySelectorAll('.assistant-stored-row').length).toBeGreaterThan(1));
   });
 
-  it('goes back to the note when Pop out cannot reach the window of the page after the chat was shown here, and says nothing more', async () => {
+  it('tells the person why when Pop out cannot reach the window of the page, and goes back to the note if the chat was shown here', async () => {
     const blank = { closed: false, focus: vi.fn(), close: vi.fn(), location: { href: 'about:blank' } };
     const open = vi.spyOn(window, 'open').mockReturnValue(blank as unknown as Window);
     await panel();
@@ -213,6 +213,7 @@ describe('the panel while the page of the chat is open in another window', () =>
     expect(open).toHaveBeenCalledTimes(1);
     expect(blank.close).toHaveBeenCalledTimes(1);
     expect(note()).not.toBeNull();
+    expect(screen.getAllByText(ASSISTANT_COPY.popOutUnreachable)).toHaveLength(1);
     expect(screen.queryByText(ASSISTANT_COPY.popOutRefused)).toBeNull();
   });
 
