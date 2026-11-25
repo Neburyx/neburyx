@@ -29,14 +29,12 @@ export interface WindowChannel {
   close(): void;
 }
 
-/** @public: the selection across windows builds on it. */
-export interface WindowSelection {
+interface WindowSelection {
   readonly requestId: string;
   readonly keys: readonly string[];
 }
 
-/** @public: the selection across windows builds on it. */
-export interface WindowSelectionResult {
+interface WindowSelectionResult {
   /** The window that answered: one of the ids of `openWindows` while it is open. */
   readonly windowId: string;
   readonly requestId: string;
