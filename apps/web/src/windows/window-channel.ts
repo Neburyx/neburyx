@@ -16,11 +16,25 @@ export interface WindowChannel {
   announce(role: WindowRole): () => void;
   /** The roles held by other windows of the scope; this window's own never count. The set is the same object while it does not change. */
   readonly others: ReadableStore<ReadonlySet<WindowRole>>;
-  /** Sends the keys of the selected elements to the other windows of the scope: keys, never content. Keys that are not valid are not sent. */
-  sendSelection(keys: readonly string[]): void;
+  /** Sends the keys of the selected elements to the other windows of the scope: keys, never content. Returns the id of the request, which an answer carries back; `undefined` where the channel is unavailable or the keys are not valid (1 to 100 keys, each non-empty text of at most 200 characters), when nothing is sent. */
+  sendSelection(keys: readonly string[]): string | undefined;
   /** Hears the selections of other windows of the scope; the returned function stops listening. */
-  onSelection(listener: (keys: readonly string[]) => void): () => void;
+  onSelection(listener: (request: SelectionRequest) => void): () => void;
+  /** Answers a selection: which of its keys the window has on its canvas (0 to 100 keys). Nothing is sent where the request id or a key is not valid. */
+  sendSelectionResult(requestId: string, onCanvas: readonly string[]): void;
+  /** Hears the answers of other windows of the scope; a request id the listener did not send is its own concern. */
+  onSelectionResult(listener: (result: SelectionResult) => void): () => void;
   close(): void;
+}
+
+export interface SelectionRequest {
+  readonly requestId: string;
+  readonly keys: readonly string[];
+}
+
+export interface SelectionResult {
+  readonly requestId: string;
+  readonly onCanvas: readonly string[];
 }
 
 export interface ChannelLike {
@@ -38,21 +52,31 @@ export const HEARTBEAT_MS = 5000;
 export const EXPIRY_MS = 15000;
 export const MAX_SELECTION_KEYS = 100;
 export const MAX_KEY_LENGTH = 200;
+export const MAX_REQUEST_ID_LENGTH = 64;
 
 const CHANNEL_PREFIX = 'neburyx-windows';
 const ROLES: readonly WindowRole[] = ['graph', 'assistant'];
 const NO_ROLES: ReadonlySet<WindowRole> = new Set();
 
-type Body = { readonly kind: 'hello' } | { readonly kind: 'presence'; readonly role: WindowRole; readonly open: boolean } | { readonly kind: 'select'; readonly keys: readonly string[] };
+type Body = { readonly kind: 'hello' } | { readonly kind: 'presence'; readonly role: WindowRole; readonly open: boolean } | { readonly kind: 'select'; readonly requestId: string; readonly keys: readonly string[] } | { readonly kind: 'selected'; readonly requestId: string; readonly onCanvas: readonly string[] };
 
 const MEMBERS: Readonly<Record<Body['kind'], readonly string[]>> = {
   hello: ['v', 'investigationId', 'sourceId', 'windowId', 'kind'],
   presence: ['v', 'investigationId', 'sourceId', 'windowId', 'kind', 'role', 'open'],
-  select: ['v', 'investigationId', 'sourceId', 'windowId', 'kind', 'keys'],
+  select: ['v', 'investigationId', 'sourceId', 'windowId', 'kind', 'requestId', 'keys'],
+  selected: ['v', 'investigationId', 'sourceId', 'windowId', 'kind', 'requestId', 'onCanvas'],
 };
 
+function textKeys(keys: unknown, least: number): keys is readonly string[] {
+  return Array.isArray(keys) && keys.length >= least && keys.length <= MAX_SELECTION_KEYS && keys.every((key) => typeof key === 'string' && key !== '' && key.length <= MAX_KEY_LENGTH);
+}
+
 function validKeys(keys: unknown): keys is readonly string[] {
-  return Array.isArray(keys) && keys.length >= 1 && keys.length <= MAX_SELECTION_KEYS && keys.every((key) => typeof key === 'string' && key !== '' && key.length <= MAX_KEY_LENGTH);
+  return textKeys(keys, 1);
+}
+
+function validRequestId(id: unknown): id is string {
+  return typeof id === 'string' && id.length >= 1 && id.length <= MAX_REQUEST_ID_LENGTH;
 }
 
 /** What a message says when it is whole, of this scope and of the version: an object with exactly the members of its kind. Anything else is nothing. */
@@ -60,7 +84,7 @@ export function readMessage(data: unknown, scope: WindowScope): { readonly windo
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return undefined;
   const record = data as Record<string, unknown>;
   const kind = record['kind'];
-  if (kind !== 'hello' && kind !== 'presence' && kind !== 'select') return undefined;
+  if (kind !== 'hello' && kind !== 'presence' && kind !== 'select' && kind !== 'selected') return undefined;
   const names = Object.keys(record);
   const members = MEMBERS[kind];
   if (names.length !== members.length || !names.every((name) => members.includes(name))) return undefined;
@@ -72,8 +96,14 @@ export function readMessage(data: unknown, scope: WindowScope): { readonly windo
     const open = record['open'];
     return ROLES.some((known) => known === role) && typeof open === 'boolean' ? { windowId, body: { kind, role: role as WindowRole, open } } : undefined;
   }
-  const keys = record['keys'];
-  return validKeys(keys) ? { windowId, body: { kind, keys: [...keys] } } : undefined;
+  const requestId = record['requestId'];
+  if (!validRequestId(requestId)) return undefined;
+  if (kind === 'select') {
+    const keys = record['keys'];
+    return validKeys(keys) ? { windowId, body: { kind, requestId, keys: [...keys] } } : undefined;
+  }
+  const onCanvas = record['onCanvas'];
+  return textKeys(onCanvas, 0) ? { windowId, body: { kind, requestId, onCanvas: [...onCanvas] } } : undefined;
 }
 
 function browserFactory(name: string): ChannelLike | undefined {
@@ -91,7 +121,7 @@ function newWindowId(): string {
 
 function unavailable(): WindowChannel {
   const others = createStore<ReadonlySet<WindowRole>>(NO_ROLES);
-  return { available: false, announce: () => () => undefined, others, sendSelection: () => undefined, onSelection: () => () => undefined, close: () => undefined };
+  return { available: false, announce: () => () => undefined, others, sendSelection: () => undefined, onSelection: () => () => undefined, sendSelectionResult: () => undefined, onSelectionResult: () => () => undefined, close: () => undefined };
 }
 
 function sameRoles(a: ReadonlySet<WindowRole>, b: ReadonlySet<WindowRole>): boolean {
@@ -107,8 +137,10 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
   const others = createStore<ReadonlySet<WindowRole>>(NO_ROLES);
   const heard = new Map<string, Map<WindowRole, number>>();
   const mine = new Map<WindowRole, number>();
-  const listeners = new Set<(keys: readonly string[]) => void>();
+  const listeners = new Set<(request: SelectionRequest) => void>();
+  const resultListeners = new Set<(result: SelectionResult) => void>();
   let closed = false;
+  let requests = 0;
 
   const post = (body: Body): void => {
     if (closed) return;
@@ -142,7 +174,8 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
     if (message === undefined || message.windowId === windowId || closed) return;
     const { body } = message;
     if (body.kind === 'hello') sayAll();
-    else if (body.kind === 'select') for (const listener of [...listeners]) listener(body.keys);
+    else if (body.kind === 'select') for (const listener of [...listeners]) listener({ requestId: body.requestId, keys: body.keys });
+    else if (body.kind === 'selected') for (const listener of [...resultListeners]) listener({ requestId: body.requestId, onCanvas: body.onCanvas });
     else {
       const roles = heard.get(message.windowId) ?? new Map<WindowRole, number>();
       if (body.open) roles.set(body.role, now());
@@ -187,12 +220,25 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
       };
     },
     sendSelection(keys) {
-      if (validKeys(keys)) post({ kind: 'select', keys: [...keys] });
+      if (!validKeys(keys)) return undefined;
+      requests += 1;
+      const requestId = `${windowId}:${requests}`;
+      post({ kind: 'select', requestId, keys: [...keys] });
+      return requestId;
     },
     onSelection(listener) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
+      };
+    },
+    sendSelectionResult(requestId, onCanvas) {
+      if (validRequestId(requestId) && textKeys(onCanvas, 0)) post({ kind: 'selected', requestId, onCanvas: [...onCanvas] });
+    },
+    onSelectionResult(listener) {
+      resultListeners.add(listener);
+      return () => {
+        resultListeners.delete(listener);
       };
     },
     close() {
@@ -205,6 +251,7 @@ export function createWindowChannel(scope: WindowScope, deps: WindowChannelDeps 
         window.removeEventListener('pageshow', shown);
       }
       listeners.clear();
+      resultListeners.clear();
       channel.onmessage = null;
       channel.close();
     },

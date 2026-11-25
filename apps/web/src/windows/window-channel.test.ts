@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createWindowChannel, EXPIRY_MS, HEARTBEAT_MS, MAX_KEY_LENGTH, MAX_SELECTION_KEYS, readMessage, type ChannelLike, type WindowChannel, type WindowScope } from './window-channel.js';
+import { createWindowChannel, EXPIRY_MS, HEARTBEAT_MS, MAX_KEY_LENGTH, MAX_REQUEST_ID_LENGTH, MAX_SELECTION_KEYS, readMessage, type ChannelLike, type WindowChannel, type WindowScope } from './window-channel.js';
 
 const SCOPE: WindowScope = { principalId: 'p1', investigationId: 'inv-1', sourceId: 'src-1' };
 
@@ -77,12 +77,21 @@ describe('what a message is', () => {
     ['an extra member', envelope({ kind: 'hello', title: 'A title' })],
     ['a presence with an unknown role', envelope({ kind: 'presence', role: 'table', open: true })],
     ['a presence with no flag', envelope({ kind: 'presence', role: 'graph', open: 'yes' })],
-    ['a selection with no keys', envelope({ kind: 'select', keys: [] })],
-    ['a selection with too many keys', envelope({ kind: 'select', keys: Array.from({ length: MAX_SELECTION_KEYS + 1 }, (_, index) => `k${index}`) })],
-    ['a selection with a key that is not text', envelope({ kind: 'select', keys: [1] })],
-    ['a selection with an empty key', envelope({ kind: 'select', keys: [''] })],
-    ['a selection with a key too long', envelope({ kind: 'select', keys: ['k'.repeat(MAX_KEY_LENGTH + 1)] })],
-    ['a selection that also carries text', envelope({ kind: 'select', keys: ['k1'], text: 'content' })],
+    ['a selection with no keys', envelope({ kind: 'select', requestId: 'r1', keys: [] })],
+    ['a selection with too many keys', envelope({ kind: 'select', requestId: 'r1', keys: Array.from({ length: MAX_SELECTION_KEYS + 1 }, (_, index) => `k${index}`) })],
+    ['a selection with a key that is not text', envelope({ kind: 'select', requestId: 'r1', keys: [1] })],
+    ['a selection with an empty key', envelope({ kind: 'select', requestId: 'r1', keys: [''] })],
+    ['a selection with a key too long', envelope({ kind: 'select', requestId: 'r1', keys: ['k'.repeat(MAX_KEY_LENGTH + 1)] })],
+    ['a selection that also carries text', envelope({ kind: 'select', requestId: 'r1', keys: ['k1'], text: 'content' })],
+    ['a selection with no request id', envelope({ kind: 'select', keys: ['k1'] })],
+    ['a selection with a request id that is empty', envelope({ kind: 'select', requestId: '', keys: ['k1'] })],
+    ['a selection with a request id too long', envelope({ kind: 'select', requestId: 'r'.repeat(MAX_REQUEST_ID_LENGTH + 1), keys: ['k1'] })],
+    ['an answer with no request id', envelope({ kind: 'selected', onCanvas: [] })],
+    ['an answer with no onCanvas', envelope({ kind: 'selected', requestId: 'r1' })],
+    ['an answer whose onCanvas is not text', envelope({ kind: 'selected', requestId: 'r1', onCanvas: [1] })],
+    ['an answer with an empty key', envelope({ kind: 'selected', requestId: 'r1', onCanvas: [''] })],
+    ['an answer with more than 100 keys', envelope({ kind: 'selected', requestId: 'r1', onCanvas: Array.from({ length: MAX_SELECTION_KEYS + 1 }, (_, index) => `k${index}`) })],
+    ['an answer that also carries the keys', envelope({ kind: 'selected', requestId: 'r1', onCanvas: [], keys: ['k1'] })],
   ])('is nothing when it is %s', (_name, data) => {
     expect(readMessage(data, SCOPE)).toBeUndefined();
   });
@@ -90,7 +99,8 @@ describe('what a message is', () => {
   it('is read when whole, of the scope and of the version', () => {
     expect(readMessage(envelope({ kind: 'hello' }), SCOPE)).toEqual({ windowId: 'w-other', body: { kind: 'hello' } });
     expect(readMessage(envelope({ kind: 'presence', role: 'graph', open: true }), SCOPE)).toEqual({ windowId: 'w-other', body: { kind: 'presence', role: 'graph', open: true } });
-    expect(readMessage(envelope({ kind: 'select', keys: ['k'.repeat(MAX_KEY_LENGTH)] }), SCOPE)?.body).toEqual({ kind: 'select', keys: ['k'.repeat(MAX_KEY_LENGTH)] });
+    expect(readMessage(envelope({ kind: 'select', requestId: 'r'.repeat(MAX_REQUEST_ID_LENGTH), keys: ['k'.repeat(MAX_KEY_LENGTH)] }), SCOPE)?.body).toEqual({ kind: 'select', requestId: 'r'.repeat(MAX_REQUEST_ID_LENGTH), keys: ['k'.repeat(MAX_KEY_LENGTH)] });
+    expect(readMessage(envelope({ kind: 'selected', requestId: 'r1', onCanvas: [] }), SCOPE)?.body).toEqual({ kind: 'selected', requestId: 'r1', onCanvas: [] });
   });
 });
 
@@ -113,8 +123,10 @@ describe('a channel that is not there', () => {
     expect(opened.others.getState().size).toBe(0);
     const heard = vi.fn();
     opened.onSelection(heard)();
+    opened.onSelectionResult(heard)();
+    opened.sendSelectionResult('r1', []);
     opened.announce('assistant')();
-    opened.sendSelection(['k1']);
+    expect(opened.sendSelection(['k1'])).toBeUndefined();
     opened.close();
     expect(heard).not.toHaveBeenCalled();
   });
@@ -160,13 +172,13 @@ describe('what only the same investigation and source hear', () => {
     const here = make(h);
     const heard = vi.fn();
     here.onSelection(heard);
-    h.deliver(NAME, envelope({ kind: 'select', keys: ['k1'], text: 'x' }));
+    h.deliver(NAME, envelope({ kind: 'select', requestId: 'r1', keys: ['k1'], text: 'x' }));
     h.deliver(NAME, 'garbage');
     h.deliver(NAME, envelope({ kind: 'presence', role: 'graph', open: 1 }));
     expect(heard).not.toHaveBeenCalled();
     expect(here.others.getState().size).toBe(0);
-    h.deliver(NAME, envelope({ kind: 'select', keys: ['k1', 'k2'] }));
-    expect(heard).toHaveBeenCalledWith(['k1', 'k2']);
+    h.deliver(NAME, envelope({ kind: 'select', requestId: 'r1', keys: ['k1', 'k2'] }));
+    expect(heard).toHaveBeenCalledWith({ requestId: 'r1', keys: ['k1', 'k2'] });
   });
 });
 
@@ -179,12 +191,13 @@ describe('the selection', () => {
     b.onSelection(heardB);
     c.onSelection(heardC);
     h.sent.length = 0;
-    a.sendSelection(['k1', 'k2']);
+    const requestId = a.sendSelection(['k1', 'k2']);
+    expect(requestId).toEqual(expect.any(String));
     expect(heardA).not.toHaveBeenCalled();
-    expect(heardB).toHaveBeenCalledWith(['k1', 'k2']);
-    expect(heardC).toHaveBeenCalledWith(['k1', 'k2']);
+    expect(heardB).toHaveBeenCalledWith({ requestId, keys: ['k1', 'k2'] });
+    expect(heardC).toHaveBeenCalledWith({ requestId, keys: ['k1', 'k2'] });
     expect(h.sent).toHaveLength(1);
-    expect(Object.keys(h.sent[0]?.data as object).sort()).toEqual(['investigationId', 'keys', 'kind', 'sourceId', 'v', 'windowId']);
+    expect(Object.keys(h.sent[0]?.data as object).sort()).toEqual(['investigationId', 'keys', 'kind', 'requestId', 'sourceId', 'v', 'windowId']);
     expect(JSON.stringify(h.sent[0]?.data)).not.toMatch(/title|property|text|count/u);
   });
 
@@ -194,12 +207,17 @@ describe('the selection', () => {
     const heard = vi.fn();
     b.onSelection(heard);
     h.sent.length = 0;
-    a.sendSelection([]);
-    a.sendSelection(['']);
-    a.sendSelection(['k'.repeat(MAX_KEY_LENGTH + 1)]);
-    a.sendSelection(Array.from({ length: MAX_SELECTION_KEYS + 1 }, (_, index) => `k${index}`));
+    const refused = [a.sendSelection([]), a.sendSelection(['']), a.sendSelection(['k'.repeat(MAX_KEY_LENGTH + 1)]), a.sendSelection(Array.from({ length: MAX_SELECTION_KEYS + 1 }, (_, index) => `k${index}`))];
+    expect(refused).toEqual([undefined, undefined, undefined, undefined]);
     expect(h.sent).toHaveLength(0);
     expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('gives each selection an id of its own', () => {
+    const h = hub();
+    const a = make(h);
+    const ids = [a.sendSelection(['k1']), a.sendSelection(['k1'])];
+    expect(new Set(ids).size).toBe(2);
   });
 
   it('stops being heard after the listener is removed and after the channel is closed', () => {
@@ -215,6 +233,56 @@ describe('the selection', () => {
     b.close();
     a.sendSelection(['k2']);
     expect(later).not.toHaveBeenCalled();
+  });
+});
+
+describe('the answer to a selection', () => {
+  it('reaches the window that selected, with the id of its request and the keys on the canvas, and not the window that answered', () => {
+    const h = hub();
+    const [page, graph] = [make(h), make(h)];
+    const heard = vi.fn();
+    const own = vi.fn();
+    page.onSelectionResult(heard);
+    graph.onSelectionResult(own);
+    graph.sendSelectionResult('r1', ['k2']);
+    graph.sendSelectionResult('r2', []);
+    expect(heard).toHaveBeenNthCalledWith(1, { requestId: 'r1', onCanvas: ['k2'] });
+    expect(heard).toHaveBeenNthCalledWith(2, { requestId: 'r2', onCanvas: [] });
+    expect(own).not.toHaveBeenCalled();
+  });
+
+  it('is an answer of the window that was asked: a selection through one channel and the answer through the other make one round trip', () => {
+    const h = hub();
+    const [page, graph] = [make(h), make(h)];
+    graph.onSelection(({ requestId, keys }) => graph.sendSelectionResult(requestId, keys.slice(0, 1)));
+    const heard = vi.fn();
+    page.onSelectionResult(heard);
+    const requestId = page.sendSelection(['k1', 'k2']);
+    expect(heard).toHaveBeenCalledWith({ requestId, onCanvas: ['k1'] });
+  });
+
+  it('sends nothing when the request id or a key is not valid, and ignores the answer of another scope', () => {
+    const h = hub();
+    const [page, graph] = [make(h), make(h)];
+    const heard = vi.fn();
+    page.onSelectionResult(heard);
+    h.sent.length = 0;
+    graph.sendSelectionResult('', ['k1']);
+    graph.sendSelectionResult('r'.repeat(MAX_REQUEST_ID_LENGTH + 1), ['k1']);
+    graph.sendSelectionResult('r1', ['']);
+    graph.sendSelectionResult('r1', Array.from({ length: MAX_SELECTION_KEYS + 1 }, (_, index) => `k${index}`));
+    expect(h.sent).toHaveLength(0);
+    h.deliver(NAME, { ...envelope({ kind: 'selected', requestId: 'r1', onCanvas: [] }), investigationId: 'inv-2' });
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('stops being heard after the listener is removed', () => {
+    const h = hub();
+    const [page, graph] = [make(h), make(h)];
+    const heard = vi.fn();
+    page.onSelectionResult(heard)();
+    graph.sendSelectionResult('r1', ['k1']);
+    expect(heard).not.toHaveBeenCalled();
   });
 });
 
