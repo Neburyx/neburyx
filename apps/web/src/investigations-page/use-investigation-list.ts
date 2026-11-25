@@ -89,12 +89,12 @@ export interface InvestigationList {
   readonly focusTaken: () => void;
 }
 
-/** The pages of the caller's investigations for the filters given. A change of the filters reads the first page again and ignores what an earlier read answers late; the rows on screen stay until the new ones come. */
 /** How a list is read: `readWaitMs`, when given, is how long a read may wait for an answer before it is given up as a failure with Try again; absent, a read waits as long as the request does. */
 export interface ListReadOptions {
   readonly readWaitMs?: number;
 }
 
+/** The pages of the caller's investigations for the filters given. A change of the filters reads the first page again and ignores what an earlier read answers late; the rows on screen stay until the new ones come. */
 export function useInvestigationList(client: ApiClient, filters: ListFilters, options: ListReadOptions = {}): InvestigationList {
   const [state, dispatch] = useReducer(reduceList, INITIAL);
   const generation = useRef(0);
@@ -110,6 +110,8 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters, op
     generation.current += 1;
     moreInFlight.current = false;
     controller.current?.abort();
+    // a later read of another page needs a signal that is not aborted
+    controller.current = new AbortController();
     dispatch({ type: 'failed', where, failure: { code: 'NETWORK_UNAVAILABLE' } });
   }, []);
 

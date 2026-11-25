@@ -71,15 +71,16 @@ describe('the picker of a new chat: a list read that hangs or fails', () => {
     );
     const dialog = await open();
     await within(dialog).findByText(NEW_CHAT_COPY.loading);
-    await wait(READ_WAIT_MS / 2);
+    await wait(READ_WAIT_MS - 500);
     expect(within(dialog).queryByText(/could not be reached/u)).toBeNull();
-    await wait(READ_WAIT_MS / 2 + 1000);
+    await wait(1000);
     const alert = await within(dialog).findByText(/could not be reached/u);
     expect(alert.textContent).toContain('The server could not be reached.');
     expect(alert.textContent).not.toContain('NETWORK_UNAVAILABLE');
     await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.tryAgain }));
     expect(await within(dialog).findAllByRole('option')).toHaveLength(2);
     expect(within(dialog).queryByText(/could not be reached/u)).toBeNull();
+    expect(document.activeElement).toBe(within(dialog).getByRole('combobox'));
   });
 
   it('says a failed read of the list in the shared sentence, not as the code of the failure', async () => {
@@ -110,20 +111,48 @@ describe('the picker of a new chat: a read of more rows that hangs', () => {
     setup(
       fakeClient({
         lookupAssistantChats: NO_CHATS,
-        listInvestigationPage: (query, signal) => (query.cursor !== undefined && hung ? never(signal) : held.client.listInvestigationPage(query, signal)),
+        listInvestigationPage: (query, signal) => {
+          if (signal?.aborted) return Promise.resolve(ABORTED);
+          return query.cursor !== undefined && hung ? never(signal) : held.client.listInvestigationPage(query, signal);
+        },
       }),
     );
     const dialog = await open();
     await within(dialog).findAllByRole('option');
     await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.showMore }));
-    await wait(READ_WAIT_MS / 2);
+    await wait(READ_WAIT_MS - 500);
     expect(within(dialog).queryByText(NEW_CHAT_COPY.moreFailed)).toBeNull();
-    await wait(READ_WAIT_MS / 2 + 1000);
+    await wait(1000);
     expect(await within(dialog).findByText(NEW_CHAT_COPY.moreFailed)).toBeTruthy();
     expect(within(dialog).getAllByRole('option')).toHaveLength(25);
     hung = false;
     await userEvent.click(within(dialog).getByRole('button', { name: NEW_CHAT_COPY.showMore }));
     await waitFor(() => expect(within(dialog).getAllByRole('option')).toHaveLength(50));
+  });
+});
+
+describe('the picker of a new chat: a search read that hangs after a list that loaded', () => {
+  it('draws none of the earlier rows, no Show more and no lookup note once the read of the search is given up', async () => {
+    const held = pagedClient(rowsOf(60), [], { lookupAssistantChats: NO_CHATS });
+    setup(
+      fakeClient({
+        lookupAssistantChats: NO_CHATS,
+        listInvestigationPage: (query, signal) => (query.text === 'ca' ? never(signal) : held.client.listInvestigationPage(query, signal)),
+      }),
+    );
+    const dialog = await open();
+    await within(dialog).findAllByRole('option');
+    await userEvent.type(within(dialog).getByRole('combobox'), 'ca');
+    // the search is read after its pause, and the bound counts from then
+    await wait(1000);
+    await wait(READ_WAIT_MS - 500);
+    await wait(1000);
+    expect(await within(dialog).findByText(/could not be reached/u)).toBeTruthy();
+    expect(within(dialog).queryAllByRole('option')).toHaveLength(0);
+    expect(within(dialog).queryByRole('button', { name: NEW_CHAT_COPY.showMore })).toBeNull();
+    expect(within(dialog).queryByText(NEW_CHAT_COPY.lookupFailed)).toBeNull();
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });
 
@@ -140,9 +169,11 @@ describe('the picker of a new chat: the lookup of the chats that hangs or fails'
     const dialog = await open();
     const rows = await within(dialog).findAllByRole('option');
     expect(rows).toHaveLength(3);
-    await wait(READ_WAIT_MS / 2);
+    await wait(READ_WAIT_MS - 500);
     expect(within(dialog).queryByText(NEW_CHAT_COPY.lookupFailed)).toBeNull();
-    await wait(READ_WAIT_MS / 2 + 1000);
+    expect(within(dialog).queryByText(NEW_CHAT_COPY.hasChat)).toBeNull();
+    expect(within(dialog).queryByText(NEW_CHAT_COPY.startChat)).toBeNull();
+    await wait(1000);
     expect(await within(dialog).findByText(NEW_CHAT_COPY.lookupFailed)).toBeTruthy();
     expect(within(dialog).queryByText(NEW_CHAT_COPY.hasChat)).toBeNull();
     expect(within(dialog).queryByText(NEW_CHAT_COPY.startChat)).toBeNull();
