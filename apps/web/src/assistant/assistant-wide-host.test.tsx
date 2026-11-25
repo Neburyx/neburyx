@@ -213,3 +213,17 @@ describe('the Assistant panel when the inspector opens', () => {
     expect(box()).toBeTruthy();
   });
 });
+
+describe('the Assistant dragged wide with the inspector open and a panel on the left', () => {
+  it('stops short of covering the inspector or the left panel: the inspector keeps at least its least width, clear of the left panel', async () => {
+    const left: PanelEntry = { id: 'left-panel', title: 'Left', placement: { kind: 'floating', side: 'left', top: 64, inset: 72 }, initialWidth: 300, content: () => null };
+    const side: PanelEntry = { id: INSPECTOR_PANEL_ID, title: 'Inspector', placement: { kind: 'floating', side: 'right', top: 16, beside: ASSISTANT_PANEL_ID }, initialWidth: 320, content: () => null };
+    const { box } = await openAssistant(1440, 1384, [left, side]);
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize Assistant' }), { key: 'End' });
+    const px = (value: string): number => Number.parseFloat(value);
+    const inspectorLeft = 1384 - px(box(INSPECTOR_PANEL_ID).style.right) - px(box(INSPECTOR_PANEL_ID).style.width);
+    expect(px(box(INSPECTOR_PANEL_ID).style.width)).toBeGreaterThanOrEqual(240);
+    expect(inspectorLeft).toBeGreaterThanOrEqual(72 + 300 + 16);
+    expect(px(box(ASSISTANT_PANEL_ID).style.width)).toBeGreaterThan(400);
+  });
+});

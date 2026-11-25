@@ -143,3 +143,13 @@ describe('the top of a panel below the boxes it would cover', () => {
     expect(topBelowObstacles(16, { left: 224, right: 544 }, [{ ...scope, bottom: 110 }])).toBe(126);
   });
 });
+
+describe('the floating limits with room kept for other panels', () => {
+  it('take the reserve from how wide the panel may be made, never from below the width it opens at', () => {
+    expect(floatingLimits(1384, 16, 864)).toEqual({ min: 240, max: 864 });
+    expect(floatingLimits(1384, 16, 864, { reserve: 644, floor: 400 })).toEqual({ min: 240, max: 708 });
+    expect(floatingLimits(1000, 16, 600, { reserve: 644, floor: 400 })).toEqual({ min: 240, max: 400 });
+    expect(floatingLimits(300, 16, 600, { reserve: 644, floor: 400 })).toEqual({ min: 240, max: 268 });
+    expect(floatingLimits(undefined, 16, 600, { reserve: 644, floor: 400 })).toEqual({ min: 240, max: 600 });
+  });
+});

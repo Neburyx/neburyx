@@ -23,8 +23,11 @@ export function dockLimits(workspaceWidth: number | undefined, widest?: number):
 }
 
 /** The canvas less the distance from the side the panel hangs from and the gap on its other side; a panel may name a widest width of its own in place of the usual one. */
-export function floatingLimits(canvasWidth: number | undefined, inset: number = PANEL_GAP, widest?: number): WidthLimits {
-  return limitsIn(canvasWidth === undefined ? undefined : canvasWidth - inset - PANEL_GAP, widest);
+export function floatingLimits(canvasWidth: number | undefined, inset: number = PANEL_GAP, widest?: number, held: { readonly reserve: number; readonly floor: number } = { reserve: 0, floor: 0 }): WidthLimits {
+  if (canvasWidth === undefined) return limitsIn(undefined, widest);
+  const room = canvasWidth - inset - PANEL_GAP;
+  // `held`: the room other panels need (the left panels, an inspector beside) is taken from how wide the panel may be made, never from below the width it opens at (`floor`), so a window with no room is left as it was
+  return limitsIn(Math.max(room - held.reserve, Math.min(room, held.floor)), widest);
 }
 
 /** A share of the window's width, rounded down to a whole pixel because a stored width is whole; undefined (the usual widest applies) for a share outside 0 to 1 or a window that is not measured. */

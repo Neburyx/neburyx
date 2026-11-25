@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { PanelBoundary } from './panel-boundary.js';
-import { dockLimits, drawnWidth, floatingLimits, floatingPlacement, PANEL_GAP, PANEL_RAIL_WIDTH, topBelowObstacles, windowShareWidth, type CanvasBox, type WidthLimits } from './panel-limits.js';
+import { dockLimits, drawnWidth, floatingLimits, floatingPlacement, PANEL_GAP, PANEL_MIN_WIDTH, PANEL_RAIL_WIDTH, topBelowObstacles, windowShareWidth, type CanvasBox, type WidthLimits } from './panel-limits.js';
 import { useDragResize, type PanelAnchor } from './panel-resize.js';
 import { usePanels, type RegisteredPanel } from './panel-registry.js';
 import { useElementSize } from './use-element-size.js';
@@ -119,16 +119,18 @@ interface FloatingProps {
   readonly canvas: { readonly width: number | undefined; readonly height: number | undefined };
   readonly windowWidth: number | undefined;
   readonly obstacles: readonly CanvasBox[];
+  /** The room that other panels need beside this one: how wide it may be made is limited by it. */
+  readonly reserve: number;
 }
 
-function limitsOfFloating(panel: RegisteredPanel, inset: number, canvasWidth: number | undefined, windowWidth: number | undefined): WidthLimits {
-  return floatingLimits(canvasWidth, inset, windowShareWidth(panel.widestShareOfWindow, windowWidth));
+function limitsOfFloating(panel: RegisteredPanel, inset: number, canvasWidth: number | undefined, windowWidth: number | undefined, reserve = 0): WidthLimits {
+  return floatingLimits(canvasWidth, inset, windowShareWidth(panel.widestShareOfWindow, windowWidth), { reserve, floor: panel.placement.kind === 'floating' && panel.placement.beside !== undefined ? PANEL_MIN_WIDTH : panel.initialWidth });
 }
 
-function FloatingPanel({ panel, side, top, inset, canvas, windowWidth, obstacles }: FloatingProps) {
+function FloatingPanel({ panel, side, top, inset, canvas, windowWidth, obstacles, reserve }: FloatingProps) {
   const sizes = useStoreSelector(useClientState().presentation.view, (current) => current.panelSizes);
   const { collapsed, toggle } = useCollapsed(panel);
-  const limits = limitsOfFloating(panel, inset, canvas.width, windowWidth);
+  const limits = limitsOfFloating(panel, inset, canvas.width, windowWidth, reserve);
   const width = drawnWidth(sizes.get(panel.id), panel.initialWidth, limits);
   const span = canvas.width === undefined ? undefined : side === 'right' ? { left: canvas.width - inset - width, right: canvas.width - inset } : { left: inset, right: inset + width };
   const placement = floatingPlacement(span === undefined ? top : topBelowObstacles(top, span, obstacles), canvas.height);
@@ -246,23 +248,36 @@ export function FloatingPanels() {
   const [layer, setLayer] = useState<HTMLElement | null>(null);
   const { canvas, obstacles } = useCanvasLayout(layer);
   const windowWidth = useWindowWidth();
+  // how far the left panels reach, and for a right-hand panel the room the left panels and a panel hanging beside it need: a panel is never made wider over them (it opens at its own width wherever there is no room)
+  const leftReach = floating.reduce((reach, panel) => {
+    if (panel.placement.kind !== 'floating' || panel.placement.side !== 'left') return reach;
+    const own = panel.placement.inset ?? PANEL_GAP;
+    return Math.max(reach, own + drawnWidth(sizes.get(panel.id), panel.initialWidth, limitsOfFloating(panel, own, canvas.width, windowWidth)));
+  }, 0);
+  const reserveOf = (panel: RegisteredPanel): number => {
+    if (panel.placement.kind !== 'floating' || panel.placement.side !== 'right') return 0;
+    if (leftReach <= 0) return 0;
+    // a panel hanging beside this one keeps its least width
+    const hanging = floating.some((other) => other.placement.kind === 'floating' && other.placement.beside === panel.id);
+    return leftReach + PANEL_GAP + (hanging ? PANEL_GAP + PANEL_MIN_WIDTH : 0);
+  };
   const insetOf = (placement: { readonly inset?: number; readonly beside?: string }): number => {
     const next = placement.beside === undefined ? undefined : floating.find(({ id }) => id === placement.beside);
     if (next === undefined) return placement.inset ?? PANEL_GAP;
     const own = next.placement.kind === 'floating' ? (next.placement.inset ?? PANEL_GAP) : PANEL_GAP;
-    return PANEL_GAP + drawnWidth(sizes.get(next.id), next.initialWidth, limitsOfFloating(next, own, canvas.width, windowWidth)) + PANEL_GAP;
+    return PANEL_GAP + drawnWidth(sizes.get(next.id), next.initialWidth, limitsOfFloating(next, own, canvas.width, windowWidth, reserveOf(next))) + PANEL_GAP;
   };
   const reachOf = (side: PanelAnchor): number =>
     floating.reduce((reach, panel) => {
       if (panel.placement.kind !== 'floating' || panel.placement.side !== side) return reach;
       const inset = insetOf(panel.placement);
-      return Math.max(reach, inset + drawnWidth(sizes.get(panel.id), panel.initialWidth, limitsOfFloating(panel, inset, canvas.width, windowWidth)));
+      return Math.max(reach, inset + drawnWidth(sizes.get(panel.id), panel.initialWidth, limitsOfFloating(panel, inset, canvas.width, windowWidth, reserveOf(panel))));
     }, 0);
   useReservedReach(layer, { right: reachOf('right'), left: reachOf('left'), canvasWidth: canvas.width });
   if (floating.length === 0) return null;
   return (
     <div ref={setLayer} className="panel-layer">
-      {floating.map((panel) => (panel.placement.kind === 'floating' ? <FloatingPanel key={panel.registration} panel={panel} side={panel.placement.side} top={panel.placement.top} inset={insetOf(panel.placement)} canvas={canvas} windowWidth={windowWidth} obstacles={obstacles} /> : null))}
+      {floating.map((panel) => (panel.placement.kind === 'floating' ? <FloatingPanel key={panel.registration} panel={panel} side={panel.placement.side} top={panel.placement.top} inset={insetOf(panel.placement)} canvas={canvas} windowWidth={windowWidth} obstacles={obstacles} reserve={reserveOf(panel)} /> : null))}
     </div>
   );
 }

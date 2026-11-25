@@ -66,6 +66,13 @@ const OPEN: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     // Wide is off while the inspector is open, so that no panel is covered
     await expect(page.locator('.assistant-panel').getByRole('button', { name: /^Wide: close the inspector first/ })).toHaveAttribute('aria-disabled', 'true');
   },
+  'assistant dragged wide': async (page) => {
+    await header(page).getByRole('button', { name: 'Assistant' }).click();
+    await expect(page.locator('.assistant-panel')).toBeVisible();
+    // the person's own resize to the widest the panel may be made, with the inspector open: it stops short of covering the left panel
+    await page.getByRole('separator', { name: 'Resize Assistant' }).focus();
+    await page.keyboard.press('End');
+  },
   'inspector over a wide assistant': async (page) => {
     await header(page).getByRole('button', { name: 'Assistant' }).click();
     await expect(page.locator('.assistant-panel')).toBeVisible();
@@ -116,6 +123,7 @@ const COMBINATIONS: ReadonlyArray<readonly string[]> = [
   ['inspector', 'assistant'],
   ['inspector', 'assistant wide attempted'],
   ['inspector over a wide assistant'],
+  ['inspector', 'assistant dragged wide'],
   ['inspector', 'legend'],
   ['assistant', 'selection bar'],
 ];
