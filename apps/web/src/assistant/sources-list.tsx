@@ -133,7 +133,10 @@ export function SourcesList({
   };
   return (
     <>
-      <p className="assistant-sources-title">{hasGroup ? sourcesGroupedText(entries.length) : sourcesText(entries.length)}</p>
+      <p className="assistant-sources-title">
+        <span>{hasGroup ? sourcesGroupedText(entries.length) : sourcesText(entries.length)}</span>
+        {rowStateOf === undefined ? null : <span className="assistant-sources-hint">{ASSISTANT_COPY.selectHint}</span>}
+      </p>
       <ul>{rows.map((row) => (row.kind === "group" ? groupOf(row) : rowOf(row.entry, false)))}</ul>
     </>
   );

@@ -395,6 +395,9 @@
 }
 
 .assistant-sources-title {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-12);
   margin: 0 0 var(--space-6);
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
@@ -1914,4 +1917,23 @@
   height: var(--space-8);
   border-radius: 50%;
   background: var(--color-success-text);
+}
+
+.assistant-sources-hint {
+  flex: none;
+}
+
+/* the row that was pressed from the page: filled across its width, as the frames draw it */
+.assistant-source-row[data-selection] {
+  box-sizing: border-box;
+  width: calc(100% + var(--space-12));
+  margin: calc(var(--space-4) * -1) calc(var(--space-6) * -1);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius);
+}
+
+.assistant-source-row[data-selection="highlighted"],
+.assistant-source-row[data-selection="selected"],
+.assistant-source-row[data-selection="not-on-canvas"] {
+  background: var(--color-accent-surface);
 }

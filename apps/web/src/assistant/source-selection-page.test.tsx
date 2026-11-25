@@ -174,14 +174,14 @@ describe('Select on graph on the Assistant page', () => {
     expect(h.calls.getInvestigation).toEqual([INVESTIGATION_A]);
   });
 
-  it('says Not on the canvas when the window answers that it does not hold the element, and offers Open graph, with no highlight', async () => {
+  it('says Not on the canvas when the window answers that it does not hold the element, with no highlight and no Open graph', async () => {
     await page();
     graphWindow([]);
     await waitFor(() => expect(screen.getByText(ASSISTANT_COPY.graphWindowOpen)).toBeTruthy());
     await userEvent.click(row(1));
     await waitFor(() => expect(within(row(1)).getByText(ASSISTANT_COPY.notOnCanvas)).toBeTruthy());
     expect(screen.queryByText(ASSISTANT_COPY.highlightedInGraph)).toBeNull();
-    expect(screen.getByRole('button', { name: ASSISTANT_COPY.openGraph })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: ASSISTANT_COPY.openGraph })).toBeNull();
   });
 
   it('says Selected with the notice and an Open graph button when no graph window is open, sends nothing, and shows the notice once', async () => {

@@ -161,6 +161,7 @@ export const ASSISTANT_COPY = {
   notOnCanvas: 'Not on the canvas',
   selectionNotOnCanvas: 'The element you selected is not on the canvas.',
   graphWindowOpen: 'Graph window open',
+  selectHint: 'Select a source to show it on the graph',
   valueUnavailable: '(not available)',
   storedLoading: 'Reading the earlier turns…',
   storedFailed: 'The earlier turns of this thread could not be read.',

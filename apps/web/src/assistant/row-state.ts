@@ -19,6 +19,6 @@ export function rowStateOf(key: string, selection: RowSelection | undefined, idl
     case 'no-window':
       return { kind: 'selected', text: ASSISTANT_COPY.selected, notice: ASSISTANT_COPY.noGraphWindow, openGraph };
     case 'not-on-canvas':
-      return { kind: 'not-on-canvas', text: ASSISTANT_COPY.notOnCanvas, openGraph };
+      return { kind: 'not-on-canvas', text: ASSISTANT_COPY.notOnCanvas };
   }
 }
