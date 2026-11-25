@@ -36,7 +36,7 @@ test.describe('The Assistant page', () => {
   test('fits its header, thread column and composer, with nothing overlapping or wider than the area', async ({ page }) => {
     await routes(page, TABLE);
     await openPage(page);
-    const area = await page.locator('.assistant-page').boundingBox();
+    const area = await page.locator('.assistant-page-thread').boundingBox();
     const head = await page.locator('.assistant-page-head').boundingBox();
     expect(head?.height).toBe(64);
     expect((await page.locator('.sidebar').boundingBox())?.width).toBe(208);
