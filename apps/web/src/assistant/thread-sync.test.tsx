@@ -59,6 +59,80 @@ describe('the thread of a window while another window shows the chat', () => {
     expect(echoed).not.toHaveBeenCalled();
   });
 
+  it('reads again after 0.6 s, 1.5 s and 3 s while the server has not stored the turn yet, shows it when it appears, and stops', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let reads = 0;
+      let stored = false;
+      const h = harness(async () => ok(REFUSE), 1000, async () => {
+        reads += 1;
+        return ok(stored ? thread(1, 2) : thread(1));
+      });
+      render(h.tree());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+      expect(rows()).toBe(1);
+      const before = reads;
+      const other = window2();
+      await act(async () => other.announceThreadChanged());
+      expect(reads).toBe(before + 1);
+      expect(rows()).toBe(1);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(700)));
+      expect(reads).toBe(before + 2);
+      stored = true;
+      await act(async () => void (await vi.advanceTimersByTimeAsync(1600)));
+      expect(reads).toBe(before + 3);
+      expect(rows()).toBe(2);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+      expect(reads).toBe(before + 3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after the third wait when the server never holds another turn, and keeps what it shows', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let reads = 0;
+      const h = harness(async () => ok(REFUSE), 1000, async () => {
+        reads += 1;
+        return ok(thread(1));
+      });
+      render(h.tree());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+      const before = reads;
+      const other = window2();
+      await act(async () => other.announceThreadChanged());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+      expect(reads).toBe(before + 4);
+      expect(rows()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts again from the newest notice and does not run two waits at once', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let reads = 0;
+      const h = harness(async () => ok(REFUSE), 1000, async () => {
+        reads += 1;
+        return ok(thread(1));
+      });
+      render(h.tree());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+      const before = reads;
+      const other = window2();
+      await act(async () => other.announceThreadChanged());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
+      await act(async () => other.announceThreadChanged());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+      // the first notice's read, the second notice's read, and the three waits of the second only
+      expect(reads - before).toBe(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps a turn that is pending here and the draft, and reads once for notices that come together', async () => {
     const gate = deferred<ApiResult<AssistantTurnAnswer>>();
     const reads: number[] = [];

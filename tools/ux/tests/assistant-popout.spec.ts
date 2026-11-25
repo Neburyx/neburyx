@@ -7,6 +7,7 @@ const EMPTY = { turns: [], earlierTurns: 0, previousThreadClearedAt: null };
 const panel = (page: Page) => page.locator('.assistant-panel');
 const popOutButton = (page: Page) => panel(page).getByRole('button', { name: 'Pop out' });
 const NOTE = 'The chat is open in another window';
+const STORE_LAG_MS = 900;
 
 /** The stored thread of the stub server: a turn answered through POST turns is in what the thread read returns, as on the real server. */
 async function stubs(context: BrowserContext): Promise<{ readonly turns: object[]; clear(): void }> {
@@ -16,7 +17,8 @@ async function stubs(context: BrowserContext): Promise<{ readonly turns: object[
   await context.route((url) => url.pathname === '/v1/assistant/turns', (route) => {
     const seq = stored.length + 1;
     const sent = route.request().postDataJSON() as { turnId?: string };
-    stored.push({ id: sent.turnId ?? `0192f000-0000-7000-8000-0000000000${String(seq).padStart(2, '0')}`, seq, at: '2026-11-25T10:00:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 });
+    // the server stores the turn a moment after it has answered, as the real one does
+    setTimeout(() => stored.push({ id: sent.turnId ?? `0192f000-0000-7000-8000-0000000000${String(seq).padStart(2, '0')}`, seq, at: '2026-11-25T10:00:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 }), STORE_LAG_MS);
     return route.fulfill({ json: { status: 'answered', route: 'refuse', cause: 'verdict', sentence: ASSISTANT_REFUSAL_SENTENCES.verdict } });
   });
   return { turns: stored, clear: () => void (stored.length = 0) };
@@ -115,10 +117,10 @@ test.describe('Pop out of the Assistant panel', () => {
     await panel(page).getByRole('button', { name: 'Show the chat here' }).click();
     await ask(popup, 'what is here?');
     await expect(popup.getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
-    await expect(storedRows(page)).toHaveCount(1, { timeout: 5000 });
+    await expect(storedRows(page)).toHaveCount(1, { timeout: 8000 });
     await ask(page, 'and this?');
     await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
-    await expect(storedRows(popup)).toHaveCount(1, { timeout: 5000 });
+    await expect(storedRows(popup)).toHaveCount(1, { timeout: 8000 });
     await expect(popup).toHaveURL(new RegExp(`/assistant/${id}$`));
   });
 
