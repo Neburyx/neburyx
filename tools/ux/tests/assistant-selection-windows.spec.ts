@@ -65,7 +65,7 @@ test.describe('Select on graph across two windows', () => {
 
   test('keeps the pressed row and its notice whole above the composer when the row is at the fold', async ({ page }) => {
     const long: AssistantTurnAnswer = { ...ANSWER, blocks: [{ kind: 'sentences', sentences: Array.from({ length: 9 }, (_, index) => ({ text: `Sentence ${index + 1} of a long answer that takes room in the thread so that the list of sources starts low on the page.`, cites: ['n1'] })) }] } as AssistantTurnAnswer;
-    await page.setViewportSize({ width: 1440, height: 560 });
+    await page.setViewportSize({ width: page.viewportSize()?.width ?? 1440, height: 560 });
     await routes(page, long);
     await openAssistantPage(page);
     await page.getByRole('button', { name: /^Sources: 1,/ }).click();
