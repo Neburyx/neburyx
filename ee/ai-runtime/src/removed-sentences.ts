@@ -10,6 +10,7 @@ const EXPLANATION: Readonly<Record<RemovalReason, string>> = {
   name: 'it holds a name, an identifier or a quoted text that the text sent does not hold',
   label: 'a column label of the table is not a word of the text sent',
   cell: 'a number in a cell of the row is not on the lines the row cites; in a table the count of the cited elements does not stand for it',
+  length: 'it is too long to be checked: write it as shorter sentences, each with its own citations',
   row: 'the row cites a line that is no element a read returned (a line of a read, a meaning or a note), which a row may not rest on',
 };
 

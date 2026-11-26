@@ -95,10 +95,15 @@ describe.each([
 
   it('judges long repeats of those words within its bound', async () => {
     const units = ['same ', 'But same, ', 'and yet share, ', `differ in ${statusWords}, `, `differ in amountDue (1, `, `differ in amountDue and (`, 'no two ', 'not all ', 'at the top ', 'by far ', 'cannot be named ', 'cannot name the largest ', '"', '( ', ', ', ' . ', 'nothing is ', 'only shared ', `these two ${item}s share a ${holder} `, 'Item A ', 'x '];
-    const long = units.flatMap((unit) => ['', ` the same ${statusWords}`, ' share a holder'].map((tail) => `${unit.repeat(Math.ceil(24_000 / unit.length))}${tail}`));
+    const long = units.flatMap((unit) => ['', ` the same ${statusWords}`, ' share a holder'].map((tail) => `${unit.repeat(Math.ceil(3900 / unit.length))}${tail}`));
     const judged = await judgeEach(held, long, cites, 2000);
     expect(judged).toHaveLength(long.length);
   }, 120_000);
+
+  it('removes a sentence far longer than any answer writes, without reading it', async () => {
+    const judged = await judgeEach(held, ['these two share a thing '.repeat(6000), `${'two '.repeat(1100)}.`], cites, 500);
+    expect(judged).toEqual([{ kept: 0, reason: 'length' }, { kept: 0, reason: 'length' }]);
+  }, 60_000);
 
   it('removes a sentence with dozens of comparison words, which it does not read one by one', async () => {
     const [judged] = await judgeEach(held, [`${`These share the ${statusWords}, `.repeat(30)}.`], cites, 2000);

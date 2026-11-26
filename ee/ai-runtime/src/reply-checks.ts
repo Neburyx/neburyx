@@ -111,7 +111,10 @@ export function descriptionHoldsVerdict(description: string, ownNames: readonly 
   return hit || statesConclusion(left);
 }
 
-export const REMOVAL_REASONS = ['verdict', 'key', 'citation', 'number', 'count', 'comparison', 'name', 'label', 'cell', 'row'] as const;
+/** The longest sentence that is checked, in characters: ten times the longest the recorded answers hold. */
+const LONGEST_SENTENCE = 4000;
+
+export const REMOVAL_REASONS = ['verdict', 'key', 'citation', 'number', 'count', 'comparison', 'name', 'label', 'cell', 'row', 'length'] as const;
 export type RemovalReason = (typeof REMOVAL_REASONS)[number];
 
 export interface RejectedSentence {
@@ -179,7 +182,8 @@ function writtenNumbersIn(text: string, assembled: CheckedText): { readonly inde
     const value = numberWordValue(found[0]);
     const after = text.slice(found.index + found[0].length);
     // `no two widgets share an owner`: a pair of the set, not a count of what is cited
-    const pairwise = /(?<![\p{L}\p{N}_-])(?:no|any)\s+$/iu.test(text.slice(0, found.index));
+    // only the words just before are read: the whole text before each number would make a long reply take time that grows with the square of its length
+    const pairwise = /(?<![\p{L}\p{N}_-])(?:no|any)\s+$/iu.test(text.slice(Math.max(0, found.index - 60), found.index));
     const counting = !pairwise && /^\s+\S/u.test(after) && types.some((name) => namesType(after.trimStart(), name));
     return Number(value) <= 10 && !counting ? [] : [{ index: found.index, length: found[0].length, value, after, counting }];
   });
@@ -2060,6 +2064,13 @@ export function judgeSentences(sentences: readonly SummarySentence[], input: Che
   let keysRemoved = 0;
   let previous: { readonly cites: ReadonlySet<string>; readonly reason: RemovalReason } | undefined;
   for (const original of sentences) {
+    // a sentence far longer than any answer writes is not read at all: several of the checks take time that grows faster than its length
+    if (original.text.length > LONGEST_SENTENCE) {
+      removed += 1;
+      rejected.push({ text: original.text, reason: 'length' });
+      previous = { cites: new Set(original.cites), reason: 'length' };
+      continue;
+    }
     if (holdsVerdict(original, assembled)) {
       verdictFound = true;
       removed += 1;
