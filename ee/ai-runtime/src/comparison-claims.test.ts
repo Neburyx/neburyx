@@ -322,6 +322,18 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
       expect(verdict(held, `These two do not share a ${holder}.`, ['n1', 'n2'])).toBe('comparison');
     });
 
+    it('tests "the same" where the cited links reach a second entity of the type, though one alone is cited', () => {
+      const linked = (second: string): CheckedText =>
+        textOf([
+          { key: 'a', type: item, title: 'Item A' }, { key: 'b', type: item, title: 'Item B' }, { key: 'd', type: holder, title: 'Delta' }, { key: 'e', type: holder, title: 'Epsilon' },
+          { key: 'e1', type: pack.send, title: 'one', ends: ['a', 'd'] }, { key: 'e2', type: pack.send, title: 'two', ends: ['b', second] },
+        ]);
+      const text = `The same ${holder} is joined to Item A and Item B.`;
+      const cites = ['a', 'b', 'd', 'e1', 'e2'];
+      expect(verdict(linked('e'), text, cites)).toBe('comparison');
+      expect(verdict(linked('d'), text, cites)).toBe('kept');
+    });
+
     it('does not take a negated verb that another assertion carries for a clause that cannot tell', () => {
       expect(verdict(held, `These two share a ${holder} and its keeper is not known.`, ['n1', 'n2', 'c1'])).toBe('comparison');
       expect(verdict(held, `The view does not show their keepers and these two share a ${holder}.`, ['n1', 'n2', 'c1'])).toBe('comparison');

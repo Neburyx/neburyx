@@ -1653,7 +1653,11 @@ function claimsNothing(evidence: Evidence, claim: Span & { readonly word: string
   const following = spoken.slice(claim.end).trimStart();
   const types = [...new Set(evidence.cited.map((key) => assembled.elementTypes?.get(key) ?? ''))].filter((type) => typeWordLength(following, elementTypeName(type)) !== undefined);
   const [type] = types;
-  return type !== undefined && evidence.cited.filter((key) => assembled.elementTypes?.get(key) === type).length === 1 ? true : undefined;
+  if (type === undefined) return undefined;
+  if (!type.startsWith('entity ')) return evidence.cited.filter((key) => assembled.elementTypes?.get(key) === type).length === 1 ? true : undefined;
+  // one entity of the type among the cited elements and the ends of the cited relationships together: a second one reached by a link leaves it open which is meant
+  const held = new Set(evidence.cited.flatMap((key) => (assembled.elementEnds?.get(key) ?? []).filter(([ofType]) => `entity ${ofType}` === type).map(identityOf)));
+  return held.size === 1 ? true : undefined;
 }
 
 /** The aspect a claim word names before it: in its own clause, or in the nearest clause before it that names one. */
