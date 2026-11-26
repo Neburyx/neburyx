@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests && NEBURYX_TEST_PACK=banking-fraud vitest run src/assistant/agent-turn.test.ts src/assistant/tool-allowlist.test.ts src/assistant/sensitive-items.test.ts && NEBURYX_TEST_PACK=insurance-claims vitest run src/assistant/agent-turn.test.ts src/assistant/tool-allowlist.test.ts src/assistant/sensitive-items.test.ts"
+    "test": "vitest run --passWithNoTests && NEBURYX_TEST_PACK=banking-fraud vitest run src/assistant/agent-turn.test.ts src/assistant/answer-faults.test.ts src/assistant/tool-allowlist.test.ts src/assistant/sensitive-items.test.ts && NEBURYX_TEST_PACK=insurance-claims vitest run src/assistant/agent-turn.test.ts src/assistant/answer-faults.test.ts src/assistant/tool-allowlist.test.ts src/assistant/sensitive-items.test.ts"
   },
   "dependencies": {
     "@neburyx/contracts": "workspace:*",
