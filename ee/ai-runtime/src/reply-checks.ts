@@ -1367,7 +1367,7 @@ const countHolds = (stated: number | 'several' | undefined, actual: number): boo
 type Reading = 'same' | 'allDifferent' | 'notAllSame' | 'twoDifferent' | 'oneForAll';
 
 /** A denial of a difference (`do not differ`, `no two … differ`, `do not have different …`), which says that all have the same; `not all differ` says something else and is not read. */
-const DENIED_DIFFERENCE = /(?:(?:(?<![\p{L}\p{N}_-])(?:not|never)|n['\u2019]t)\s+(?:(?:have|has|be|appear to|seem to)\s+)?|(?<![\p{L}\p{N}_-])(?:no two|none)(?![\p{L}\p{N}_-])[^]{0,80}?)(?:differ|differs|different|distinct|vary|varies)(?![\p{L}\p{N}_])/iu;
+const DENIED_DIFFERENCE = /(?:(?:(?<![\p{L}\p{N}_-])(?:not|never)|n['\u2019]t)\s+(?:(?:have|has|be|appear to|seem to)\s+)?|(?<![\p{L}\p{N}_-])(?:no two|none)(?![\p{L}\p{N}_-])(?:(?!(?<![\p{L}])(?:and|or|but|while|which|so)(?![\p{L}]))[^,;.]){0,80}?)(?:differ|differs|different|distinct|vary|varies)(?![\p{L}\p{N}_])/iu;
 
 /** How a claim of a clause reads, with its negation: only the forms listed are read, and any other negated claim is not (undefined). */
 function readingOf(kind: ClaimKind, word: string, clause: string, sentence: string): Reading | undefined {
@@ -1832,15 +1832,24 @@ function entitiesAreSubject(evidence: Evidence, span: Span, claim: Span, entityT
 /** The items of a list that follows `differ in`: split at commas and `and` outside parentheses, up to the end of the sentence, each with the examples written in parentheses after it. */
 function listedItems(text: string, from: number): { readonly words: string; readonly examples: readonly string[] }[] {
   const items: { words: string; examples: string[] }[] = [];
-  for (const piece of (/^(?:[^.;!?(]|\([^)]*\)|\.(?=\d))*/u.exec(text.slice(from))?.[0] ?? '').split(/(?:,|(?<![\p{L}\p{N}_-])and(?![\p{L}\p{N}_-]))(?![^(]*\))/iu)) {
-    const examples = [...piece.matchAll(/\(([^)]*)\)/gu)].flatMap((found) => (found[1] ?? '').replace(/^\s*(?:for example|for instance|e\.g\.|such as|including)[\s,:]*/iu, '').split(/,|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-])/iu)).map((example) => example.trim().replace(/^["\u201c]|["\u201d]$/gu, '')).filter((example) => example !== '' && !/^etc/iu.test(example));
+  const segment = /^(?:[^.;!?(]|\([^)]*\)|\.(?=\d))*/u.exec(text.slice(from))?.[0] ?? '';
+  const turn = /(?<![\p{L}\p{N}_-])(?:but|while|whereas|so|yet|although)(?![\p{L}\p{N}_-])(?![^(]*\))/iu.exec(segment);
+  for (const piece of segment.slice(0, turn?.index ?? segment.length).split(/(?:,|(?<![\p{L}\p{N}_-])and(?![\p{L}\p{N}_-]))(?![^(]*\))/iu)) {
+    const examples = [...piece.matchAll(/\(([^)]*)\)/gu)].flatMap((found) => (found[1] ?? '').replace(/^\s*(?:for example|for instance|e\.g\.|such as|including)[\s,:]*/iu, '').split(/(?<!\d),|,(?!\d{3}(?!\d))|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-])/iu)).map((example) => example.trim().replace(/^["\u201c]|["\u201d]$/gu, '')).filter((example) => example !== '' && !/^etc/iu.test(example));
     const words = piece.replace(/\([^)]*\)/gu, ' ').trim().replace(/^(?:(?:in|their|its|the)\s+)+/iu, '');
-    const first = words.split(/\s+/u)[0]?.toLowerCase() ?? '';
-    // a word that opens another assertion ends the list
-    if (items.length > 0 && SENTENCE_OPENERS.has(first)) break;
     if (words !== '') items.push({ words, examples });
   }
   return items;
+}
+
+/** The words that open another assertion after a list: a subject, a verb of having or being, or a word of comparison, which is judged by itself. */
+const OPENS_ANOTHER: ReadonlySet<string> = new Set(['both', 'they', 'it', 'these', 'those', 'all', 'each', 'none', 'no', 'one', 'also', 'then', 'is', 'are', 'was', 'were', 'has', 'have', 'had', 'use', 'uses', 'used', 'share', 'shares', 'shared', 'differ', 'differs', 'vary', 'varies', 'come', 'comes', 'came', 'show', 'shows', 'include', 'includes']);
+
+/** Whether an item of a list goes on to say something else, and so ends the list: it opens another assertion, or names no property and is longer than the name of a thing. */
+function endsTheList(words: string, namesNone: boolean): boolean {
+  const all = words.toLowerCase().split(/\s+/u);
+  const first = all[0] ?? '';
+  return OPENS_ANOTHER.has(first) || SENTENCE_OPENERS.has(first) || (namesNone && all.length > 3);
 }
 
 /**
@@ -1853,7 +1862,8 @@ function differsInHolds(evidence: Evidence, claimEnd: number, apart: boolean): b
   const items = listedItems(evidence.text, claimEnd + lead[0].length);
   const named = items.map((item) => propertiesNamed(evidence, item.words));
   if ((named[0]?.length ?? 0) === 0) return undefined;
-  return items.every((item, index) => {
+  const ends = items.findIndex((item, index) => index > 0 && endsTheList(item.words, named[index]?.length === 0));
+  return items.slice(0, ends < 0 ? items.length : ends).every((item, index) => {
     const [property, other] = named[index] ?? [];
     if (property === undefined || other !== undefined) return false;
     const subjects = propertySubjects(evidence, evidence.cited.filter((key) => evidence.assembled.rankedValues?.get(key)?.some((entry) => entry.key === property) === true));

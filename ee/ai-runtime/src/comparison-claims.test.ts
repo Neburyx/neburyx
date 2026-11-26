@@ -453,6 +453,22 @@ describe.each(PACKS)('the sentences a live run wrote, in the words of the $name 
     // a property that is not shown by a cited element, or a name that is no property
     expect(verdict(one, `They differ in channel and ${flag}.`, all)).toBe('comparison');
     expect(verdict(one, 'They differ in channel and colour.', all)).toBe('comparison');
+    // every cited value the same: "differ in" and "vary in" are both false
+    const alike = ['n1', 'n2', 'n3'];
+    for (const text of [`They differ in ${statusWords}.`, `These three vary in ${statusWords}.`, `They differ in their ${statusWords} (Wire).`, `These differ in ${statusWords} and amountDue.`]) expect(verdict(one, text, alike), text).toBe('comparison');
+    // two of them unequal is enough for "differ in" and "vary in"
+    for (const text of ['They differ in channel.', 'These four vary in channel.']) expect(verdict(one, text, all), text).toBe('kept');
+    expect(verdict(one, 'Each of the four differs in channel.', all)).toBe('comparison');
+    // the list ends where the sentence goes on to another assertion, which is judged by itself
+    for (const text of ['Item A and Item B differ in amountDue and both are listed.', 'Item A and Item B differ in amountDue and were both read.', `Item A and Item B differ in amountDue and use the same ${statusWords}.`, `Item A and Item B differ in amountDue but share the ${statusWords} Wire.`]) expect(verdict(one, text, ['n1', 'n2']), text).toBe('kept');
+    expect(verdict(one, 'Item A and Item C differ in amountDue but share the channel branch.', ['n1', 'n3'])).toBe('comparison');
+    expect(verdict(one, 'Item A and Item B differ in amountDue and colour.', ['n1', 'n2'])).toBe('comparison');
+    // a figure written with a separator of thousands is one example
+    const large = textOf([{ key: 'n1', type: item, title: 'Item A', properties: [['amountDue', 1000]] }, { key: 'n2', type: item, title: 'Item B', properties: [['amountDue', 2500]] }]);
+    expect(verdict(large, 'Item A and Item B differ in amountDue (1,000 and 2,500).', ['n1', 'n2'])).toBe('kept');
+    expect(verdict(large, 'Item A and Item B differ in amountDue (1,000, 2,500).', ['n1', 'n2'])).toBe('kept');
+    // a denial reaches only the word it denies
+    for (const text of [`No two of these three have the same amountDue and they differ in ${statusWords}.`, `None of these three share an amountDue and they differ in ${statusWords}.`]) expect(verdict(one, text, alike), text).toBe('comparison');
     // all different is still what "different" says
     expect(verdict(one, 'These four have different channels.', all)).toBe('comparison');
   });
