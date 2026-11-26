@@ -81,7 +81,6 @@ describe('no record of any case holds a value, the question or a label', () => {
     for (const event of questionEvents(rig).filter((candidate) => candidate.result === 'success')) expect(detailOf(event).paramsHash).toMatch(/^[0-9a-f]{64}$/);
     expect(questionEvents(rig).filter((event) => event.result === 'success').length).toBeGreaterThan(0);
     expect(questionEvents(heavy).map((event) => detailOf(event).intent)).toEqual(['sharedWith']);
-    // both are rules by which the gate refuses a file query, so the audit says refused and names the rule
     expect([forced, unmapped].map((each) => questionEvents(each).map((event) => [event.result, detailOf(event).cause]))).toEqual([[['refused', 'file-query-text']], [['refused', 'file-query-result']]]);
     for (const each of [rig, heavy, forced, unmapped]) await each.close();
   });
