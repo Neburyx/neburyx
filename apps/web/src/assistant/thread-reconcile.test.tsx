@@ -5,7 +5,7 @@ import type { ApiResult } from '../api/client.js';
 import { createAssistantSession, type Turn } from './assistant-session.js';
 import { harness, REFUSE, typeAndSend } from './assistant-kit.js';
 import { ASSISTANT_COPY } from './copy.js';
-import { reloadThread, takeRead, turnsAfterRead } from './thread-reconcile.js';
+import { reloadThread, rereadThread, takeRead, turnsAfterRead } from './thread-reconcile.js';
 
 afterEach(cleanup);
 
@@ -83,6 +83,43 @@ describe('a read of the thread taken by a session', () => {
     takeRead(session, empty(6));
     session.clear({ mask: true });
     expect(session.known).toEqual({ epoch: 6, seen: 6 });
+  });
+});
+
+describe('a read again that finds the access lost', () => {
+  const lost = async () => ({ ok: false as const, failure: { code: 'NOT_FOUND' as const, message: 'x', retryable: false, traceId: 't' } });
+  const shownSession = () => {
+    const session = createAssistantSession(null);
+    session.stored.setState({ kind: 'ready', thread: stored(0) });
+    session.store.setState({ ...session.store.getState(), turns: [turnOf(1)], input: 'typed' });
+    return session;
+  };
+
+  it.each([
+    ['a reread', rereadThread],
+    ['a reload', reloadThread],
+  ])('takes the thread, the live turns and the typed text of %s away, with the notice', async (_name, read) => {
+    const session = shownSession();
+    await read(session, lost);
+    expect(session.stored.getState()).toEqual({ kind: 'denied' });
+    expect(session.store.getState()).toMatchObject({ turns: [], input: '', notice: { kind: 'access-lost' } });
+  });
+
+  it('says to a reload that it failed, so that nothing is waited for', async () => {
+    expect(await reloadThread(shownSession(), lost)).toEqual({ failed: true, held: undefined });
+  });
+
+  it.each([
+    ['a reread', rereadThread],
+    ['a reload', reloadThread],
+  ])('is ignored when the session was cleared while %s was out', async (_name, read) => {
+    const session = shownSession();
+    await read(session, async () => {
+      session.clear({ investigationId: 'inv-2' });
+      return lost();
+    });
+    expect(session.store.getState().notice).toBeUndefined();
+    expect(session.stored.getState()).not.toEqual({ kind: 'denied' });
   });
 });
 
@@ -282,7 +319,7 @@ describe('the thread read again for a panel that comes back', () => {
     session.known.seen = 2;
     session.stored.setState({ kind: 'ready', thread: stored(2) });
     const before = session.stored.getState();
-    await reloadThread(session, async () => ({ ok: false }));
+    await reloadThread(session, async () => ({ ok: false, failure: { code: 'INTERNAL_ERROR', message: 'x', retryable: false, traceId: 't' } }));
     await reloadThread(session, async () => ok(two(1)));
     await reloadThread(session, async () => {
       session.store.setState({ ...session.store.getState(), epoch: session.store.getState().epoch + 1 });

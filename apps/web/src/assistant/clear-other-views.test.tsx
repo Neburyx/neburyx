@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantThreadResponse, AssistantTurnAnswer } from '@neburyx/contracts';
-import type { ApiResult } from '../api/client.js';
+import type { ApiFailure, ApiResult } from '../api/client.js';
 import { createClientState } from '../state/client-state.js';
 import { followClearNotice } from './assistant-binder.js';
 import { createAssistantSession } from './assistant-session.js';
@@ -110,6 +110,66 @@ describe('a clearing seen from another window of the same person', () => {
     expect(second.session.stored.getState().kind).toBe('ready');
     expect(second.reads).toEqual(['inv-1']);
     second.stop();
+  });
+});
+
+describe('a window whose reread finds the access lost', () => {
+  const lost = (code: 'NOT_FOUND' | 'ACCESS_DENIED') => ({ ok: false as const, failure: { code, message: 'x', retryable: false, traceId: 't' } });
+
+  it.each(['NOT_FOUND', 'ACCESS_DENIED'] as const)('loses its shown thread, with the access-lost notice, when another window’s clear finds the access lost (%s) and its own reread is answered the same', async (code) => {
+    const channel = bus();
+    let access = true;
+    const read = async (): Promise<ApiResult<AssistantThreadResponse>> => (access ? ok(stored(0)) : lost(code));
+    const first = harness(async () => ok(REFUSE), 1000, read, false, undefined, async () => lost(code), { notice: channel.noticeFor({}) });
+    const second = harness(async () => ok(REFUSE), 1000, read, false, undefined, undefined, { notice: channel.noticeFor({}) });
+    const stops = [first, second].map((h) => {
+      h.session.store.setState({ ...h.session.store.getState(), principalId: PERSON });
+      return followClearNotice(h.state, h.session);
+    });
+    const view = render(<div><div data-testid="first">{first.tree()}</div><div data-testid="second">{second.tree()}</div></div>);
+    await waitFor(() => expect(within(view.getByTestId('second')).getByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeTruthy());
+    await userEvent.type(within(view.getByTestId('second')).getByRole('textbox'), 'typed in the second');
+    access = false;
+    await userEvent.click(within(view.getByTestId('first')).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
+    await waitFor(() => expect(within(view.getByTestId('second')).queryByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeNull());
+    expect(within(view.getByTestId('second')).getByRole('alert').textContent).toBe(ASSISTANT_COPY.accessLost);
+    expect((within(view.getByTestId('second')).getByRole('textbox') as HTMLTextAreaElement).value).toBe('');
+    expect(second.session.stored.getState()).toEqual({ kind: 'denied' });
+    expect(second.clears).toEqual([]);
+    expect(channel.sent).toEqual([`${PERSON}:inv-1`]);
+    stops.forEach((stop) => stop());
+  });
+
+  it('loses its shown thread when it missed the notice and reads again on being shown', async () => {
+    let access = true;
+    const h = harness(async () => ok(REFUSE), 1000, async (): Promise<ApiResult<AssistantThreadResponse>> => (access ? ok(stored(0)) : lost('NOT_FOUND')));
+    render(h.tree());
+    await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading });
+    access = false;
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await waitFor(() => expect(screen.queryByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeNull());
+    expect(screen.getByRole('alert').textContent).toBe(ASSISTANT_COPY.accessLost);
+    expect(h.session.stored.getState()).toEqual({ kind: 'denied' });
+  });
+
+  it.each([
+    ['the Assistant being off', { code: 'ACCESS_DENIED' as const, message: 'x', retryable: false, traceId: 't', details: { reason: 'ai-off' } }],
+    ['a server failure', { code: 'INTERNAL_ERROR' as const, message: 'x', retryable: false, traceId: 't' }],
+    ['an unreachable server', { code: 'NETWORK_UNAVAILABLE' as const, message: 'x', retryable: true, traceId: 't' }],
+  ])('keeps the thread on screen when the reread fails for %s', async (_name, failure) => {
+    let reads = 0;
+    const h = harness(async () => ok(REFUSE), 1000, async (): Promise<ApiResult<AssistantThreadResponse>> => (++reads === 1 ? ok(stored(0)) : { ok: false, failure: failure as ApiFailure }));
+    render(h.tree());
+    await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await waitFor(() => expect(reads).toBeGreaterThan(1));
+    expect(screen.getByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeTruthy();
+    expect(screen.queryByText(ASSISTANT_COPY.accessLost)).toBeNull();
   });
 });
 

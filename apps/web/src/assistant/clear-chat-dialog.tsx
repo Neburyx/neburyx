@@ -3,7 +3,7 @@ import type { AssistantThreadClearResponse } from '@neburyx/contracts';
 import { isServerFailure, type ApiResult } from '../api/client.js';
 import { ConfirmDialog } from '../lifecycle/confirm-dialog.js';
 import { ASSISTANT_COPY } from './copy.js';
-import { isAccessLost } from './stored-thread.js';
+import { isAccessLost } from './failure-kinds.js';
 
 export interface ClearChatDialogProps {
   /** Sends the clear call; the caller decides what must settle first. */

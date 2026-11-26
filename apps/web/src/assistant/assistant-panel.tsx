@@ -10,6 +10,7 @@ import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, word
 import { MaskingCard, NewThreadCard, StandingNote } from './thread-notices.js';
 import { StoredTurns } from './stored-turns.js';
 import { useAssistantSession } from './assistant-session.js';
+import { loseAccess } from './thread-reconcile.js';
 import { useThreadSync } from './use-thread-sync.js';
 import { PoppedOutNote } from './popped-out-note.js';
 import { NO_STORED_THREAD } from './stored-thread-state.js';
@@ -191,10 +192,11 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
   };
   // access that is lost holds for the person and investigation whatever else cleared the thread meanwhile, so no epoch is compared
   const accessLost = (scope: NonNullable<typeof confirming>): void => {
+    // the other windows are told to read again, and their read finds the same
+    session.notice?.announce(scope.principalId, scope.investigationId);
     setConfirming(undefined);
     if (isElsewhere(scope)) return;
-    session.clear({ notice: { kind: 'access-lost' } });
-    session.stored.setState({ kind: 'denied' });
+    loseAccess(session);
     queueMicrotask(() => focusInside(field.current, null));
   };
   const pressPopOut = (): void => {

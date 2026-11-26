@@ -141,6 +141,37 @@ test.describe('Clear chat in the Assistant panel', () => {
     await expect(panel(page).getByLabel('Your message')).toBeFocused();
   });
 
+  test('takes the chat off another window too when that window reads its thread again on being shown and the read is answered not found', async ({ context, page }) => {
+    let access = true;
+    const notFound = { status: 404, json: { error: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 't' } } };
+    await context.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill(access ? { json: STORED } : notFound));
+    await context.route((url) => /\/thread\/clear$/.test(url.pathname), (route) => {
+      access = false;
+      return route.fulfill(notFound);
+    });
+    await context.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } } }));
+    const other = await context.newPage();
+    for (const target of [page, other]) {
+      await target.goto('/dev/open-entity');
+      await target.getByRole('button', { name: 'banking-demo' }).click();
+      const form = target.getByRole('form', { name: 'Open an entity' });
+      await form.getByLabel('Stable ID').fill('AC-1');
+      await form.getByRole('button', { name: 'Open' }).click();
+      await expect(canvasOf(target)).toHaveAttribute('data-drawn-entities', '1');
+      await header(target).getByRole('button', { name: 'Assistant' }).click();
+      await expect(panel(target).locator('.assistant-stored')).toBeVisible();
+    }
+    await panel(other).getByLabel('Your message').fill('typed in the other window');
+    await panel(page).getByRole('button', { name: 'Clear chat' }).click();
+    await dialog(page).getByRole('button', { name: 'Clear chat' }).click();
+    await expect(dialog(page)).toBeHidden();
+    // the two windows hold investigations of their own here, so the other one learns of it by the read it makes when it is shown
+    await other.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await expect(panel(other).locator('.assistant-stored')).toHaveCount(0);
+    await expect(panel(other).getByRole('alert')).toHaveText('You no longer have access to this investigation, so the thread was cleared.');
+    await expect(panel(other).getByLabel('Your message')).toHaveValue('');
+  });
+
   test('empties the other window of the browser: by the notice at once, and by a read of the server when the window is shown again if the notice is missed', async ({ context, page }) => {
     let cleared = false;
     await context.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: cleared ? { ...NO_THREAD, epoch: 1 } : { ...STORED, epoch: 0 } }));

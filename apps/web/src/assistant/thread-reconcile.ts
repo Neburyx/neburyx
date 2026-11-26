@@ -1,4 +1,6 @@
 import type { AssistantThreadResponse } from '@neburyx/contracts';
+import type { ApiFailure } from '../api/client.js';
+import { isAccessLost } from './failure-kinds.js';
 import type { AssistantSession, Turn } from './assistant-session.js';
 
 /**
@@ -15,6 +17,14 @@ export function turnsAfterRead(turns: readonly Turn[], read: number, rise: boole
   }
   return { kept, dropped };
 }
+
+/** The investigation is no longer the person's: its thread, the requests that are out and what was typed go, with the notice, and the history is not read again. */
+export function loseAccess(session: AssistantSession): void {
+  session.clear({ notice: { kind: 'access-lost' } });
+  session.stored.setState({ kind: 'denied' });
+}
+
+type ThreadRead = (signal: AbortSignal) => Promise<{ readonly ok: true; readonly value: AssistantThreadResponse } | { readonly ok: false; readonly failure: ApiFailure }>;
 
 export interface TakenRead {
   readonly show: boolean;
@@ -51,21 +61,25 @@ export function takeRead(session: AssistantSession, read: AssistantThreadRespons
 
 /**
  * Reads the thread again, for a window that is shown (visible or focused) with its panel open, or that heard a notice: a window that missed a clearing learns of it here. A read that shows no rise changes nothing on screen; one that shows a rise replaces the stored turns and removes the live turns of before.
- * A read that fails changes nothing.
+ * A read that finds the access lost takes the thread away, as the first read does; any other read that fails changes nothing.
  */
-export async function rereadThread(session: AssistantSession, read: (signal: AbortSignal) => Promise<{ readonly ok: true; readonly value: AssistantThreadResponse } | { readonly ok: false }>): Promise<void> {
+export async function rereadThread(session: AssistantSession, read: ThreadRead): Promise<void> {
   const controller = new AbortController();
   const epoch = session.store.getState().epoch;
   session.open.add(controller);
   const result = await read(controller.signal);
   session.open.delete(controller);
-  if (controller.signal.aborted || session.store.getState().epoch !== epoch || !result.ok) return;
+  if (controller.signal.aborted || session.store.getState().epoch !== epoch) return;
+  if (!result.ok) {
+    if (isAccessLost(result.failure)) loseAccess(session);
+    return;
+  }
   const taken = takeRead(session, result.value);
   if (taken.show && taken.replaces) session.stored.setState({ kind: 'ready', thread: taken.thread });
 }
 
 /**
- * Reads the thread again for a panel that comes back after the page of the chat was open in another window, and shows what the server holds: the turns made there are in it, which `rereadThread` does not show when no clearing has happened. The live turns of this window stay as they are and are not listed twice. A read that fails, or is from before a clearing this session has heard of, changes nothing. It says whether the read failed, so that a caller can try again when the window is shown, and how many turns the server held when the read was shown.
+ * Reads the thread again for a panel that comes back after the page of the chat was open in another window, and shows what the server holds: the turns made there are in it, which `rereadThread` does not show when no clearing has happened. The live turns of this window stay as they are and are not listed twice. A read that finds the access lost takes the thread away. Any other read that fails, or one from before a clearing this session has heard of, changes nothing. It says whether the read failed, so that a caller can try again when the window is shown, and how many turns the server held when the read was shown.
  */
 export interface Reloaded {
   readonly failed: boolean;
@@ -73,14 +87,17 @@ export interface Reloaded {
   readonly held: number | undefined;
 }
 
-export async function reloadThread(session: AssistantSession, read: (signal: AbortSignal) => Promise<{ readonly ok: true; readonly value: AssistantThreadResponse } | { readonly ok: false }>): Promise<Reloaded> {
+export async function reloadThread(session: AssistantSession, read: ThreadRead): Promise<Reloaded> {
   const controller = new AbortController();
   const epoch = session.store.getState().epoch;
   session.open.add(controller);
   const result = await read(controller.signal);
   session.open.delete(controller);
   if (controller.signal.aborted || session.store.getState().epoch !== epoch) return { failed: false, held: undefined };
-  if (!result.ok) return { failed: true, held: undefined };
+  if (!result.ok) {
+    if (isAccessLost(result.failure)) loseAccess(session);
+    return { failed: true, held: undefined };
+  }
   const taken = takeRead(session, result.value);
   if (!taken.show) return { failed: false, held: undefined };
   const live = new Set(session.store.getState().turns.flatMap((turn) => turn.turnIds ?? []));

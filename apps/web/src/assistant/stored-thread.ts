@@ -1,17 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useApiClient } from '../api/client-context.js';
-import type { ApiFailure } from '../api/client.js';
 import { usePrincipalIdWhenProvided } from '../shell/shell-data.js';
 import { isSourceChanged } from '../state/investigation-state.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
-import { isAssistantOff } from './failure-kinds.js';
-import { rereadThread, takeRead } from './thread-reconcile.js';
+import { isAccessLost, isAssistantOff } from './failure-kinds.js';
+import { loseAccess, rereadThread, takeRead } from './thread-reconcile.js';
 import { useAssistantSession } from './assistant-session.js';
 import type { StoredThreadState } from './stored-thread-state.js';
-
-/** A refusal that says the investigation is no longer the person's: what the panel shows of it is cleared. */
-export const isAccessLost = (failure: ApiFailure): boolean => failure.code === 'NOT_FOUND' || (failure.code === 'ACCESS_DENIED' && !isAssistantOff(failure));
 
 /** The stored turns that are not turns of this session: a turn of this session that the server has already written is in the read too, under the id its request carried. */
 export const withoutLiveTurns = <T extends { readonly id: string }>(stored: readonly T[], liveIds: ReadonlySet<string>): T[] => stored.filter((turn) => !liveIds.has(turn.id));
@@ -25,7 +21,7 @@ export function useStoredThread(available: boolean): StoredThreadState {
   const client = useApiClient();
   const state = useClientState();
   const session = useAssistantSession();
-  const { store, stored, open, clear } = session;
+  const { store, stored, open } = session;
   const principalId = usePrincipalIdWhenProvided();
   const held = useStoreSelector(stored, (value) => value);
   const inflight = useRef<AbortController | undefined>(undefined);
@@ -53,11 +49,8 @@ export function useStoredThread(available: boolean): StoredThreadState {
       }
       if (!result.ok) {
         if (isAssistantOff(result.failure)) stored.setState({ kind: 'off' });
-        else if (isAccessLost(result.failure)) {
-          // the thread, the requests that are out and the history all go, and the history is not read again
-          clear({ notice: { kind: 'access-lost' } });
-          stored.setState({ kind: 'denied' });
-        } else stored.setState({ kind: 'failed' });
+        else if (isAccessLost(result.failure)) loseAccess(session);
+        else stored.setState({ kind: 'failed' });
         return;
       }
       const taken = takeRead(session, result.value);
@@ -69,7 +62,7 @@ export function useStoredThread(available: boolean): StoredThreadState {
       const earlier = withoutLiveTurns(taken.thread.turns, new Set(store.getState().turns.flatMap((turn) => turn.turnIds ?? [])));
       stored.setState({ kind: 'ready', thread: { ...taken.thread, turns: earlier } });
     });
-  }, [available, clear, client, investigationId, open, principalId, session, sourceChanged, store, stored, held.kind]);
+  }, [available, client, investigationId, open, principalId, session, sourceChanged, store, stored, held.kind]);
   // closing the panel ends the read it started and no other request of the session
   useEffect(
     () => () => {

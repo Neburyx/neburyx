@@ -5,7 +5,8 @@ import { edgeKey, elementKey } from '../state/keys.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { useAssistantSession } from './assistant-session.js';
-import { isAccessLost } from './stored-thread.js';
+import { isAccessLost } from './failure-kinds.js';
+import { loseAccess } from './thread-reconcile.js';
 
 type Ref = ElementRef | EdgeRef;
 type ChunkStatus = 'loading' | 'failed' | 'done';
@@ -94,7 +95,8 @@ function endsToRead(held: Held, asked: ReadonlySet<string>): ElementRef[] {
  */
 export function useRefReads(refs: readonly Ref[], enabled = true): RefReads {
   const client = useApiClient();
-  const { store, stored, clear } = useAssistantSession();
+  const session = useAssistantSession();
+  const { store, stored } = session;
   const state = useClientState();
   const epoch = useStoreSelector(store, (held) => held.epoch);
   const mask = useStoreSelector(store, (held) => held.mask);
@@ -124,8 +126,7 @@ export function useRefReads(refs: readonly Ref[], enabled = true): RefReads {
         if (held.current !== mine || controller.signal.aborted) return;
         if (!result.ok) {
           if (isAccessLost(result.failure)) {
-            clear({ notice: { kind: 'access-lost' } });
-            stored.setState({ kind: 'denied' });
+            loseAccess(session);
             return;
           }
           mine.chunks.set(chunk.id, 'failed');
@@ -139,7 +140,7 @@ export function useRefReads(refs: readonly Ref[], enabled = true): RefReads {
         bump();
       });
     }
-  }, [clear, client, enabled, epoch, mask, readable, sourceId, stored, tick]);
+  }, [client, enabled, epoch, mask, readable, session, sourceId, stored, tick]);
 
   // closing the panel ends the requests of this holder and empties it
   useEffect(
