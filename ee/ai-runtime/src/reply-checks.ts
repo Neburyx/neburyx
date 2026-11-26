@@ -1182,6 +1182,10 @@ function rangeHolds(sentence: SummarySentence, assembled: CheckedText): boolean 
   return candidates.some((pair) => verifies(pair.type, pair.property));
 }
 
+/** How many claim words of one sentence are read, and how many clauses back a claim looks for what it is about: a sentence beyond either is not written to be read, and the check would take time that grows far faster than its length. */
+const MOST_CLAIMS = 20;
+const MOST_CLAUSES_BACK = 20;
+
 /** The words that say elements differ, are the same or share something: words of the language, never of a domain. A word joined to another before it (`co-shared`) is no claim. */
 const CLAIM_WORD = /(?<![\p{L}\p{N}_-])(differ(?:s|ed|ing|ently|ences?|ent)?|distinct|var(?:y|ies|ied|ying)|same|identical|alike|shar(?:e|es|ed|ing)|in common|common to)(?![\p{L}\p{N}_])/giu;
 
@@ -1405,7 +1409,7 @@ function namedFor(evidence: Evidence, span: Span, subjects: (mention: Evidence['
   const following = evidence.named.filter((mention) => mention.index >= span.end && /^[\s,:(]*$/u.test(evidence.text.slice(span.end, mention.index)));
   if (following.length > 0) return following;
   let earlier = span.start;
-  while (earlier > 0) {
+  for (let back = 0; earlier > 0 && back < MOST_CLAUSES_BACK; back += 1) {
     const before = clauseSpanAt(evidence.spoken, earlier - 1);
     const found = within({ start: before.start, end: earlier });
     if (found.length > 0) return found;
@@ -1779,10 +1783,10 @@ function earlierAspect(evidence: Evidence, span: Span, before: readonly Word[], 
   const nouns = (words: readonly Word[]): Word[] => words.filter((each) => !PHRASE_STOP.has(each.text.toLowerCase()) || /^(?:of|that)$/iu.test(each.text)).slice(-6);
   let words = before;
   let from = span.start;
-  for (;;) {
+  for (let back = 0; ; back += 1) {
     const phrase = nouns(words);
     const aspect = aspectOf(evidence, phrase, pointed(phrase), named);
-    if (aspect !== undefined || from === 0) return aspect;
+    if (aspect !== undefined || from === 0 || back === MOST_CLAUSES_BACK) return aspect;
     const earlier = clauseSpanAt(evidence.spoken, from - 1);
     words = wordsAt(evidence.spoken, { start: earlier.start, end: from });
     from = earlier.start;
@@ -1819,7 +1823,9 @@ function entitiesAreSubject(evidence: Evidence, span: Span, claim: Span, entityT
 function comparisonClaimsHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   if (sentence.text.normalize('NFC').search(new RegExp(CLAIM_WORD.source, 'iu')) < 0) return true;
   const evidence = evidenceOf(sentence, assembled);
-  return [...evidence.spoken.matchAll(CLAIM_WORD)].every((found) => {
+  const claims = [...evidence.spoken.matchAll(CLAIM_WORD)];
+  if (claims.length > MOST_CLAIMS) return false;
+  return claims.every((found) => {
     const word = found[0].toLowerCase();
     const claim = { start: found.index, end: found.index + found[0].length, word };
     const span = clauseSpanAt(evidence.spoken, found.index);
