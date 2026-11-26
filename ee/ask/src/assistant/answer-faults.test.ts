@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
-import { askRunResultSchema, type AiNotesCapability, type AskRunResult } from '@neburyx/contracts';
+import { askRunResultSchema, type AiNotesCapability, type AskRunResult, type CaseSummarizer } from '@neburyx/contracts';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, VIEW_KEYS, V, answerOf, expandResult, nodeOf, ok, rig, routeAsk } from '../testing/assistant-rig.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
@@ -18,7 +18,6 @@ const plural = V.anchor.endsWith('y') ? `${V.anchor.slice(0, -1)}ies` : `${V.anc
 const answer = (blocks: unknown[]) => ({ name: 'answer', args: { blocks } });
 const sentences = (...list: { text: string; cites: string[] }[]) => answer([{ kind: 'sentences', sentences: list }]);
 
-// What each test shows is how the turn behaves today where an answer went wrong in a hand test; the change that mends a fault changes its test.
 describe('what the loop is given about the elements on screen', () => {
   const noNotes: AiNotesCapability = { read: () => Promise.resolve({ entries: [], version: 1, save: { state: 'unsaved', savedAt: null } }), append: () => Promise.reject(new Error('not used')), canWrite: () => Promise.resolve() };
 
@@ -71,6 +70,28 @@ describe('what the loop is given about the elements on screen', () => {
     expect(r.elementReads.length).toBeGreaterThan(0);
   });
 
+  const summarizer: CaseSummarizer = {
+    maxElements: 300,
+    availability: () => ({ available: true }),
+    summarize: () => Promise.resolve({ status: 'ok', sentences: [{ text: `${V.title} A-1 is listed.`, cites: ['n1'], storable: true }], citations: [{ key: 'n1', kind: 'entity', ref: nodeOf('A-1').ref }], coverage: { retrieval: 'x', summary: 'y' }, removedCount: 0, sent: '', model: 'configured-model', calls: 1, summaryToken: 'tok' }),
+  };
+
+  it.each([
+    ['a typology', 'typology', { typology: ['A shape.'] }, {}],
+    ['a drafted case summary that names elements', 'ai-summary', {}, { caseSummarizer: summarizer }],
+  ] as const)('refuses once an answer made after only a read of %s with elements in view', async (_name, tool, options, over) => {
+    const model = fakeModel()
+      .respondWithTools([{ name: tool, args: {} }])
+      .respondWithTools([sentences({ text: nothingNamed, cites: ['s1'] })])
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([sentences({ text: seen, cites: ['n1'] })])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model, maxInputTokens: 200_000 }, ...options });
+    const given = await answerOf(r.route.handler(r.request(VIEW_BODY, over)));
+    expect(told(model)).toContain(READ_VIEW_FIRST);
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: seen }] }] });
+  });
+
   it('judges a second answer as usual, whether or not the view was read after the refusal', async () => {
     const model = fakeModel()
       .respondWithTools([sentences({ text: nothingNamed, cites: [] })])
@@ -83,12 +104,13 @@ describe('what the loop is given about the elements on screen', () => {
   });
 
   it.each([
+    ['after a read of the view', [{ name: 'view', args: {} }], 'n1', {}, VIEW_BODY],
     ['after a read of the source that returned elements', [{ name: 'byId', args: { id: 'A-1' } }], 'r1', {}, VIEW_BODY],
     ['with no element in view', [{ name: 'ai-notes', args: {} }], 's1', {}, { ...VIEW_BODY, viewElementKeys: [] }],
     ['with one call left, which could not both read and answer', [{ name: 'ai-notes', args: {} }], 's1', { agent: { maxCalls: 4 } }, VIEW_BODY],
     ['with no step left', [{ name: 'ai-notes', args: {} }], 's1', { loopSteps: 1 }, VIEW_BODY],
   ] as const)('judges the first answer as usual %s', async (_name, call, cite, options, body) => {
-    const text = cite === 'r1' ? `${V.title} A-1 is listed.` : nothingNamed;
+    const text = cite === 's1' ? nothingNamed : `${V.title} A-1 is listed.`;
     const model = fakeModel().respondWithTools([...call]).respondWithTools([sentences({ text, cites: [cite] })]).respond(new AIMessage('Done.'));
     const { given } = await turn(model, options as Parameters<typeof rig>[0], body, noNotes);
     expect(told(model)).not.toContain(READ_VIEW_FIRST);
@@ -169,7 +191,9 @@ describe('a list of connected elements', () => {
   it('tells the model, in the table rule and in the answer tool, that every connected element gets a row, in the order of the lines, and never a sample of its own', () => {
     const rule = readFileSync(fileURLToPath(new URL('../../prompts/assistant-view.md', import.meta.url)), 'utf8');
     expect(rule).toContain('a row for every connected element the lines hold, in the order of the lines, never a sample of your own choosing');
-    for (const table of [true, false]) expect(answerDescription(table)).toContain('an item or a row for every connected element the lines you were given hold, in the order of the lines and never a sample you choose');
+    for (const table of [true, false]) expect(answerDescription(table)).toContain('has an item for every connected element the lines you were given hold, in the order of the lines and never a sample you choose');
+    expect(answerDescription(true)).toContain('has a row for every connected element the lines you were given hold, in the order of the lines and never a sample you choose, up to 100 rows');
+    expect(answerDescription(false)).not.toMatch(/table/iu);
   });
 });
 
