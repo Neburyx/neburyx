@@ -128,6 +128,62 @@ describe('the stored thread whose read gets no answer', () => {
   });
 });
 
+describe('the stored thread whose read gets no answer, and whose next read finds the access lost', () => {
+  const lost: ApiResult<AssistantThreadResponse> = { ok: false, failure: { code: 'NOT_FOUND', message: 'x', retryable: false, traceId: 't' } };
+  const focus = async () => {
+    await act(async () => void window.dispatchEvent(new Event('focus')));
+    await drawn();
+  };
+  const expectCleared = (h: Awaited<ReturnType<typeof open>>) => {
+    expect(screen.getByRole('alert').textContent).toBe(ASSISTANT_COPY.accessLost);
+    expect(h.session.stored.getState()).toEqual({ kind: 'denied' });
+    expect(rows()).toBe(0);
+    expect(heading()).toBeNull();
+    expect(screen.queryByRole('button', { name: ASSISTANT_COPY.tryAgain })).toBeNull();
+    expect(screen.queryByText(ASSISTANT_COPY.storedFailed)).toBeNull();
+    expect(h.session.open.size).toBe(0);
+  };
+
+  it('says the first read failed at the bound, and clears the thread with the notice when Try again finds the access lost', async () => {
+    let reads = 0;
+    const h = await open(() => (++reads === 1 ? hang() : Promise.resolve(lost)));
+    await wait(READ_WAIT_MS);
+    expect(screen.getByRole('alert').textContent).toBe(`${ASSISTANT_COPY.storedFailed} ${ASSISTANT_COPY.tryAgain}`);
+    await press(tryAgain());
+    expectCleared(h);
+    await focus();
+    expect(reads).toBe(2);
+  });
+
+  it.each([
+    ['the window is shown', focus],
+    [
+      'another window says the thread changed',
+      async () => {
+        const other = createWindowChannel({ principalId: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', investigationId: 'inv-1', sourceId: 'a' });
+        others.push(other);
+        await act(async () => other.announceThreadChanged());
+        await drawn();
+      },
+    ],
+  ])('keeps the thread when the reread made as %s ends at the bound, and clears it with the notice when the next one finds the access lost', async (_name, reread) => {
+    let reads = 0;
+    const h = await open(() => (++reads === 1 ? Promise.resolve(ok(thread([1]))) : reads === 2 ? hang() : Promise.resolve(lost)));
+    await reread();
+    expect(reads).toBe(2);
+    await wait(READ_WAIT_MS);
+    expect(rows()).toBe(1);
+    expect(h.session.stored.getState().kind).toBe('ready');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(h.session.open.size).toBe(0);
+    await focus();
+    expectCleared(h);
+    const made = reads;
+    await focus();
+    expect(reads).toBe(made);
+  });
+});
+
 const turnWith = (answer: NonNullable<AssistantThreadResponse['turns'][number]['answer']>, citedElements: number): AssistantThreadResponse => ({
   turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements, steps: 0, question: 'What links them?', answer }],
   earlierTurns: 0,
