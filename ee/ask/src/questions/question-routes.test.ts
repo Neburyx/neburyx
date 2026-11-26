@@ -309,9 +309,9 @@ describe('a file-query intent', () => {
     expect(runs).toEqual([]);
   });
 
-  it('gives back the refusal of the gate rule that refused the query, and records a failed run', async () => {
-    const { route, request, events, rows } = await rig({ ...ask, run: () => ({ status: 'refused', refusal: { code: 'INVALID_REQUEST', reason: 'file-query-result' } }) });
-    expect(await refusalOf(route.handler(request(ASK)))).toMatchObject({ code: 'INVALID_REQUEST', reason: 'file-query-result' });
+  it.each(['file-query-result', 'file-query-masked'] as const)('gives back the refusal of the gate rule that refused the query (%s), and records a failed run', async (reason) => {
+    const { route, request, events, rows } = await rig({ ...ask, run: () => ({ status: 'refused', refusal: { code: 'INVALID_REQUEST', reason } }) });
+    expect(await refusalOf(route.handler(request(ASK)))).toMatchObject({ code: 'INVALID_REQUEST', reason });
     expect(detailOf(events[0])).toMatchObject({ kind: 'query', outcome: 'failed', cause: 'invalid-request' });
     expect(rows).toEqual([{ actorId: 'p-1', intent: 'byId', outcome: 'failed', rowCount: 0, elapsedMs: 0 }]);
   });

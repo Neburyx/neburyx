@@ -4,7 +4,7 @@
  * Approach: the text is first split into tokens (strings, comments and backticked names are skipped as non-code). Then every unquoted word is judged by an allowlist: a word that starts a clause and is not one of the nine allowed starters is refused. Words that can only be clauses or commands are held in one fixed set. Any other unknown word that follows a finished expression is refused too, because it can only be the start of a clause. A word after a dot or a colon (property, label, type) and a map key is not a clause. The body of EXISTS, COUNT and COLLECT subqueries is checked by the same rules.
  */
 
-const ALLOWED_STARTERS: ReadonlySet<string> = new Set(['MATCH', 'OPTIONAL', 'WHERE', 'WITH', 'RETURN', 'ORDER', 'SKIP', 'LIMIT', 'UNWIND']);
+export const ALLOWED_STARTERS: ReadonlySet<string> = new Set(['MATCH', 'OPTIONAL', 'WHERE', 'WITH', 'RETURN', 'ORDER', 'SKIP', 'LIMIT', 'UNWIND']);
 
 const REFUSED_WORDS: ReadonlySet<string> = new Set([
   'CREATE', 'MERGE', 'DELETE', 'DETACH', 'SET', 'REMOVE', 'FOREACH', 'LOAD', 'USE', 'CALL', 'UNION', 'PROFILE', 'EXPLAIN', 'INSERT', 'FINISH', 'LET',
@@ -12,23 +12,23 @@ const REFUSED_WORDS: ReadonlySet<string> = new Set([
   'ALLOCATE', 'DEALLOCATE', 'CSV',
 ]);
 
-const EXPRESSION_WORDS: ReadonlySet<string> = new Set([
+export const EXPRESSION_WORDS: ReadonlySet<string> = new Set([
   'AS', 'AND', 'OR', 'XOR', 'NOT', 'IN', 'IS', 'NULL', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'DISTINCT', 'ASC', 'DESC', 'ASCENDING', 'DESCENDING',
   'STARTS', 'ENDS', 'CONTAINS', 'ALL', 'ANY', 'NONE', 'SINGLE', 'SHORTEST', 'TRUE', 'FALSE', 'COUNT', 'EXISTS', 'COLLECT', 'BY',
   'WALK', 'TRAIL', 'ACYCLIC', 'REPEATABLE', 'ELEMENTS', 'PATHS', 'PATH', 'GROUPS', 'GROUP',
 ]);
 
 /** Keywords that end an expression, so a word right after one is still a word after a finished expression. */
-const VALUE_WORDS: ReadonlySet<string> = new Set(['NULL', 'TRUE', 'FALSE', 'END', 'ASC', 'DESC', 'ASCENDING', 'DESCENDING']);
+export const VALUE_WORDS: ReadonlySet<string> = new Set(['NULL', 'TRUE', 'FALSE', 'END', 'ASC', 'DESC', 'ASCENDING', 'DESCENDING']);
 
-const SUBQUERY_WORDS: ReadonlySet<string> = new Set(['EXISTS', 'COUNT', 'COLLECT']);
+export const SUBQUERY_WORDS: ReadonlySet<string> = new Set(['EXISTS', 'COUNT', 'COLLECT']);
 const BUILT_IN_NAMESPACES: ReadonlySet<string> = new Set(['date', 'datetime', 'localdatetime', 'time', 'localtime', 'duration', 'point', 'vector']);
 const CLOSERS: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
 const PARAMETER_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const PLAIN_NAME = /^[A-Za-z0-9_.]{1,80}$/;
 const MAX_SUBQUERY_DEPTH = 16;
 
-type Token =
+export type Token =
   | { readonly kind: 'word'; readonly text: string; readonly upper: string; readonly quoted: boolean }
   | { readonly kind: 'param'; readonly name: string }
   | { readonly kind: 'value' }
@@ -89,7 +89,7 @@ const readBackticked = (query: string, from: number): { readonly text: string; r
   return undefined;
 };
 
-const tokenize = (query: string): Tokens => {
+export const tokenize = (query: string): Tokens => {
   const tokens: Token[] = [];
   const notes = new Set<string>();
   let i = 0;
@@ -159,11 +159,11 @@ const tokenize = (query: string): Tokens => {
   return { tokens, unreadable: false, notes: [...notes] };
 };
 
-const symOf = (token: Token | undefined): string => (token?.kind === 'sym' ? token.text : '');
+export const symOf = (token: Token | undefined): string => (token?.kind === 'sym' ? token.text : '');
 const wordOf = (token: Token | undefined): string => (token?.kind === 'word' && !token.quoted ? token.upper : '');
 
 /** Index of the closer of each opener, or -1; `balanced` is false when a bracket is left open, closes nothing or closes the wrong kind. */
-const matchBrackets = (tokens: readonly Token[]): { readonly closeOf: readonly number[]; readonly balanced: boolean } => {
+export const matchBrackets = (tokens: readonly Token[]): { readonly closeOf: readonly number[]; readonly balanced: boolean } => {
   const closeOf: number[] = tokens.map(() => -1);
   const open: number[] = [];
   let balanced = true;

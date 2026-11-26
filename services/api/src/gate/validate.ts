@@ -6,7 +6,7 @@ import type { CursorPosition } from './cursor/codec.js';
 import { canonicalJson, filterHashOf } from './cursor/binding.js';
 import { hopCap } from './hops.js';
 import type { CursorBinding, CursorCodec } from './cursor/codec.js';
-import { renderFileQuery, type FileQueryDeps } from './file-query.js';
+import { refuseMaskedFileQuery, renderFileQuery, type FileQueryDeps } from './file-query.js';
 import { renderTemplate, type Rendered } from './render.js';
 import type { GateContext, GateRequest, Params, Template, TemplateCatalog } from './types.js';
 
@@ -122,6 +122,7 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   // the row cap of a file query is the source's `max_page`, and the gate's: a limit that is not it is not a request this gate makes
   if (template.fileQuery !== undefined && request.limit !== context.budgets.maxPage) throw new AppError('INVALID_REQUEST');
   const rendered = template.fileQuery === undefined ? renderTemplate(template, parsed.data, context.allowlist, request.limit, context.budgets.countCap) : renderFileQuery(fileQueries, context.sourceId, parsed.data);
+  if (context.mask && template.fileQuery !== undefined) refuseMaskedFileQuery(rendered.cypher, context.model);
   if (!template.paged) return { template, params: parsed.data, rendered, binding, held: 0 };
   // the position is the one this gate signed for this request, or none; a template reads it as the parameter `cursor`
   const verified = splitHeld(template, request.cursor === undefined ? null : cursors.verify(request.cursor, binding));

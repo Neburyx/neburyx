@@ -26488,6 +26488,48 @@
                   },
                   "message": {
                     "type": "string",
+                    "const": "This query uses personal data and cannot run while masking is on."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "file-query-masked"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "INVALID_REQUEST"
+                  },
+                  "message": {
+                    "type": "string",
                     "const": "This continue is no longer valid. Ask the question again."
                   },
                   "retryable": {

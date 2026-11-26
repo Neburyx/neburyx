@@ -143,3 +143,54 @@ describe('a write that passed the text check', () => {
     expect(answer).toBe('cannot-write');
   });
 });
+
+describe('the mask on a real server', () => {
+  const marked = [{ type: 'person', label: 'XPerson', stable_id: 'pid', pii: [{ property: 'name', class: 'name' }] }];
+  const MASKED = { code: 'INVALID_REQUEST', details: { reason: 'file-query-masked' } };
+  const asked: Readonly<Record<string, string>> = {
+    escaped: 'MATCH (p:XPerson) WHERE p.\\u006Eame = $name RETURN p',
+    dynamic: "MATCH (p:XPerson) WHERE p['na' + 'me'] = $name RETURN p",
+    everything: 'MATCH (p:XPerson) WHERE properties(p).name = $name RETURN p',
+    allowed: 'MATCH (p:XPerson {pid: $name}) WHERE toLower(p.pid) STARTS WITH "p" AND size(labels(p)) > 0 AND point({x: 1, y: 2}) IS NOT NULL AND date("2026-01-01") < date() RETURN p',
+    pointOfNode: 'MATCH (p:XPerson {pid: $name}) WHERE point({x: p, y: 1}) IS NOT NULL RETURN p',
+    dateOfNode: 'MATCH (p:XPerson {pid: $name}) WHERE date({date: p}) IS NOT NULL RETURN p',
+  };
+  const intents = Object.entries(asked).map(([name, text]) => intent(name, ['name'], text));
+  let masking: SourceGate;
+
+  beforeAll(() => {
+    const defaults = communitySeams();
+    masking = createSourceGate({
+      mapping: { sources: [sourceFor(server, { entities: marked, relationships })] },
+      env: envFor(server, server.reader),
+      seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
+      logger: { warn: () => undefined },
+      fileQueries: fileQueryDepsOf(() => ({ ...folder, intent: (_sourceId, name) => intents.find((candidate) => candidate.name === name) })),
+    });
+  });
+
+  afterAll(async () => {
+    await masking?.close();
+  });
+
+  const ask = (name: string, value: string, mask: boolean) => createFileQueryRunner({ gate: masking.gate }).run({ traceId: `tr-mask-${name}`, principal: LOCAL_PRINCIPAL, sourceId: 'graph', intent: name, values: { name: value }, mask });
+
+  it('reads a marked property through an escape, a dynamic access and the whole map when the mask is off, and refuses each when it is on', async () => {
+    for (const name of ['escaped', 'dynamic', 'everything']) {
+      expect((await ask(name, 'Ann', false)).nodes.map((node) => node.ref.stableId), name).toEqual(['p1']);
+      expect(await failure(ask(name, 'Ann', true)), name).toMatchObject(MASKED);
+    }
+  });
+
+  it('runs a query of listed functions and constructors under the mask', async () => {
+    expect((await ask('allowed', 'p1', true)).nodes.map((node) => node.ref.stableId)).toEqual(['p1']);
+  });
+
+  it('does not read the properties of a node that is a value of a constructor map', async () => {
+    for (const name of ['pointOfNode', 'dateOfNode']) {
+      const result = (await failure(ask(name, 'p1', true))) as { code?: string; details?: unknown };
+      expect(result.code, name).toBeDefined();
+      expect(result.details, name).not.toMatchObject({ reason: 'file-query-masked' });
+    }
+  });
+});

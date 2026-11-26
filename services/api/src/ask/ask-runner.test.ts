@@ -68,6 +68,7 @@ describe('a run that the gate or the services refuse', () => {
     ['an audit that could not be written', new AppError('AUDIT_UNAVAILABLE'), { code: 'AUDIT_UNAVAILABLE' }],
     ['parameters the service refuses', new AppError('INVALID_REQUEST'), { code: 'ASK_INTENT_INVALID' }],
     ['a file query that the gate refuses for its text', new AppError('INVALID_REQUEST', { reason: 'file-query-text' }), { code: 'INVALID_REQUEST', reason: 'file-query-text' }],
+    ['a file query that the gate refuses for the mask', new AppError('INVALID_REQUEST', { reason: 'file-query-masked' }), { code: 'INVALID_REQUEST', reason: 'file-query-masked' }],
     ['a file query that the gate refuses for its result', new AppError('INVALID_REQUEST', { reason: 'file-query-result' }), { code: 'INVALID_REQUEST', reason: 'file-query-result' }],
     ['a reason that is not a file query\'s', new AppError('INVALID_REQUEST', { reason: 'export-too-large' }), { code: 'ASK_INTENT_INVALID' }],
   ])('comes back as the refusal of %s, with the code and details the manual route gives and no result', async (_name, error, refusal) => {

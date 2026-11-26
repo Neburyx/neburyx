@@ -195,6 +195,8 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 | `property` | yes | The property that holds personal data |
 | `class` | no | Picks the shape of the mask: `name`, `email`, `phone`, `date` or `text`. A field with no class, or a class that does not fit, gets the full mask |
 
+While masking is on, a query of the [Ask folder](ai-preview.md#the-ask-folder) that touches a `pii` property is refused, so that nobody can search, filter or sort by a value they are not shown. A property of the same name counts on any entity type, and so does a use the query text does not name; [the rules](ai-preview.md#file-queries-while-masking-is-on) say which. The shipped by-name queries of the two domain packs filter by a `pii` name, so they are refused while masking is on.
+
 <!-- keys: degree -->
 | Key | Required | What it does |
 |---|---|---|

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_FOLDER_LIMITS, ASK_INTENT_NAME, ASK_SAVED_PATTERN_INTENT, checkIntentQuery, type AskFolder, type AskIntent } from '@neburyx/contracts';
+import { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_FOLDER_LIMITS, ASK_INTENT_NAME, ASK_SAVED_PATTERN_INTENT, checkIntentQuery, mayUseMaskedProperty, type AskFolder, type AskIntent } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
+import type { NormalizeModel } from './normalize/model.js';
 import type { Rendered } from './render.js';
 import type { Params } from './types.js';
 
@@ -20,7 +21,7 @@ export function fileQueryDepsOf(folder: () => AskFolder | undefined, check: File
   return { intent: (sourceId, name) => folder()?.intent(sourceId, name), check };
 }
 
-const refused = (reason: 'file-query-text' | 'file-query-intent' | 'file-query-values'): AppError => new AppError('INVALID_REQUEST', { reason });
+const refused = (reason: 'file-query-text' | 'file-query-intent' | 'file-query-values' | 'file-query-masked'): AppError => new AppError('INVALID_REQUEST', { reason });
 
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
@@ -55,6 +56,15 @@ export function renderFileQuery(deps: FileQueryDeps | undefined, sourceId: strin
   if (deps === undefined) throw refused('file-query-intent');
   if (sha256(intent.query.text) !== intent.query.sha256 || deps.check({ intent: intent.name, query: intent.query.text, parameters: intent.parameters }).length > 0) throw refused('file-query-text');
   return { cypher: intent.query.text, parameters: valuesOf(intent, params['values']) };
+}
+
+/**
+ * A masked field is not an oracle: while masking is asked, a file query that may use a property the mapping marks `pii`, on any entity type of the source, is refused. The text does not say which type a variable has,
+ * so the names of every type count.
+ */
+export function refuseMaskedFileQuery(query: string, model: NormalizeModel): void {
+  const properties = [...model.entitiesByType.values()].flatMap((entity) => entity.pii);
+  if (mayUseMaskedProperty(query, properties)) throw refused('file-query-masked');
 }
 
 /**

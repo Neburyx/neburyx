@@ -1,4 +1,4 @@
-import { AppError, RequestCancelled } from '../errors.js';
+import { AppError, detailsOf, RequestCancelled } from '../errors.js';
 import { makeToken } from '../reference/token.js';
 import { mapPositionReferences } from './cursor/references.js';
 import { AdapterError } from '../sources/errors.js';
@@ -173,11 +173,16 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
   return pages;
 }
 
-/** The detail of the event: the reason of a read that was cancelled or timed out, and what the template added (a run of a file query: its intent and the hash of its query). */
+const stopReason = (failure: AppError | RequestCancelled | undefined): 'cancelled' | 'timeout' | undefined => (failure instanceof RequestCancelled ? 'cancelled' : failure?.code === 'QUERY_TIMEOUT' ? 'timeout' : undefined);
+
+const refusedForMask = (failure: AppError | RequestCancelled | undefined): boolean => failure instanceof AppError && failure.code === 'INVALID_REQUEST' && Object.getOwnPropertyDescriptor(detailsOf(failure) ?? {}, 'reason')?.value === 'file-query-masked';
+
+/** The detail of the event: the reason of a read that was cancelled or timed out, and what the template added (a run of a file query: its intent, the hash of its query and, when the mask refused it, that reason). */
 function detailOf(progress: Progress, failure: AppError | RequestCancelled | undefined): { readonly detail?: AuditDetail } {
-  const reason = failure instanceof RequestCancelled ? ('cancelled' as const) : failure?.code === 'QUERY_TIMEOUT' ? ('timeout' as const) : undefined;
+  const reason = stopReason(failure);
   if (progress.detail === undefined) return reason === undefined ? {} : { detail: { reason } };
-  return { detail: { ...progress.detail, ...(reason === undefined ? {} : { reason }) } };
+  const said = refusedForMask(failure) ? ('file-query-masked' as const) : reason;
+  return { detail: { ...progress.detail, ...(said === undefined ? {} : { reason: said }) } };
 }
 
 async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progress, failure: AppError | RequestCancelled | undefined): Promise<void> {

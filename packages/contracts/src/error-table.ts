@@ -55,6 +55,7 @@ export const INVALID_REQUEST_ENTRIES: Readonly<Record<InvalidRequestReason, Omit
   'file-query-intent': { message: 'This question has no query for this source.', retryable: false },
   'file-query-values': { message: 'The values of this question do not match its query.', retryable: false },
   'file-query-result': { message: 'This query returned something that cannot be drawn on the graph.', retryable: false },
+  'file-query-masked': { message: 'This query uses personal data and cannot run while masking is on.', retryable: false },
 };
 
 export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {

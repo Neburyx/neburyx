@@ -17,6 +17,7 @@ const FILE_QUERY_WORDS: Readonly<Record<string, string>> = {
   'file-query-intent': 'This question has no query for this source.',
   'file-query-values': 'The values of this question do not fit its query.',
   'file-query-result': 'The query behind this question returned something that cannot be drawn on the graph.',
+  'file-query-masked': 'This query uses personal data and cannot run while masking is on.',
 };
 
 /** A failure that is the answer to a build without Ask: it is drawn as the card of the cause `unavailable`, with the server's fixed sentence. */

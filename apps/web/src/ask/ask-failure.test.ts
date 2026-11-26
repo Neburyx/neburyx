@@ -13,6 +13,7 @@ describe('the failures of an Ask call, in words', () => {
     ['INVALID_REQUEST', { reason: 'file-query-intent' }, 'This question has no query for this source.', undefined],
     ['INVALID_REQUEST', { reason: 'file-query-values' }, 'The values of this question do not fit its query.', undefined],
     ['INVALID_REQUEST', { reason: 'file-query-result' }, 'The query behind this question returned something that cannot be drawn on the graph.', undefined],
+    ['INVALID_REQUEST', { reason: 'file-query-masked' }, 'This query uses personal data and cannot run while masking is on.', undefined],
     ['AUDIT_UNAVAILABLE', undefined, 'The record of this could not be kept, so the answer is withheld. The question may have run. Try again later.', 'try-again'],
   ])('%s %j', (code, details, text, action) => {
     const words = askFailureWords(failure(code, details), 'a');

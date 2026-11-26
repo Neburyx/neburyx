@@ -95,6 +95,27 @@ The folder is read once at start-up; a change needs a restart. The start-up chec
 
 A word that Cypher reserves for a command (for example `start`, `next`, `offset`, `set`, `create`, `use`) cannot be used as a name in a query: put it in backticks.
 
+### File queries while masking is on
+
+When a person asks with masking on and the source's mapping marks any property `pii`, a query of the folder is refused before the source is read if its text uses such a property, or might use one it does not name. The answer is `INVALID_REQUEST` with the reason `file-query-masked` ("This query uses personal data and cannot run while masking is on."), and the audit event says the run was refused. With masking off the query runs as written. The check reads the query text only, and when it cannot tell, it refuses:
+
+- a `pii` property name of any entity type of the source, after a `.` (`p.name`, also in backticks) or as a key of a map in braces (`(p:Person {name: $name})`), wherever it stands, `RETURN` and `ORDER BY` included. Names are compared whole and by letter case: a marked `name` does not refuse `username` or `Name`. A property of the same name on another entity type, or on a relationship, is refused too, because the text does not say which type a variable has. A name that stands only in a string or a comment does not count;
+- a subscript such as `p[$key]` or `list[0]`, `.*` in a map projection, a `\u` or `\U` escape anywhere in the text, and `CALL`;
+- a function that is not listed below, so `properties()`, `keys()` and any function written in backticks;
+- `date`, `datetime`, `localdatetime`, `time`, `localtime`, `duration` or `point` given anything but nothing, one literal, one parameter or one map written out (`point({x: 1, y: 2})`), because they also take a whole map.
+
+The functions a query may call while masking is on (in any letter case):
+
+- aggregating: `count`, `collect`, `sum`, `avg`, `min`, `max`, `stdev`, `stdevp`, `percentilecont`, `percentiledisc`
+- predicate: `all`, `any`, `none`, `single`, `exists`
+- scalar: `coalesce`, `elementid`, `id`, `type`, `length`, `size`, `startnode`, `endnode`, `head`, `last`, `toboolean`, `tobooleanornull`, `tofloat`, `tofloatornull`, `tointeger`, `tointegerornull`, `tostring`, `tostringornull`, `char_length`, `character_length`, `timestamp`, `randomuuid`
+- list: `labels`, `nodes`, `relationships`, `range`, `reverse`, `tail`, `reduce`, `tobooleanlist`, `tofloatlist`, `tointegerlist`, `tostringlist`
+- number: `abs`, `ceil`, `floor`, `isnan`, `rand`, `round`, `sign`, `e`, `exp`, `log`, `log10`, `sqrt`, `pi`, `sin`, `cos`, `tan`, `cot`, `asin`, `acos`, `atan`, `atan2`, `degrees`, `radians`, `haversin`
+- text: `left`, `right`, `substring`, `split`, `replace`, `trim`, `ltrim`, `rtrim`, `btrim`, `lower`, `upper`, `tolower`, `toupper`, `normalize`
+- paths: `shortestpath`, `allshortestpaths`
+- temporal and point: `date`, `datetime`, `localdatetime`, `time`, `localtime`, `duration`, `point` (with the arguments above), `duration.between`, `duration.inDays`, `duration.inMonths`, `duration.inSeconds`, `point.distance`, `point.withinBBox`
+- vector: `vector.similarity.cosine`, `vector.similarity.euclidean`
+
 ### The reply form
 
 `classification.md` must tell the model to answer in this form (the shipped files of the two domain packs do). Ask reads the reply strictly:

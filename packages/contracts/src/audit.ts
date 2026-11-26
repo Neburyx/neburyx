@@ -211,7 +211,7 @@ export const auditDetailSchema = z.union([
   z.strictObject({ notes: notesAuditDetailSchema }),
   z.strictObject({ turn: assistantTurnAuditDetailSchema }),
   z.strictObject({ threadClear: threadClearAuditDetailSchema }),
-  z.strictObject({ fileQuery: z.strictObject({ intent: z.string().regex(ASK_INTENT_NAME).optional(), queryHash: z.string().regex(/^[0-9a-f]{64}$/).optional() }), reason: z.enum(['cancelled', 'timeout']).optional() }),
+  z.strictObject({ fileQuery: z.strictObject({ intent: z.string().regex(ASK_INTENT_NAME).optional(), queryHash: z.string().regex(/^[0-9a-f]{64}$/).optional() }), reason: z.enum(['cancelled', 'timeout', 'file-query-masked']).optional() }),
 ]);
 
 export type AuditDetail =
@@ -231,8 +231,8 @@ export type AuditDetail =
       readonly fileQuery?: never;
     }
   | { readonly ai: AiAuditDetail; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
-  /** A run of a file query of the Ask folder: the intent's name and the SHA-256 of its query (each present only when the folder holds the intent) and, for a read that was cancelled or timed out, the reason; never an entity value, a query text or a row. */
-  | { readonly fileQuery: { readonly intent?: string; readonly queryHash?: string }; readonly reason?: 'cancelled' | 'timeout'; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly target?: never; readonly type?: never; readonly askRun?: never }
+  /** A run of a file query of the Ask folder: the intent's name and the SHA-256 of its query (each present only when the folder holds the intent) and, for a read that was cancelled, timed out or refused for the mask, the reason; never an entity value, a query text, a property name or a row. */
+  | { readonly fileQuery: { readonly intent?: string; readonly queryHash?: string }; readonly reason?: 'cancelled' | 'timeout' | 'file-query-masked'; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly target?: never; readonly type?: never; readonly askRun?: never }
   /** What a question of Ask was: the intent, the outcome or cause, and hashes and counts only. */
   | { readonly askRun: AskRunAuditDetail; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never }
 
