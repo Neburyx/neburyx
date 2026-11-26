@@ -18,7 +18,6 @@ let rig: Neo4jRig;
 
 beforeAll(async () => {
   rig = await startNeo4jRig({ size: 10, timeoutMs: BUDGET_MS });
-  // the last read to get a slot gets it just before the wait ends and then runs to its budget
   // the statement of the ordinary reads is planned before one is timed or held to the budget
   await warmUp('the expansion', expandOnce);
   const read = await timeOneRead(expandOnce);
@@ -32,6 +31,7 @@ beforeAll(async () => {
   });
   // the timed reads' slots are released before the case counts its own
   expect(await pollUntil(() => Promise.resolve(rig.slots.inspect().sources.size === 0), 5000, 25)).toBe(true);
+  // the last read to get a slot gets it just before the wait ends and then runs to its budget
   ceilingMs = ceilingOf(QUEUE_WAIT_MS + BUDGET_MS, lag.lagMs, read);
   ceilingNote = `ceiling ${ceilingMs} ms: ordinary read ${read} ms, server lag ${lag.lagMs} ms from the ${lag.via}`;
   timedCalls = rig.executor.calls.length;
