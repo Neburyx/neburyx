@@ -2,7 +2,7 @@
 export const SOURCE_REQUEST_DEADLINE_MS = 10_000;
 
 /**
- * How many source reads one request makes one after another, for each request that makes more than one: each has its own deadline, so the server can still be answering after this many deadlines.
+ * The most source reads one request makes one after another, for each request that makes more than one: each has its own deadline, so the server can still be answering after this many deadlines.
  * A server test per request counts them.
  */
 export const SOURCE_READS_IN_A_ROW = {

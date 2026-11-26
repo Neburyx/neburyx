@@ -36,10 +36,12 @@ type Found =
   | { readonly kind: 'found'; readonly nodes: readonly GraphNode[]; readonly count: Count | undefined }
   | { readonly kind: 'failed'; readonly failure: ApiFailure };
 
+const NOTHING: Found = { kind: 'none' };
+
 export interface EntitySearch {
   readonly found: Found;
-  /** What the last answered search of this source, type and masking found: it stays listed when a later search fails. */
-  readonly earlier: readonly GraphNode[];
+  /** What the last answered search of this source, type and masking found, with the text it answered: it stays listed while a later search waits and after one fails. */
+  readonly earlier: { readonly text: string; readonly nodes: readonly GraphNode[] } | undefined;
   /** A search for the text typed is out and has no answer yet. */
   readonly waiting: boolean;
   /** Searches again for the text typed. */
@@ -48,19 +50,22 @@ export interface EntitySearch {
   readonly asked: boolean;
 }
 
-/** The search of the source for the text typed, narrowed to one entity type when one is given and over every type when not, after a pause; typed text only ever reaches the search route. An answer to older text is never shown. */
+/**
+ * The search of the source for the text typed, narrowed to one entity type when one is given and over every type when not, after a pause; typed text only ever reaches the search route. An answer to older text is listed until the newer one comes
+ * (and stays when the newer search fails); an answer of another source, type or masking is never shown.
+ */
 export function useEntitySearch(client: ApiClient, sourceId: string, mask: boolean, entityType: string | undefined, text: string): EntitySearch {
-  const [found, setFound] = useState<Found>({ kind: 'none' });
+  const [held, setHeld] = useState<{ readonly scope: string; readonly found: Found }>({ scope: '', found: NOTHING });
   const [asked, setAsked] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [waiting, setWaiting] = useState(false);
   const scope = JSON.stringify([sourceId, mask, entityType]);
-  const [answered, setAnswered] = useState<{ readonly scope: string; readonly nodes: readonly GraphNode[] }>({ scope, nodes: [] });
+  const [answered, setAnswered] = useState<{ readonly scope: string; readonly text: string; readonly nodes: readonly GraphNode[] } | undefined>(undefined);
 
   useEffect(() => {
     const trimmed = text.trim();
     if (trimmed === '') {
-      setFound({ kind: 'none' });
+      setHeld({ scope, found: NOTHING });
       setAsked(false);
       setWaiting(false);
       return undefined;
@@ -78,8 +83,8 @@ export function useEntitySearch(client: ApiClient, sourceId: string, mask: boole
         if (controller.signal.aborted) return;
         setWaiting(false);
         setAsked(true);
-        if (result.ok) setAnswered({ scope, nodes: result.value.exact });
-        setFound(result.ok ? { kind: 'found', nodes: result.value.exact, count: result.value.counts.exact } : result.failure.code === 'ABORTED' ? { kind: 'none' } : { kind: 'failed', failure: result.failure });
+        if (result.ok) setAnswered({ scope, text: trimmed, nodes: result.value.exact });
+        setHeld({ scope, found: result.ok ? { kind: 'found', nodes: result.value.exact, count: result.value.counts.exact } : result.failure.code === 'ABORTED' ? NOTHING : { kind: 'failed', failure: result.failure } });
       };
       void send();
     }, SEARCH_DEBOUNCE_MS);
@@ -90,7 +95,9 @@ export function useEntitySearch(client: ApiClient, sourceId: string, mask: boole
   }, [text, client, sourceId, mask, entityType, scope, attempt]);
 
   const retry = (): void => setAttempt((count) => count + 1);
-  return { found, asked, waiting, earlier: text.trim() === '' || answered.scope !== scope ? [] : answered.nodes, retry };
+    // read here and not in the effect, so that nothing of another scope is drawn even once
+  const current = held.scope === scope;
+  return { found: current ? held.found : NOTHING, asked: current && asked, waiting, earlier: text.trim() === '' || answered?.scope !== scope ? undefined : answered, retry };
 }
 
 /** The line of a picker's failed search, with Try again beside it where a retry helps. A press on it leaves the focus in the field, whose blur ends the search. */
@@ -100,7 +107,7 @@ export function SearchFailed({ text, failure, retry }: { readonly text: string; 
       <p className="patterns-error" role="alert">
         {text}
       </p>
-      {offersRetry(failure) ? <RetryButton name={RETRY_NAMES.sourceSearch} run={retry} /> : null}
+      {offersRetry(failure) ? <RetryButton failure={failure} name={RETRY_NAMES.sourceSearch} run={retry} /> : null}
     </div>
   );
 }
@@ -114,7 +121,7 @@ export function StartEntityField({ client, sourceId, mask, label, entityType, ca
   const { found, asked, waiting, earlier, retry } = useEntitySearch(client, sourceId, mask, entityType, text);
 
   const listed = new Set(candidates.map((node) => elementKey(node.ref)));
-  const searched = found.kind === 'found' ? found.nodes : found.kind === 'failed' ? earlier : [];
+  const searched = found.kind === 'found' ? found.nodes : found.kind === 'failed' ? (earlier?.nodes ?? []) : [];
   const extra = searched.filter((node) => !listed.has(elementKey(node.ref)));
   const options = [...candidates, ...extra];
   return (

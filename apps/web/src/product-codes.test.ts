@@ -23,7 +23,7 @@ function isNotShown(node: ts.Node): boolean {
   return false;
 }
 
-/** The lines of a source file that write a code into text: into a template, into JSX or onto a string. */
+/** The lines of a source file that write a code into text: into a template, into JSX or onto a string. It follows the name: a code first copied into a variable of another name is not seen here, only by the tests that read the screens. */
 function codesWritten(name: string, source: string): string[] {
   const file = ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true, name.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const found: string[] = [];

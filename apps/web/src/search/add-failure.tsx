@@ -7,7 +7,7 @@ const timeoutOf = (failure: ApiFailure): number | undefined => ('details' in fai
 
 function headlineOf(failure: ApiFailure, sourceId: string): string {
   if (failure.code === 'QUERY_TIMEOUT') return timedOutText(timeoutOf(failure));
-  return failure.code === 'NOT_FOUND' ? unknownSourceText(sourceId) : failureText(failure, sourceId);
+  return failure.code === 'NOT_FOUND' ? unknownSourceText(sourceId) : failureText(failure);
 }
 
 export function SearchFailure({ failure, sourceId, onRetry }: { readonly failure: ApiFailure; readonly sourceId: string; readonly onRetry: () => void }) {

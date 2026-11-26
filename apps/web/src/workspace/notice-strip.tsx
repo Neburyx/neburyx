@@ -34,7 +34,7 @@ export function NoticeStrip({ extra }: { readonly extra?: ReactNode }) {
                 <span className="notice-lead">{notice.lead}</span>
                 <FailureNotice failure={notice.failure} />
               </div>
-              {offersRetry(notice.failure) ? <RetryButton name={notice.retryName} run={notice.retry} /> : <span />}
+              {offersRetry(notice.failure) ? <RetryButton failure={notice.failure} name={notice.retryName} run={notice.retry} /> : <span />}
             </div>
           ))}
         </div>

@@ -45,17 +45,22 @@ export function boundedRead<T>(load: (signal: AbortSignal) => Promise<ApiResult<
       clearTimeout(giveUp);
       signal?.removeEventListener('abort', cancel);
     };
-    if (signal?.aborted === true) cancel();
-    else signal?.addEventListener('abort', cancel, { once: true });
-    load(own.signal).then(
-      (result) => {
+    const fail = (error: unknown): void => {
+      settle();
+      reject(error instanceof Error ? error : new Error('the read failed'));
+    };
+    if (signal?.aborted === true) {
+      cancel();
+      return;
+    }
+    signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      load(own.signal).then((result) => {
         settle();
         resolve(result);
-      },
-      (error: unknown) => {
-        settle();
-        reject(error instanceof Error ? error : new Error('the read failed'));
-      },
-    );
+      }, fail);
+    } catch (error) {
+      fail(error);
+    }
   });
 }

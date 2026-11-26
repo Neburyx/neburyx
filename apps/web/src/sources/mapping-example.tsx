@@ -19,7 +19,7 @@ export function MappingExample({ sourceId, opening }: { readonly sourceId: strin
       {excerpt?.failure === undefined ? null : (
         <>
           <FailureNotice failure={excerpt.failure} />
-          {offersRetry(excerpt.failure) ? <RetryButton name={RETRY_NAMES.mappingExample} compact={false} run={() => excerpts.retry(sourceId, opening)} /> : null}
+          {offersRetry(excerpt.failure) ? <RetryButton failure={excerpt.failure} name={RETRY_NAMES.mappingExample} compact={false} run={() => excerpts.retry(sourceId, opening)} /> : null}
         </>
       )}
       {text === undefined ? (

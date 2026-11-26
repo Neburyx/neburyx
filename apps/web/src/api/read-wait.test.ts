@@ -66,12 +66,20 @@ describe('a read that may not wait without end', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('is an abort at once, with an aborted signal handed on, when the caller aborted before it began', async () => {
-    const read = hung();
+  it('is an abort at once, with no request made, when the caller aborted before it began', async () => {
+    const load = vi.fn(() => Promise.resolve(answer));
     const caller = new AbortController();
     caller.abort();
-    await expect(boundedRead(read.load, caller.signal)).resolves.toEqual({ ok: false, failure: { code: 'ABORTED' } });
-    expect(read.aborted()).toBe(true);
+    await expect(boundedRead(load, caller.signal)).resolves.toEqual({ ok: false, failure: { code: 'ABORTED' } });
+    expect(load).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('passes on a request that threw before it returned, and leaves no timer behind', async () => {
+    const thrower = (): Promise<ApiResult<number>> => {
+      throw new Error('broke at once');
+    };
+    await expect(boundedRead(thrower)).rejects.toThrow('broke at once');
     expect(vi.getTimerCount()).toBe(0);
   });
 

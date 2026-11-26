@@ -83,7 +83,7 @@ export function OpenDeepLinkPrompt() {
       if (answer.kind === 'shown') navigate(`${EXPLORE_PATH}/${answer.id}`, { state: { resumed: answer.created === false } });
       else if (answer.failure.code === 'INVALID_REQUEST' && mask) setPartsProblem(PROMPT_MASKED_VALUE);
       else if (answer.failure.code === 'NOT_FOUND') setPartsProblem(PROMPT_NOT_FOUND);
-      else setPartsProblem(`The entity could not be opened. ${failureText(answer.failure, parts.sourceId)}`);
+      else setPartsProblem(`The entity could not be opened. ${failureText(answer.failure)}`);
     });
   };
 

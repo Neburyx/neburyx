@@ -36,7 +36,9 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
   const listId = useId();
   const { found, asked, waiting, earlier, retry } = useEntitySearch(client, sourceId, mask, entityType, text);
   const typed = text.trim() !== '';
-  const options: readonly GraphNode[] = typed ? (found.kind === 'found' ? found.nodes : found.kind === 'failed' ? earlier : []) : candidates;
+  const options: readonly GraphNode[] = typed ? (found.kind === 'found' ? found.nodes : found.kind === 'failed' ? (earlier?.nodes ?? []) : []) : candidates;
+  // the rows are headed by the text they answered, which is older than the typed text while a newer search waits and after it fails
+  const listedFor = typesMatching(typeName, earlier?.text ?? text.trim());
   const listing = open && (typed ? asked || found.kind === 'failed' : candidates.length > 0);
   const choose = (node: GraphNode): void => {
     onChoose(node);
@@ -107,11 +109,11 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
       />
       {listing ? (
         <div className="run-start-list" onMouseDown={(event) => event.preventDefault()}>
-          <p className="run-start-heading">{typed ? typesMatching(typeName, text.trim()) : typesOnCanvas(typeName)}</p>
+          <p className="run-start-heading">{typed ? listedFor : typesOnCanvas(typeName)}</p>
           {waiting && typed ? <WaitingLine word={SEARCHING} /> : null}
           {found.kind === 'failed' && typed && !waiting ? <SearchFailed text={failureView(found.failure, sourceName).text} failure={found.failure} retry={retry} /> : null}
           {found.kind === 'failed' && typed && options.length === 0 ? null : (
-            <ul id={listId} role="listbox" aria-label={typed ? typesMatching(typeName, text.trim()) : typesOnCanvas(typeName)}>
+            <ul id={listId} role="listbox" aria-label={typed ? listedFor : typesOnCanvas(typeName)}>
               {options.map((node, index) => {
                 const label = entityLabel(node, showIds);
                 return (

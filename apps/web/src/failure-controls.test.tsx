@@ -1,6 +1,6 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiFailure, ApiResult } from './api/client.js';
 import { fakeClient } from './api/fake-client.js';
 import { ProfileProvider } from './canvas/profile-context.js';
@@ -157,5 +157,27 @@ describe('the entity types of the legend', () => {
     await act(async () => undefined);
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again to read the entity types' }));
     expect(held.reloads()).toBe(1);
+  });
+});
+
+describe('a Try again while the server asks the person to wait', () => {
+  const LIMITED: ApiFailure = { code: 'RATE_LIMITED', message: 'Too many requests. Try again shortly.', retryable: true, traceId: 'trace-2', details: { retryAfterMs: 2000 } };
+
+  it('is disabled and counts the seconds down, then reads again', async () => {
+    vi.useFakeTimers();
+    const held = profileStore({ phase: 'failed', failure: LIMITED });
+    shell({}, <LegendPanel />, held.profile);
+    await act(async () => undefined);
+    const button = () => screen.getByRole('button', { name: /try again/i });
+    expect(button().textContent).toBe('Try again in 2 s');
+    expect((button() as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
+    expect(button().textContent).toBe('Try again in 1 s');
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
+    expect(button().getAttribute('aria-label')).toBe('Try again to read the entity types');
+    expect((button() as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => void fireEvent.click(button()));
+    expect(held.reloads()).toBe(1);
+    vi.useRealTimers();
   });
 });

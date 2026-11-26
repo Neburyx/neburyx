@@ -50,7 +50,7 @@ function EndField({ client, sourceId, mask, id, label, candidates, chosen, onCho
   const query = typed.trim().toLowerCase();
   const local = candidates.filter((node) => query === '' || node.display.title.toLowerCase().includes(query)).slice(0, LOCAL_OPTIONS);
   const loadedKeys = new Set(candidates.map((node) => elementKey(node.ref)));
-  const searched = found.kind === 'found' ? found.nodes : found.kind === 'failed' ? earlier : [];
+  const searched = found.kind === 'found' ? found.nodes : found.kind === 'failed' ? (earlier?.nodes ?? []) : [];
   const hits = searched.filter((node) => !loadedKeys.has(elementKey(node.ref)));
   const options = [...local, ...hits];
   const listId = `${id}-options`;
