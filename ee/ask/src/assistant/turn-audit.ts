@@ -64,6 +64,7 @@ interface TurnNotes {
   summary?: { readonly kept: number; readonly dropped: number };
   tableRowsLeftOut?: number;
   listItemsDropped?: number;
+  tableCitesAdded?: number;
   /** That the reads being made are made again after a decision; and the record of the waiting turn this turn goes on from. */
   replaying?: boolean;
   resumes?: string;
@@ -92,6 +93,8 @@ export interface TurnNote {
   readonly tableRowsLeftOut?: number;
   /** How many items of lists the checks removed or the total of 12 cut: a count and nothing of them. */
   readonly listItemsDropped?: number;
+  /** How many cites the server added to the rows of the tables shown, the ends of the relationships they cite: a count and nothing of them. */
+  readonly tableCitesAdded?: number;
 }
 
 /** Notes what the route of a turn knows; outside a turn it does nothing. */
@@ -109,6 +112,7 @@ export function noteTurn(change: TurnNote): void {
     if (change.summary !== undefined) notes.summary = change.summary;
     if (change.tableRowsLeftOut !== undefined) notes.tableRowsLeftOut = change.tableRowsLeftOut;
     if (change.listItemsDropped !== undefined) notes.listItemsDropped = change.listItemsDropped;
+    if (change.tableCitesAdded !== undefined) notes.tableCitesAdded = change.tableCitesAdded;
   });
 }
 
@@ -322,7 +326,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(notes.steps === undefined ? {} : { steps: notes.steps }),
     ...(ending.citedElements === undefined ? {} : { citedElements: ending.citedElements }),
     ...(ending.list === undefined ? {} : { listItemsShown: ending.list.shown, ...(ending.list.dropped === undefined ? {} : { listItemsDropped: ending.list.dropped }) }),
-    ...(ending.table === undefined ? {} : { form: 'table' as const, tableRowsShown: ending.table.shown, ...(ending.table.dropped === undefined ? {} : { tableRowsDropped: ending.table.dropped }), ...(ending.table.notShown === undefined ? {} : { tableRowsNotShown: ending.table.notShown }) }),
+    ...(ending.table === undefined ? {} : { form: 'table' as const, tableRowsShown: ending.table.shown, ...(ending.table.dropped === undefined ? {} : { tableRowsDropped: ending.table.dropped }), ...(ending.table.notShown === undefined ? {} : { tableRowsNotShown: ending.table.notShown }), ...((notes.tableCitesAdded ?? 0) === 0 ? {} : { tableCitesAdded: notes.tableCitesAdded }) }),
     ...(notes.selectedElements === undefined || notes.selectedElements === 0 ? {} : { selectedElements: notes.selectedElements }),
     ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),
     modelCalls: notes.calls + (notes.summaryCalls ?? 0),

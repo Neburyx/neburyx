@@ -6,7 +6,7 @@ import { askRunResultSchema, type AiNotesCapability, type AskRunResult } from '@
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, VIEW_KEYS, V, answerOf, expandResult, nodeOf, ok, rig, routeAsk } from '../testing/assistant-rig.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
-import { OFFERED_LABEL_WORDS, labelsHold } from './table.js';
+import { OFFERED_LABEL_WORDS, labelsHold, withEndsCited } from './table.js';
 import { READ_VIEW_FIRST, answerDescription } from './agent-turn.js';
 import { assembleResults } from './tool-answer.js';
 
@@ -207,6 +207,69 @@ describe('the column labels a table may use', () => {
     const r = await rig({ reply: TABLE, agent: { model, maxInputTokens: 200_000 }, viewNodes: nodes });
     const given = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: VIEW_KEYS })));
     expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { columns: ['Element', 'Type', 'Relationship'], rows: [{ cells: [`${V.title} A-1`, V.anchor, ''] }] } }] });
+  });
+});
+
+describe('a row that cites a relationship', () => {
+  const [from, to] = [nodeOf('A-1'), nodeOf('A-2')];
+  const edge = { ref: { sourceId: from.ref.sourceId, type: V.links[1], from: V.anchor, to: V.anchor, stableId: 'e-1' }, from: from.ref, to: to.ref, type: V.links[1], direction: 'from-to', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] };
+  const keys = [...[from, to].map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId])), JSON.stringify(['edge', from.ref.sourceId, 'stored', V.links[1], V.anchor, V.anchor, 'e-1'])];
+  // the second element is the row's own; its third cell names the other end, whose line the row does not cite
+  const row = { cells: [`${V.title} A-2`, `${V.links[1]}: ${V.title} A-1 to ${V.title} A-2`], cites: ['n2', 'e1'] };
+  const turn = async (rows: { cells: string[]; cites: string[] }[], extra: { viewNodes?: ReturnType<typeof nodeOf>[]; edges?: unknown[] } = {}, mask = false) => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([answer([{ kind: 'table', columns: ['Element', 'Relationship'], rows }])]).respond(new AIMessage('Done.'));
+    const r = await rig({ reply: TABLE, agent: { model, maxInputTokens: 200_000 }, viewNodes: extra.viewNodes ?? [from, to], readEdges: () => extra.edges ?? [edge] });
+    const given = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: keys, ...(mask ? { mask: true } : {}) })));
+    for (let step = 0; step < 20; step += 1) await Promise.resolve();
+    const closed = r.events.find((event) => event.action === 'assistant.turn.closed');
+    return { given, detail: (closed?.detail as { turn: Record<string, unknown> }).turn };
+  };
+
+  it('cites the end it names too, after its own cites, is kept, shows the end among its sources, and the closing event counts the cite the server added', async () => {
+    const { given, detail } = await turn([row]);
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { rows: [{ cites: ['n2', 'e1', 'n1'] }] } }] });
+    expect((given as { citations: { key: string }[] }).citations.map((citation) => citation.key).sort()).toEqual(['e1', 'n1', 'n2']);
+    expect(detail['tableCitesAdded']).toBe(1);
+    expect(JSON.stringify(detail)).not.toContain('A-1');
+  });
+
+  it('adds nothing, and counts nothing, for a row that cites no relationship', async () => {
+    const { given, detail } = await turn([{ cells: [`${V.title} A-2`, ''], cites: ['n2'] }]);
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { rows: [{ cites: ['n2'] }] } }] });
+    expect(detail['tableCitesAdded']).toBeUndefined();
+  });
+
+  it('adds no end that was not sent: the row naming it is removed as before', async () => {
+    const { given } = await turn([row], { viewNodes: [to] });
+    expect(given).toMatchObject({ status: 'not-answered' });
+  });
+
+  it('keeps the model\'s own cites first and adds ends only up to the most a row may cite', () => {
+    const own = ['e1', 'n3', 'n4', 'n5', 'n6'];
+    const assembled = {
+      keys: new Map(['n1', 'n2', 'n3', 'n4', 'n5', 'n6'].map((key, index) => [key, { kind: 'entity' as const, ref: nodeOf(`A-${index + 1}`).ref }])),
+      relationshipEnds: new Map([['e1', [[V.anchor, 'A-1'], [V.anchor, 'A-2']] as const]]),
+    };
+    const { rows, added } = withEndsCited([{ cites: own }], assembled);
+    expect(rows[0]?.cites).toEqual([...own, 'n1']);
+    expect([...added.values()]).toEqual([1]);
+    const full = ['e1', 'n3', 'n4', 'n5', 'n6', 'e2'];
+    expect(withEndsCited([{ cites: full }], assembled).rows[0]?.cites).toEqual(full);
+  });
+
+  it('does the same on the answer from the view, which writes a table without the loop', async () => {
+    const r = await rig({ reply: TABLE, view: ok(JSON.stringify({ table: { columns: ['Element', 'Relationship'], rows: [row] } })), viewNodes: [from, to], readEdges: () => [edge] });
+    const given = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: keys })));
+    for (let step = 0; step < 20; step += 1) await Promise.resolve();
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { rows: [{ cites: ['n2', 'e1', 'n1'] }] } }] });
+    expect((r.events.find((event) => event.action === 'assistant.turn.closed')?.detail as { turn: Record<string, unknown> }).turn['tableCitesAdded']).toBe(1);
+  });
+
+  it('judges an added end as the gate sent it: a name the mask hides keeps no cell', async () => {
+    const named = { cells: row.cells.map((cell, index) => (index === 1 ? `${V.links[1]}: Zeta Holdings to ${V.title} A-2` : cell)), cites: row.cites };
+    const shown = (title: string) => ({ ...from, display: { ...from.display, title } });
+    expect((await turn([named], { viewNodes: [shown('Zeta Holdings'), to] })).given).toMatchObject({ status: 'answered' });
+    expect((await turn([named], { viewNodes: [shown('••••'), to] }, true)).given).toMatchObject({ status: 'not-answered' });
   });
 });
 

@@ -4,7 +4,7 @@ import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentRun, type
 import { AuditUnavailableError, removalNoteOf, type AuditedCallContext, type CheckRunner, type RejectedSentence } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { judgeCheck } from '../case-summary/judge.js';
-import { OFFERED_LABEL_WORDS, judgeTableRows, rowSentenceOf } from './table.js';
+import { OFFERED_LABEL_WORDS, judgeTableRows, rowSentenceOf, withEndsCited } from './table.js';
 import { combineOutcomes, type BlocksAnswer, type JudgedBlock } from './answer-blocks.js';
 import { parseBlocksInput } from './blocks.js';
 import { viewCoverageOf } from '../case-summary/coverage.js';
@@ -331,10 +331,14 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         let removed = 0;
         let verdictFound = false;
         let droppedWithTable = 0;
+        const citesAdded = new Map<string, number>();
         const rejected: RejectedSentence[] = [];
         for (const block of inputs) {
           if (block.kind === 'table') {
-            const draft = block.draft;
+            // a row that cites a relationship cites its ends too, so that a cell naming an end is judged against that end and the person sees it
+            const wider = withEndsCited(block.draft.rows, basis.assembled);
+            const draft = { ...block.draft, rows: wider.rows };
+            for (const [row, count] of wider.added) citesAdded.set(JSON.stringify([row.cells, row.cites]), count);
             const judgedRows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks: options.checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
             if ('refused' in judgedRows) return 'The answer could not be checked. Reply "Done."';
             kept += judgedRows.kept.length;
@@ -372,7 +376,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         if (combined !== undefined) {
           standing = withPointer(combined, parsed.data.pointer);
           onLastCall = isLast;
-          noteTurn({ tableRowsLeftOut: combined.blocks.some((block) => block.kind === 'table') ? 0 : droppedWithTable, listItemsDropped: listDropped + combined.itemsCut });
+          const tableCitesAdded = combined.blocks.flatMap((block) => (block.kind === 'table' ? block.table.rows : [])).reduce((sum, row) => sum + (citesAdded.get(JSON.stringify([row.cells, row.cites])) ?? 0), 0);
+          noteTurn({ tableRowsLeftOut: combined.blocks.some((block) => block.kind === 'table') ? 0 : droppedWithTable, listItemsDropped: listDropped + combined.itemsCut, tableCitesAdded });
         }
         else standing ??= other;
         // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown, so no call acknowledges it

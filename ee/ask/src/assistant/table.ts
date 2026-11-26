@@ -50,6 +50,24 @@ export function subjectPluralOf(subject: { readonly type: string; readonly text:
 
 export const rowsPhrase = tableRowsPhrase;
 
+/**
+ * The rows with the two ends of each relationship they cite added after the model's own cites, so that a cell that names an end is judged against that end's line and the person sees it cited. Only an end that has a line of its
+ * own among the lines sent in this turn is added, never past the most a row may cite, and nothing is read. `added` says, by the row as it now stands, how many cites the server added to it.
+ */
+export function withEndsCited<Row extends { readonly cites: readonly string[] }>(rows: readonly Row[], assembled: Pick<AssembledText, 'keys' | 'relationshipEnds'>): { readonly rows: readonly Row[]; readonly added: ReadonlyMap<Row, number> } {
+  const keyOfEntity = new Map([...assembled.keys].flatMap(([key, held]) => (held.kind === 'entity' ? [[JSON.stringify([held.ref.entityType, held.ref.stableId]), key] as const] : [])));
+  const added = new Map<Row, number>();
+  const out = rows.map((row) => {
+    const ends = row.cites.flatMap((key) => (assembled.relationshipEnds?.get(key) ?? []).flatMap(([type, id]) => keyOfEntity.get(JSON.stringify([type, id])) ?? []));
+    const missing = [...new Set(ends)].filter((key) => !row.cites.includes(key)).slice(0, Math.max(0, ASSISTANT_TABLE_CITES_MAX - row.cites.length));
+    if (missing.length === 0) return row;
+    const wider = { ...row, cites: [...row.cites, ...missing] };
+    added.set(wider, missing.length);
+    return wider;
+  });
+  return { rows: out, added };
+}
+
 /** The kinds of thing a line can be, in the words the model is offered for a column label. */
 const LABEL_KINDS = ['element', 'entity', 'relationship'] as const;
 /**

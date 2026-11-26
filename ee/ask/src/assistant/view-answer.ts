@@ -5,7 +5,7 @@ import type { AssembledText } from '../case-summary/assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from '../case-summary/coverage.js';
 import { ASSISTANT_TABLE_ROWS_MAX, tableTitle } from '@neburyx/contracts';
 import { noteOfTable, unitsOfTable } from './blocks.js';
-import { exactSetCount, judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE, tableFactsOf, typeOfKey } from './table.js';
+import { exactSetCount, judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE, tableFactsOf, typeOfKey, withEndsCited } from './table.js';
 import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { MAX_SUMMARY_SENTENCES } from '../case-summary/instructions.js';
@@ -15,7 +15,7 @@ import { selectedSectionOf } from './selected-section.js';
 import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
-import { noteModelAnswer, notePropertyValuesSent, stampProvenance, startModelCall } from './turn-audit.js';
+import { noteModelAnswer, notePropertyValuesSent, noteTurn, stampProvenance, startModelCall } from './turn-audit.js';
 import { provenanceOf } from './sensitive-items.js';
 import type { ViewInstructions } from './view-instructions.js';
 
@@ -266,7 +266,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         judge: async (sentences, signal, drafted) => {
           if (input.form === 'table') {
             // each row alone (see `judgeTableRows`); a row that cites a sentence of a summary or a line that says what a type means is removed unjudged
-            const judged = await judgeTableRows({ rows: sentences, columns: drafted?.columns, checks: options.checks, judge: judgeCheck, text: checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => SENTENCE_KEY.test(key) || /^m\d+$/.test(key)) });
+            const judged = await judgeTableRows({ rows: withEndsCited(sentences, assembled).rows, columns: drafted?.columns, checks: options.checks, judge: judgeCheck, text: checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => SENTENCE_KEY.test(key) || /^m\d+$/.test(key)) });
             if ('refused' in judged) return { refused: judged.refused };
             keptRows = judged.positions;
             return { kept: judged.kept, removed: judged.removed, verdictFound: judged.verdictFound, keysStripped: judged.keysStripped, keysRemoved: judged.keysRemoved };
@@ -361,10 +361,13 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         const sentences = options.prompt?.connectionsOnly === true ? drafted.sentences.filter((sentence) => sentence.cites.some((key) => assembled.keys.get(key)?.kind === 'relationship')) : drafted.sentences;
         if (sentences.length === 0 || drafted.verdictFound) return fixed.length > 0 ? outcome({ status: 'no-description', sentence: noDescriptionSentence(fixed), names: fixed }) : outcome({ status: 'unsupported' });
         if (drafted.table !== undefined) {
-          const table = drafted.table;
+          // the rows as they were judged: with the ends of the relationships they cite
+          const wider = withEndsCited(drafted.table.rows, assembled);
+          const table = { ...drafted.table, rows: wider.rows };
           const rows = keptRows.flatMap((index) => (table.rows[index] === undefined ? [] : [table.rows[index]]));
           const shown = rows.slice(0, ASSISTANT_TABLE_ROWS_MAX);
           const cut = rows.length - shown.length;
+          noteTurn({ tableCitesAdded: shown.reduce((sum, row) => sum + (wider.added.get(row) ?? 0), 0) });
           const shownSentences = shown.map((row) => ({ text: row.cells.join(' '), cites: [...row.cites] }));
           const elementCitations = [...citationsOf(shownSentences, assembled)];
           const subject = subjectTypeOf(shown, assembled);
