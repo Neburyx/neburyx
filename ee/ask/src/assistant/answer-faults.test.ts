@@ -204,6 +204,19 @@ describe('a ranking over one read, once a second read starts from the ranked ele
   });
 });
 
+describe('what the loop is told once the second step is read', () => {
+  it('is told to say both which element it found, as a ranking in the taught form, and what the second read shows it is connected to', async () => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([sentences({ text: `${V.title} A-1 is in view.`, cites: ['n1'] })]).respond(new AIMessage('Done.'));
+    const runStore = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model }, runStore });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    for (let step = 0; step < 10; step += 1) await Promise.resolve();
+    const told = runStore.runs[0]?.callStarts[1]?.instructionsText ?? '';
+    // straight after the sentence that asks for the second step, of which it speaks and of no type
+    expect(told).toContain('within the steps allowed. Once that second step is read, say both in your answer: which element it is, as a ranking sentence (in the form given below when one read listed the elements ranked), and what the second read shows it is connected to. Never answer that the element cannot be named when the reads have given it and what it is connected to.');
+  });
+});
+
 describe('a turn whose next read would not fit with the earlier results whole', () => {
   const body = { ...VIEW_BODY, message: `Which ${V.anchor} is linked to the first of them?` };
   const cited = { text: `${V.title} A-1 is listed.`, cites: ['n1'] };
