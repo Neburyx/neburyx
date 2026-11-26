@@ -64,7 +64,7 @@ test.describe('the rule-derived neighbors of the inspector', () => {
       const ref = { sourceId: body.sourceId, ...body.ref };
       if (id === 'bad-1' && failures === 0) {
         failures += 1;
-        return route.fulfill({ status: 503, json: { error: { code: 'SOURCE_UNAVAILABLE', message: 'x', retryable: true, traceId: 'tr-1', details: { reason: 'unreachable' } } } });
+        return route.fulfill({ status: 503, json: { error: { code: 'SOURCE_UNAVAILABLE', message: 'The source did not answer. Try again shortly.', retryable: true, traceId: 'tr-1', details: { reason: 'unreachable' } } } });
       }
       const capped = id === 'many-1';
       const results = [result('shared-device', id, 'acc-2', capped ? { value: 25, quality: 'lowerBound' } : { value: 1, quality: 'exact' }), result('shared-address', id, 'acc-3', { value: 0, quality: 'exact' })];

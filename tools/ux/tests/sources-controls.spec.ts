@@ -6,7 +6,7 @@ test.use({ baseURL: 'http://127.0.0.1:4175' });
 const OUTLINE = ['outline-style', 'outline-width', 'outline-color'] as const;
 
 async function expectSecondary(page: Page, name: string): Promise<void> {
-  const retry = page.getByRole('button', { name });
+  const retry = page.getByRole('main').getByRole('button', { name });
   await expect(retry).toBeVisible();
   expect(await lookOf(retry)).toMatchObject({ 'background-color': await tokenColour(page, '--color-surface'), 'border-top-color': await tokenColour(page, '--color-control-border'), color: await tokenColour(page, '--color-text'), height: '34px' });
 }
@@ -49,7 +49,7 @@ test.describe('the controls of Sources and of the failure pages', () => {
     await page.route(isProfile, (route) => route.abort());
     await page.goto('/sources');
     await expectSecondary(page, 'Try again');
-    expect((await page.getByRole('button', { name: 'Try again' }).boundingBox())?.width ?? Infinity, 'the retry is as wide as its label, not the section').toBeLessThan(200);
+    expect((await page.getByRole('main').getByRole('button', { name: 'Try again' }).boundingBox())?.width ?? Infinity, 'the retry is as wide as its label, not the section').toBeLessThan(200);
     await page.unroute(isProfile);
   });
 

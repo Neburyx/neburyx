@@ -247,12 +247,12 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   'Sources with the sources read failed': async (page) => {
     await abort(page, isSources);
     await page.goto('/sources');
-    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('button', { name: 'Try again' })).toBeVisible();
   },
   'Sources with the mapping example failed': async (page) => {
     await abort(page, isProfile);
     await page.goto('/sources');
-    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('button', { name: 'Try again' })).toBeVisible();
   },
   'Patterns library with My patterns': async (page) => {
     await page.goto('/patterns?source=banking-demo');

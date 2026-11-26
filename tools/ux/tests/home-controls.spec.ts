@@ -89,7 +89,7 @@ test.describe('the controls of Home', () => {
   test('draws the Try again of the source health card, and of the search row, as secondary buttons when the sources could not be read', async ({ page }) => {
     await page.route((url) => url.pathname === '/v1/sources', (route) => route.abort());
     await page.goto('/');
-    const retries = page.getByRole('button', { name: 'Try again' });
+    const retries = page.getByRole('main').getByRole('button', { name: 'Try again' });
     await expect(retries.first()).toBeVisible();
     const count = await retries.count();
     expect(count).toBeGreaterThanOrEqual(2);
