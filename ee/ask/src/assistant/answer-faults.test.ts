@@ -61,7 +61,7 @@ describe('what the loop is given about the elements on screen', () => {
       .respondWithTools([{ name: 'view', args: {} }])
       .respondWithTools([sentences({ text: seen, cites: ['n1'] })])
       .respond(new AIMessage('Done.'));
-    const { r, given } = await turn(model, { maxInputTokens: 60_000 }, VIEW_BODY, capability);
+    const { r, given } = await turn(model, { maxInputTokens: 200_000 }, VIEW_BODY, capability);
     expect(told(model)).toContain(READ_VIEW_FIRST);
     expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: seen }] }] });
     expect(JSON.stringify(given)).not.toContain(nothingNamed);
@@ -102,14 +102,32 @@ describe('what the loop is given about the elements on screen', () => {
 });
 
 describe('the line of a folded relationship', () => {
-  it('carries its member count with its label, under the word the answers repeated', () => {
+  const lineOf = (memberCount: { quality: 'exact' | 'lowerBound'; value: number }) => {
     const base = expandResult();
     if (base.templateId !== 'expand') throw new Error('an expansion');
     const [from, to] = [nodeOf('A-1').ref, nodeOf('A-2').ref];
-    const folded = { ref: { sourceId: from.sourceId, aggregate: { type: V.links[1], from, to } }, from, to, type: V.links[1], direction: 'out', semantics: 'stored', memberCount: { quality: 'lowerBound', value: 1, scope: 'test' }, properties: [], evidenceRefs: [], qualityFlags: [] };
+    const folded = { ref: { sourceId: from.sourceId, aggregate: { type: V.links[1], from, to } }, from, to, type: V.links[1], direction: 'out', semantics: 'stored', memberCount: { ...memberCount, scope: 'test' }, properties: [], evidenceRefs: [], qualityFlags: [] };
     const result = askRunResultSchema.parse({ ...base, result: { ...base.result, edges: [folded] } });
-    const line = [...assembleResults([{ tool: 'shared', result }]).assembled.lines.values()].find((found) => found.includes('members'));
-    expect(line).toContain('members: ≥ 1 (lower bound)');
+    return [...assembleResults([{ tool: 'shared', result }]).assembled.lines.values()].find((found) => found.includes('members'));
+  };
+
+  it.each([
+    [{ quality: 'exact', value: 3 }, 'members: 3 (exact)'],
+    [{ quality: 'lowerBound', value: 1 }, 'members: ≥ 1 (lower bound)'],
+  ] as const)('carries its member count with its label: %o', (count, expected) => {
+    expect(lineOf(count)).toContain(expected);
+  });
+
+  it('is explained to the model, which is told to name relationships, only when asked how many, with the quality as written', async () => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([sentences({ text: `${V.title} A-1 is in view.`, cites: ['n1'] })]).respond(new AIMessage('Done.'));
+    const runStore = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model }, runStore });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    for (let step = 0; step < 10; step += 1) await Promise.resolve();
+    const told = runStore.runs[0]?.callStarts[1]?.instructionsText ?? '';
+    expect(told).toContain('the number of relationships of the source that the one line stands for');
+    expect(told).toContain('Never write the word members, and state that figure only when the message asks how many relationships there are');
+    expect(told).toContain('keeping the quality as the line writes it');
   });
 });
 

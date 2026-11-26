@@ -261,7 +261,7 @@ describe('a view question on the agent', () => {
       .respond(new AIMessage('Done.'));
     const nodes = ['A-1', 'A-2', 'A-3'].map((id) => nodeOf(id, `${V.title} ${id}`));
     const keys = nodes.map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId]));
-    const r = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model, maxCalls: 6, maxInputTokens: 60_000 }, viewNodes: nodes, loopSteps: 3, run: () => ({ status: 'ok', result: expandResult() }) });
+    const r = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model, maxCalls: 6, maxInputTokens: 200_000 }, viewNodes: nodes, loopSteps: 3, run: () => ({ status: 'ok', result: expandResult() }) });
     const answer = await answerOf(r.route.handler(r.request({ ...BODY, viewElementKeys: keys })));
     if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error(`not a table answer: ${JSON.stringify(answer).slice(0, 200)}`);
     const block = answer.blocks.find((entry) => entry.kind === 'table');
@@ -294,7 +294,7 @@ describe('a view question on the agent', () => {
       .respond(new AIMessage('Done.'));
     const store = createMemoryAssistantRunStore();
     // five elements in view and three reads allowed (the view and two anchors): the other three cannot be read in this turn
-    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 9, maxInputTokens: 60_000 }, viewNodes: nodes, loopSteps: 3, run: (_continuing, asked) => ({ status: 'ok', result: JSON.stringify(asked).includes('A-2') ? expandOfSecond() : expandResult() }), runStore: store });
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 9, maxInputTokens: 200_000 }, viewNodes: nodes, loopSteps: 3, run: (_continuing, asked) => ({ status: 'ok', result: JSON.stringify(asked).includes('A-2') ? expandOfSecond() : expandResult() }), runStore: store });
     const answer = await answerOf(r.route.handler(r.request({ ...BODY, viewElementKeys: keys })));
     expect(JSON.stringify(answer)).not.toContain('have an other end of their own');
     expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: first.text }, { text: second.text }, { text: notRead.text, cites: ['c1'] }] }], reads: [{ tool: 'view' }, { tool: 'expand' }, { tool: 'expand' }] });
@@ -584,7 +584,7 @@ describe('the blocks of an agent answer', () => {
       let model = fakeModel().respondWithTools([{ name: 'view', args: {} }]);
       for (const read of reads) model = model.respondWithTools([{ name: read, args: { entityType: V.anchor, stableId: 'A-1' } }]);
       model = model.respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'table', columns: ['Element'], rows: Array.from({ length: nodes.length }, (_, index) => ({ cells: [`${V.title} ${nodes[rowOf(index)]?.ref.stableId}`], cites: [`n${rowOf(index) + 1}`] })) }] } }]).respond(new AIMessage('Done.'));
-      return rig({ reply: TABLE, agent: { model, maxCalls: 8, maxInputTokens: 60_000 }, viewNodes: nodes, loopSteps: 3, run: () => ({ status: 'ok', result: degreeResult() }) }).then(async (r) => {
+      return rig({ reply: TABLE, agent: { model, maxCalls: 8, maxInputTokens: 200_000 }, viewNodes: nodes, loopSteps: 3, run: () => ({ status: 'ok', result: degreeResult() }) }).then(async (r) => {
         const answer = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: keysOf(nodes) })));
         if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error(`not a table answer: ${JSON.stringify(answer).slice(0, 120)}`);
         return answer;
