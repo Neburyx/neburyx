@@ -744,9 +744,32 @@ const MAY_BELONG = /['\u2019]|(?<![\p{L}])(?:of|belonging|owned|held)(?![\p{L}])
 const LINK_WORD = /^(?:relationships?|links?)$/iu;
 
 /**
+ * Whether cited reads that count relationship ends back what a sentence says of the relationships of one of `holders`. Such a read says how many ends an entity has, never where they go: every entity the sentence names is one
+ * a cited read counts, and the sentence states a number that a line counting this one holds.
+ */
+function countsBack(sentence: SummarySentence, assembled: CheckedText, holders: readonly string[], byName: ReadonlyMap<string, readonly string[]>): boolean {
+  const reads = sentence.cites.flatMap((cite) => {
+    const line = assembled.lines.get(cite) ?? '';
+    const at = line.search(/relationship ends/iu);
+    return assembled.readKeys?.has(cite) === true && at >= 0 ? [{ counts: numbersIn(line.slice(at)), of: assembled.readElements?.get(cite) ?? [] }] : [];
+  });
+  const own = reads.filter((read) => holders.some((key) => read.of.includes(key)));
+  if (own.length === 0) return false;
+  let rest = withoutQuoted(sentence.text);
+  for (const name of namesOfElements(assembled).filter((each) => sentence.text.includes(each))) {
+    const written = new RegExp(`${WB}${ESCAPED(name)}(?![\\p{L}\\p{N}_])`, 'gu');
+    const named = byName.get(name);
+    if (named !== undefined && rest.search(written) >= 0 && !named.some((key) => reads.some((read) => read.of.includes(key)))) return false;
+    rest = rest.replace(written, ' ');
+  }
+  const stated = numbersIn(rest);
+  return own.some((read) => read.counts.some((count) => stated.includes(count)));
+}
+
+/**
  * A sentence that ties a named entity to others by a possessive (`<name>'s <things>`, `<things> of <name>`), where the thing is a type of an element or a kind (an entity, a relationship), cites a relationship with that entity at
- * an end: a name found anywhere in what was sent shows nothing of what is said to be its own. Which relationship it is does not matter, and a property of the named entity (`<name>'s <property>`) is no such claim. What is said of the
- * entity's relationships is also backed by a cited read that counts its relationship ends.
+ * an end: a name found anywhere in what was sent shows nothing of what is said to be its own. Which relationship it is does not matter, and a property of the named entity (`<name>'s <property>`) is no such claim. A number said of the
+ * entity's relationships is also backed by a cited read that counts its relationship ends (see `countsBack`).
  */
 function possessivesAreLinked(sentence: SummarySentence, assembled: CheckedText): boolean {
   const types = assembled.elementTypes;
@@ -759,7 +782,6 @@ function possessivesAreLinked(sentence: SummarySentence, assembled: CheckedText)
   // the entities by name, read once: a name is looked for only where the sentence holds it
   const byName = new Map<string, string[]>();
   for (const [key] of entities) for (const name of namesOfKey(key, assembled)) byName.set(name, [...(byName.get(name) ?? []), key]);
-  const counted = sentence.cites.filter((cite) => assembled.readKeys?.has(cite) === true && /relationship ends/iu.test(assembled.lines.get(cite) ?? '')).flatMap((cite) => assembled.readElements?.get(cite) ?? []);
   let left = withoutQuoted(sentence.text);
   for (const name of namesOfElements(assembled).filter((each) => sentence.text.includes(each))) {
     const holders = byName.get(name) ?? [];
@@ -774,7 +796,7 @@ function possessivesAreLinked(sentence: SummarySentence, assembled: CheckedText)
       const ownProperty = properties.some((property) => after.replace(/^['\u2019]s?\s+/u, '').startsWith(property));
       const belongs = new RegExp(`${WB}(${thing})\\s+${BELONGING}\\s+(?:the\\s+)?$`, 'iu').exec(flatten(left.slice(Math.max(0, mention.index - 80), mention.index)));
       const claimed = [ownProperty ? undefined : owns?.[1], belongs?.[1] === undefined || properties.includes(flatten(belongs[1])) ? undefined : belongs[1]].filter((word) => word !== undefined);
-      if (claimed.some((word) => !(LINK_WORD.test(word) && holders.some((key) => counted.includes(key))))) return false;
+      if (claimed.some((word) => !(LINK_WORD.test(word) && countsBack(sentence, assembled, holders, byName)))) return false;
     }
     left = left.replace(written, (found) => ' '.repeat(found.length));
   }

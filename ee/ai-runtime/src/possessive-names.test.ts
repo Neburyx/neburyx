@@ -79,20 +79,23 @@ describe.each([
     expect(judged.kept).toHaveLength(1);
   });
 
-  it('takes a cited read that counts the relationship ends of the one named for what is said of its relationships, and for nothing else', () => {
-    const counted = (anchor: string): CheckedText => ({
+  it('takes a cited read that counts the relationship ends of the one named for a number said of its relationships, and for nothing else', () => {
+    const counted = (...anchors: string[]): CheckedText => ({
       ...held,
-      readKeys: new Set(['s1']),
-      readElements: new Map([['s1', [anchor]]]),
-      lines: new Map([...held.lines, ['s1', 's1: read of degree: relationship ends by the type at the other end: all relationship ends 2 (exact)']]),
-      keys: new Map([...held.keys, ['s1', true]]),
+      readKeys: new Set(anchors.map((_, index) => `s${index + 1}`)),
+      readElements: new Map(anchors.map((anchor, index) => [`s${index + 1}`, [anchor]])),
+      lines: new Map([...held.lines, ...anchors.map((_, index) => [`s${index + 1}`, `s${index + 1}: read of degree: relationship ends by the type at the other end: all relationship ends ${index === 0 ? 12 : 8} (exact)`] as const)]),
+      keys: new Map([...held.keys, ...anchors.map((_, index) => [`s${index + 1}`, true] as const)]),
     });
-    const reasons = (text: string, anchor: string): readonly string[] => judgeSentences([{ text, cites: ['o1', 'h2', 's1'] }], counted(anchor)).rejected.map((each) => each.reason);
-    for (const text of ["Gamma Partners' relationships number 2, and Holder B is listed.", 'The links of Gamma Partners number 2, and Holder B is listed.']) {
-      expect(reasons(text, 'o1')).not.toContain('citation');
-      expect(reasons(text, 'o2')).toContain('citation');
+    const reasons = (text: string, anchors: string[], cites: string[] = ['o1', 'o2', 's1']): readonly string[] => judgeSentences([{ text, cites }], counted(...anchors)).rejected.map((each) => each.reason);
+    for (const text of ["Gamma Partners' relationships number 12.", 'The links of Gamma Partners number 12.']) {
+      expect(reasons(text, ['o1'])).not.toContain('citation');
+      expect(reasons(text, ['o2'])).toContain('citation');
     }
-    expect(reasons(`Gamma Partners' ${holders} are Holder B.`, 'o1')).toContain('citation');
+    expect(reasons("Gamma Partners' relationships number 12 and Delta Traders' number 8.", ['o1', 'o2'], ['o1', 'o2', 's1', 's2'])).not.toContain('citation');
+    // a count says nothing of where the relationships go
+    for (const text of ["Gamma Partners' links include one to Holder B.", "Gamma Partners' relationships include 12 to Delta Traders.", "Gamma Partners' relationships include one to a customer."]) expect(reasons(text, ['o1'], ['o1', 'h2', 'o2', 's1']), text).toContain('citation');
+    expect(reasons(`Gamma Partners' ${holders} number 12.`, ['o1'])).toContain('citation');
   });
 
   it(`asks for nothing of a property of the one named said with "of"`, () => {
