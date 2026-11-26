@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ceilingOf, durationMs, INTERVAL_SETTING, serverLag, timeOneRead, timeOvershoot, timeWarmRead } from './read-latency.js';
+import { ceilingOf, durationMs, INTERVAL_SETTING, serverLag, timeOneRead, timeOvershoot, timeWarmRead, warmUp } from './read-latency.js';
 
 type Rows = readonly unknown[];
 
@@ -77,6 +77,49 @@ describe('the timings', () => {
 
   it.each(['', 'soon', '2', '-1s', '2d'])('reads %j as no duration', (text) => {
     expect(durationMs(text)).toBeUndefined();
+  });
+});
+
+describe('the warm-up of a statement', () => {
+  const timedOut = { ok: false, failure: { code: 'QUERY_TIMEOUT' } };
+  const answering = (...answers: readonly unknown[]) => {
+    const calls = { count: 0 };
+    return { calls, read: () => Promise.resolve(answers[calls.count++]) };
+  };
+
+  it('stops at the first read that succeeds', async () => {
+    const { calls, read } = answering({ ok: true });
+    await warmUp('the expansion', read);
+    expect(calls.count).toBe(1);
+  });
+
+  it.each([[1, [timedOut, { ok: true }]], [2, [timedOut, timedOut, { ok: true }]]])('reads again after %d timeout(s), until one succeeds', async (_timeouts, answers) => {
+    const { calls, read } = answering(...answers);
+    await warmUp('the expansion', read);
+    expect(calls.count).toBe(answers.length);
+  });
+
+  it('fails after three reads that all timed out, naming the read', async () => {
+    const { calls, read } = answering(timedOut, timedOut, timedOut, { ok: true });
+    await expect(warmUp('the expansion', read)).rejects.toThrow('the warm-up of the expansion did not succeed in 3 reads (each "QUERY_TIMEOUT")');
+    expect(calls.count).toBe(3);
+  });
+
+  it('fails at once on a failure that is no timeout, naming its code', async () => {
+    const { calls, read } = answering({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE' } }, { ok: true });
+    await expect(warmUp('the expansion', read)).rejects.toThrow('the warm-up of the expansion failed on read 1 ("SOURCE_UNAVAILABLE")');
+    expect(calls.count).toBe(1);
+  });
+
+  it('passes an error the read throws on, without another read', async () => {
+    let calls = 0;
+    await expect(
+      warmUp('the expansion', () => {
+        calls += 1;
+        return Promise.reject(new Error('no server'));
+      }),
+    ).rejects.toThrow('no server');
+    expect(calls).toBe(1);
   });
 });
 

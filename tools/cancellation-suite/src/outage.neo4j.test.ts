@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { windowRequestOf } from '../../../apps/web/src/api/expand-window.js';
 import { EXPAND_NEIGHBORS_ID } from '../../../services/api/src/gate/templates/expand-neighbors.js';
 import { pollUntil, transactionIsListed } from '../../../services/api/src/testing/neo4j-server.js';
-import { ceilingOf, serverLag, timeWarmRead, timeOvershoot } from '../../../services/api/src/testing/read-latency.js';
+import { ceilingOf, serverLag, timeOneRead, timeOvershoot, warmUp } from '../../../services/api/src/testing/read-latency.js';
 import { leftoversOf, startNeo4jRig, type Neo4jRig } from './neo4j-rig.js';
 import { personalise } from './rig.js';
 
@@ -9,7 +10,12 @@ const BUDGET_MS = 1000;
 let rig: Neo4jRig;
 let ceilingMs = 0;
 let ceilingNote = '';
-const expandOnce = () => rig.client.expandNeighbors({ sourceId: rig.hub.sourceId, ref: { entityType: rig.hub.entityType, stableId: rig.hub.stableId }, neighborTypes: ['leaf'], direction: 'both' });
+const expansion = () => ({ sourceId: rig.hub.sourceId, ref: { entityType: rig.hub.entityType, stableId: rig.hub.stableId }, neighborTypes: ['leaf'], direction: 'both' as const });
+const expandOnce = () => rig.client.expandNeighbors(expansion());
+/** The read the web client's expansion of the hub asks for: the same, in the window the store gives the node, which makes it another statement. */
+const expandAsTheStore = () => rig.client.expandNeighbors({ ...expansion(), ...windowRequestOf(rig.expand.windowOf(rig.hub)) });
+const statements = (): readonly string[] => rig.executor.calls.filter((call) => call.templateId === EXPAND_NEIGHBORS_ID).map((call) => call.cypher);
+let warmed: readonly string[] = [];
 
 /** A rig of its own for each case; the outage case keeps the product's default budget, since a budget chosen to force a timeout is not the one an outage case should be read under. */
 function ownRig(timeoutMs: number | undefined, size: number): void {
@@ -17,7 +23,11 @@ function ownRig(timeoutMs: number | undefined, size: number): void {
     rig = await startNeo4jRig({ size, timeoutMs });
     // an ordinary read and the lag of the server set the ceiling of a forced timeout; the outage case forces none and counts its own requests
     if (timeoutMs !== undefined) {
-      const read = await timeWarmRead(expandOnce);
+      // every statement a case later reads as an ordinary one is planned before the timed part
+      await warmUp('the expansion', expandOnce);
+      await warmUp("the expansion in the store's window", expandAsTheStore);
+      warmed = statements();
+      const read = await timeOneRead(expandOnce);
       const lag = await serverLag(rig.server.admin, async () => {
         rig.slow(true);
         try {
@@ -91,5 +101,6 @@ describe('a read forced past a 1,000 ms budget, through the API and the real ada
     const next = await rig.expand.expand(rig.hub, ['leaf']);
     await annotate(`the next read: ${next} ${JSON.stringify(last()?.body).slice(0, 400)}`);
     expect(next).toBe('sent');
+    expect(warmed, 'the next read ran a statement that was warmed up').toContain(statements().at(-1));
   });
 });

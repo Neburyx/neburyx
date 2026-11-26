@@ -3,7 +3,7 @@ import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate
 import { EXPAND_NEIGHBORS_ID } from '../../../services/api/src/gate/templates/expand-neighbors.js';
 import { SYSTEM_ID } from '../../../services/api/src/gate/system-principal.js';
 import { pollUntil, SLOW_READ } from '../../../services/api/src/testing/neo4j-server.js';
-import { ceilingOf, serverLag, timeWarmRead, timeOvershoot } from '../../../services/api/src/testing/read-latency.js';
+import { ceilingOf, serverLag, timeOneRead, timeOvershoot, warmUp } from '../../../services/api/src/testing/read-latency.js';
 import { leftoversOf, startNeo4jRig, type Neo4jRig } from '../../cancellation-suite/src/neo4j-rig.js';
 
 const BUDGET_MS = 1000;
@@ -19,7 +19,9 @@ let rig: Neo4jRig;
 beforeAll(async () => {
   rig = await startNeo4jRig({ size: 10, timeoutMs: BUDGET_MS });
   // the last read to get a slot gets it just before the wait ends and then runs to its budget
-  const read = await timeWarmRead(expandOnce);
+  // the statement of the ordinary reads is planned before one is timed or held to the budget
+  await warmUp('the expansion', expandOnce);
+  const read = await timeOneRead(expandOnce);
   const lag = await serverLag(rig.server.admin, async () => {
     rig.slow(true);
     try {
