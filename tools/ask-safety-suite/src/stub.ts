@@ -66,7 +66,8 @@ function agentScript(routerReply: () => string | undefined, answerOnly: () => bo
     }
     if (!started) {
       started = true;
-      const routed = jsonOf(routerReply());
+      // the route of a reply that holds text before it is its last line
+      const routed = jsonOf(routerReply()?.trimEnd().split('\n').at(-1));
       const named = (routed?.['entities'] ?? {}) as Json;
       if (routed?.['route'] === 'ask' && typeof routed['intent'] === 'string' && Object.keys(named).length > 0) {
         const entities = named;

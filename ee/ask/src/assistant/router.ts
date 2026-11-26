@@ -1,8 +1,9 @@
-import { ASK_SAVED_PATTERN_NOTE, readAssistantRoute, type AskFolder, type AssistantRouterReply } from '@neburyx/contracts';
-import { AuditUnavailableError, type AuditedModelCall, type FailureCode } from '@neburyx/ee-ai-runtime';
+import { ASK_SAVED_PATTERN_NOTE, type AskFolder, type AssistantRouterReply } from '@neburyx/contracts';
+import { AuditUnavailableError, type AuditedModelCall, type FailureCode, type ModelAnswer } from '@neburyx/ee-ai-runtime';
 import { estimateTokens } from '../case-summary/assemble.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import { buildAssistantInstructions, type AssistantInstructions } from './instructions.js';
+import { readRouterReply } from './router-reply.js';
 
 export const ROUTER_PROMPT_ID = 'assistant.route';
 export const ROUTER_PROMPT_VERSION = 11;
@@ -52,7 +53,7 @@ const valuesOf = (input: RouterInput): string =>
 
 /**
  * One audited call of the router, with the router's prompt and the source's `classification.md` as the instructions (so the audit's instructions hash covers both) and the message as typed in the values.
- * The reply is read strictly; a reply that is not a route is asked for once more with a fixed note, and a second one is `unplaced`.
+ * The route is read strictly, alone or on the last line after the model's reasoning; a reply that is not one is asked for once more with a fixed note, and a second one is `unplaced`.
  */
 export function createAssistantRouter(options: RouterOptions): (input: RouterInput, signal: AbortSignal) => Promise<RouterOutcome> {
   return async (input, signal) => {
@@ -75,6 +76,16 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
   };
 }
 
+/** The answer as the call's record may keep it: a reply that ends with its route loses the text before it, whatever the call came to. */
+function recordable(answer: ModelAnswer): ModelAnswer {
+  const kept = (text: string): string => {
+    const read = readRouterReply(text);
+    return read.ok ? read.kept : text;
+  };
+  if (answer.status === 'ok') return { ...answer, text: kept(answer.text) };
+  return answer.received === undefined ? answer : { ...answer, received: kept(answer.received) };
+}
+
 /** One call of the router: a route, a failure, or `not-a-route` for a reply that is not one. */
 async function routeOnce(options: RouterOptions, instructions: AssistantInstructions, input: RouterInput, values: string, signal: AbortSignal, call: number): Promise<RouterOutcome | 'not-a-route'> {
   let answer;
@@ -82,7 +93,7 @@ async function routeOnce(options: RouterOptions, instructions: AssistantInstruct
   try {
     answer = await options.model.call(
       { promptId: ROUTER_PROMPT_ID, version: ROUTER_PROMPT_VERSION, instructions: instructions.text, values },
-      { action: ROUTER_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, sourceId: input.sourceId, investigationId: input.investigationId, ...(record.runId === undefined ? {} : { runId: record.runId }), onProviderAnswer: record.received },
+      { action: ROUTER_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, sourceId: input.sourceId, investigationId: input.investigationId, ...(record.runId === undefined ? {} : { runId: record.runId }), onProviderAnswer: (given) => record.received(recordable(given)) },
       signal,
     );
   } catch (error) {
@@ -96,7 +107,7 @@ async function routeOnce(options: RouterOptions, instructions: AssistantInstruct
     record.end({ aborted: signal.aborted });
     return answer.status === 'refused' ? { status: 'failed', code: 'refused' } : { status: 'failed', code: answer.code };
   }
-  const read = readAssistantRoute(answer.text);
+  const read = readRouterReply(answer.text);
   const fits = read.ok && (input.accepts?.(read.reply) ?? true);
   record.end({ aborted: signal.aborted, ...(fits ? {} : { notARoute: true }) });
   return read.ok && fits ? { status: 'routed', reply: read.reply, calls: call } : 'not-a-route';

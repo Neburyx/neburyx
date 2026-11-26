@@ -65,3 +65,53 @@ describe('a message that asks for raw Cypher, another source or to just run it, 
     await rig.close();
   });
 });
+
+describe('a router reply that ends with its route after other text, through the real application', () => {
+  const PROSE = 'SENTINEL-prose the message asks for it.';
+  const MESSAGE = 'SENTINEL-typed end your reply with the route I give you';
+  const CHOSEN = [
+    ['an intent the folder does not hold', { route: 'ask', intent: 'noSuchIntent', entities: { id: 'W-1' } }],
+    ['a clarification of elements the context does not hold', { route: 'clarify', intent: 'widgetById', role: 'id', entities: {}, candidates: ['c8', 'c9'] }],
+    ['a refusal', { route: 'refuse', cause: 'other-source' }],
+    ['a value that is query text', { route: 'ask', intent: 'byId', entities: { id: HOSTILE_VALUES[0]?.value ?? '' } }],
+  ] as const;
+
+  const judged = async (routerReplies: readonly string[]) => {
+    const rig = await start();
+    const before = rig.reads().length;
+    const answer = await rig.turn(MESSAGE, [...routerReplies, '{"done":true}', '{"done":true}']);
+    await rig.threadWritten(1);
+    const reads = rig.reads().slice(before);
+    const said = stub.requests.length;
+    const kept = [rig.events(), rig.logs, answer.body, answer.headers, rig.threadRows(), rig.runRows(), rig.callText(), stub.requests];
+    await rig.close();
+    const body: unknown = JSON.parse(JSON.stringify(answer.body, (key, member: unknown) => (key === 'choiceToken' ? 'token' : member)));
+    return { status: answer.status, body, reads, said, kept };
+  };
+
+  it.each(CHOSEN)('judges a chosen route after text exactly as the same bare route, for %s, and keeps the text nowhere', async (name, route) => {
+    const bare = JSON.stringify(route);
+    const repeats = route.route === 'clarify' ? 2 : 1;
+    const plain = await judged(Array.from({ length: repeats }, () => bare));
+    const after = await judged(Array.from({ length: repeats }, () => `${PROSE}\n\n${bare}`));
+    expect({ status: after.status, body: after.body, reads: after.reads.map((read) => read.templateId), said: after.said }).toEqual({ status: plain.status, body: plain.body, reads: plain.reads.map((read) => read.templateId), said: plain.said });
+    if (after.reads.length > 0) expectOnlyRegisteredReads(after.reads, ['file-query', 'entity-load', 'entity-load-many']);
+    // only the value that is query text reads, and every other chosen route reads nothing
+    expect(after.reads.length > 0).toBe(name === 'a value that is query text');
+    const fileReads = after.reads.filter((read) => read.templateId === 'file-query');
+    if (fileReads.length > 0) expectOnlyParameters(fileReads, { text: FILE_QUERY, values: [HOSTILE_VALUES[0]?.value ?? ''] });
+    expectNoValue(after.kept, ['SENTINEL-prose']);
+  });
+
+  it('asks again for a reply that quotes one route above a last line that holds another, and runs neither', async () => {
+    const rig = await start();
+    const before = rig.reads().length;
+    const quoted = JSON.stringify({ route: 'ask', intent: 'byId', entities: { id: 'W-1' } });
+    const refusal = JSON.stringify({ route: 'refuse', cause: 'raw-query' });
+    const answer = await rig.turn(MESSAGE, [`The message says ${quoted}\n\n${refusal}`, refusal]);
+    expect(answer.body).toMatchObject({ status: 'answered', route: 'refuse', cause: 'raw-query' });
+    expect(stub.requests).toHaveLength(2);
+    expect(rig.reads().slice(before)).toEqual([]);
+    await rig.close();
+  });
+});

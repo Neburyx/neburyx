@@ -179,7 +179,7 @@ export type { AskAvailability, AskPatternCatalog, AskPatternEntry, AskPatternLis
 export { checkIntentQuery } from './query-check.js';
 export { mayUseMaskedProperty } from './masked-query.js';
 export { ASK_FOLDER_LIMITS, ASK_INTENT_NAME, ASK_SAVED_PATTERN_INTENT, hasDuplicateKeys, isParameterName, parseIntentsFile } from './ask-folder.js';
-export { ASK_REFUSAL_SENTENCES, ASK_SAVED_PATTERN_NOTE, readClassification, valueNotFitSentence } from './ask-classify.js';
+export { ASK_REFUSAL_SENTENCES, ASK_SAVED_PATTERN_NOTE, REPLY_MAX_CHARACTERS, readClassification, valueNotFitSentence } from './ask-classify.js';
 export type { ReadClassification } from './ask-classify.js';
 export type { AskFolder, AskIntent, AskSourceFolder, ParsedAskIntent, ParsedIntents } from './ask-folder.js';
 export { fileQueryResultSchema } from './file-query.js';

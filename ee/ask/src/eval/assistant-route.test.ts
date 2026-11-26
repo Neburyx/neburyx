@@ -30,6 +30,13 @@ describe('the router as the product builds it, over a replay', () => {
     expect(await routeMessage(source, replayProvider(answers), 'replay', INPUT)).toMatchObject({ status: 'routed', calls: 2 });
   });
 
+  it('routes in one call a reply that ends with its route after other text', async () => {
+    const source = await sourceOf();
+    const { first } = await routerRequests(source, INPUT);
+    const answers = new Map<string, ReplayAnswer>([[first, { reply: 'It asks about what is shown.\n\n{"route":"view"}' }]]);
+    expect(await routeMessage(source, replayProvider(answers), 'replay', INPUT)).toMatchObject({ status: 'routed', reply: { route: 'view' }, calls: 1 });
+  });
+
   it('ends unplaced after one repeat when neither reply is a route', async () => {
     const source = await sourceOf();
     const { first, repeat } = await routerRequests(source, INPUT);
