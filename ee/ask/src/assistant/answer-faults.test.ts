@@ -248,6 +248,18 @@ describe('a question for the largest', () => {
     expect(told).toContain('say nothing beyond that read');
   });
 
+  it('tells the model to read the elements before ranking them, never to claim more than the read, and when it may say they cannot be ranked', async () => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([sentences({ text: `${V.title} A-1 is in view.`, cites: ['n1'] })]).respond(new AIMessage('Done.'));
+    const runStore = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model, maxInputTokens: 200_000 }, runStore });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    for (let step = 0; step < 10; step += 1) await Promise.resolve();
+    const told = runStore.runs[0]?.callStarts[1]?.instructionsText ?? '';
+    expect(told).toContain('among elements that no line holds yet is answered by reading them first');
+    expect(told).toContain('when a read is paged, filtered or a lower bound, never say or imply that it holds for all of them');
+    expect(told).toContain('Say that they cannot be ranked only when no read lists them or no step is left');
+  });
+
   it.each([
     ['leaves an element of the read uncited', taught, ['r1', 'r2', 's1'], 1],
     ['names the read after saying in the read', `Among the ${plural} in the read of the neighbours of ${V.title} A-1, ${V.title} A-2 has the largest amountValue, 1664.72.`, ['r1', 'r2', 'r3', 's1'], 1],
