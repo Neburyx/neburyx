@@ -823,9 +823,58 @@ const UNAVAILABLE = /(?<![\p{L}\p{N}_-])(?:do not show|does not show|is not show
 /** The words of a key or of a sentence: at capital letters, digits and anything that is no letter. */
 const subwordsOf = (text: string): string[] => (text.match(/\p{Lu}?\p{Ll}+|\p{Lu}+(?!\p{Ll})|\p{N}+/gu) ?? []).map((word) => word.toLowerCase());
 
+/** `top` and `tops` as words of a ranking, the greatest: `top-ranked` and `top-rated` are one word. */
+const TOP = new RegExp(`${WB}(?:top-ranked|top-rated|tops?)${RWE}`, 'giu');
+/** The places of a screen that `top` may speak of: words of the product and of the language. */
+const SCREEN_PLACE = '(?:view|screen|page|list|panel|table|row|bar|corner|edge|graph|timeline|card)s?';
+/** `top` that names a position on the screen, a level or a topping up, and ranks nothing. */
+const ORDINARY_TOP = new RegExp(`^top(?:[\\s-](?:level|left|right|up)${WE}|\\s+(?:(?:left|right)[\\s-])?${SCREEN_PLACE}${WE})|^tops[\\s-]up${WE}`, 'iu');
+const ON_OR_FROM = new RegExp(`(?:${WB}on\\s+|${WB}from\\s+top\\s+to\\s+)$`, 'iu');
+const AT_THE_TOP = new RegExp(`${WB}(?:at|from)\\s+the\\s+$`, 'iu');
+const OF_A_PLACE = new RegExp(`^top[\\s-](?:(?:left|right)\\s+)?(?:of\\s+(?:the\\s+|this\\s+)?${SCREEN_PLACE}${WE}|(?:left|right)${WE})`, 'iu');
+
+/** Whether the `top` at a position is one of the ordinary uses of the word. At the top of a place is one only where nothing in its clause says by what. */
+function ordinaryTop(text: string, at: number): boolean {
+  const before = text.slice(0, at);
+  const from = text.slice(at);
+  if (ON_OR_FROM.test(before) || /^top\s+to\s+bottom/iu.test(from) || /(?:^|\s)from\s+top\s+to\s*$/iu.test(before) || /^to\s+bottom/iu.test(from)) return true;
+  if (AT_THE_TOP.test(before) && OF_A_PLACE.test(from)) {
+    const rest = (/^[^.;!?]*/u.exec(from.slice(OF_A_PLACE.exec(from)?.[0].length ?? 0))?.[0] ?? '');
+    return !/(?<![\p{L}\p{N}_-])(?:by|for|in)(?![\p{L}\p{N}_-])|\d/iu.test(rest);
+  }
+  return ORDINARY_TOP.test(from);
+}
+
+/** The uses of `top` that rank, outside quoted text: a title in quotes is a name. */
+function rankingTopsIn(text: string): { readonly direction: 'max'; readonly index: number; readonly end: number; readonly word: string }[] {
+  const unquoted = text.replace(QUOTED, (quoted) => ' '.repeat(quoted.length));
+  return [...unquoted.matchAll(TOP)].filter((found) => !ordinaryTop(unquoted, found.index)).map((found) => ({ direction: 'max' as const, index: found.index, end: found.index + found[0].length, word: 'top' }));
+}
+
+/** A ranking written with `top` that names more than one element, or says an element is only near the top: nothing the cited values can show. */
+const NOT_ONE_AT_THE_TOP = (text: string, claim: { readonly index: number; readonly end: number }): boolean =>
+  new RegExp(`^\\s+(?:\\d+|${CARDINAL_WORDS}|few|several)(?![\\p{L}\\p{N}_])`, 'iu').test(text.slice(claim.end)) || /(?<![\p{L}\p{N}_-])(?:one\s+of|among|in)\s+(?:the\s+)?$/iu.test(text.slice(0, claim.index));
+
 /** The ranking words of a text, with where each one ends. */
 const rankingWordsIn = (text: string): { readonly direction: 'max' | 'min'; readonly index: number; readonly end: number; readonly word: string }[] =>
-  RANKING_WORDS.flatMap(([pattern, direction]) => [...text.matchAll(pattern)].map((found) => ({ direction, index: found.index, end: found.index + found[0].length, word: (found[1] ?? found[0]).toLowerCase() }))).sort((first, second) => first.index - second.index);
+  [...RANKING_WORDS.flatMap(([pattern, direction]) => [...text.matchAll(pattern)].map((found) => ({ direction, index: found.index, end: found.index + found[0].length, word: (found[1] ?? found[0]).toLowerCase() }))), ...rankingTopsIn(text)].sort((first, second) => first.index - second.index);
+
+/**
+ * The words that say how large a gap is, which no cited value shows: one list of generic English. `far more` and the like claim a gap only before `than`, since `much more is not yet retrieved` compares nothing.
+ */
+const GAP_DEGREE = '(?:far|much|way|vastly|significantly|substantially|considerably)';
+const GAP_WORDS = new RegExp(
+  `${WB}(?:by\\s+far|far\\s+and\\s+away|by\\s+a\\s+(?:wide|large|big|huge)\\s+margin|by\\s+some\\s+distance|by\\s+a\\s+long\\s+way|${GAP_DEGREE}[\\s-]+(?:larger|higher|greater|bigger|smaller|lower|later|earlier)|(?:${GAP_DEGREE}|a\\s+lot)\\s+(?:more|less|fewer)(?=[^.,;:!?]*?${WB}than${WE})|(?:far|well|way)\\s+(?:ahead|above|exceeds|exceeded)|dwarf(?:s|ed|ing)?|towers?\\s+over)${WE}`,
+  'iu',
+);
+
+/** A sentence that says how far apart two things are is not verified: the cited values show an order, and no rule says what a large gap is. */
+function gapClaimsHold(sentence: SummarySentence, assembled: CheckedText): boolean {
+  let text = sentence.text.normalize('NFC');
+  // a name is blanked only where it is written as it is: an id of one letter is not the article
+  for (const name of namesOfElements(assembled)) text = text.replace(new RegExp(`${WB}${ESCAPED(name)}${WE}`, 'gu'), (found) => ' '.repeat(found.length));
+  return !GAP_WORDS.test(withoutQuoted(text));
+}
 
 /** The words that follow a position, each with where it ends: letters and digits, joined only by white space, hyphens and underscores, so that a mark of punctuation ends them. */
 function wordsAfter(text: string, from: number): { readonly raw: string; readonly end: number }[] {
@@ -936,6 +985,7 @@ function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolea
   if (claim === undefined || claims.length > 1 || assembled.rankedValues === undefined) return false;
   const clauseStart = Math.max(text.lastIndexOf(',', claim.index), text.lastIndexOf(';', claim.index), text.lastIndexOf('.', claim.index), text.lastIndexOf(' but ', claim.index), -1) + 1;
   if (NEGATION.test(text.slice(clauseStart, claim.index))) return false;
+  if (claim.word === 'top' && NOT_ONE_AT_THE_TOP(text, claim)) return false;
   if (MORE_THAN_READ.test(text)) return false;
   const carriers = cited.filter((key) => carries(key).length > 0);
   const keys = [...new Set(carriers.flatMap((key) => carries(key).map((property) => property.key)))];
@@ -1775,7 +1825,7 @@ function comparisonClaimsHold(sentence: SummarySentence, assembled: CheckedText)
 }
 
 function comparisonHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
-  return comparedElementsHold(sentence, assembled) && rankingHolds(sentence, assembled) && rangeHolds(sentence, assembled) && comparisonClaimsHold(sentence, assembled) && claimsAreBacked(sentence, assembled);
+  return comparedElementsHold(sentence, assembled) && rankingHolds(sentence, assembled) && rangeHolds(sentence, assembled) && gapClaimsHold(sentence, assembled) && comparisonClaimsHold(sentence, assembled) && claimsAreBacked(sentence, assembled);
 }
 
 /** The text a sentence's names are checked against: all of it, or, for a sentence that cites only the lines of reads, the lines it cites. */
@@ -1860,7 +1910,7 @@ function breaksCountRule(sentence: SummarySentence, assembled: CheckedText): boo
 function removalReasonOf(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): RemovalReason {
   if (!citationsHold(sentence, assembled)) return 'citation';
   if (!numbersHold(sentence, assembled, countElements)) return breaksCountRule(sentence, assembled) ? 'count' : 'number';
-  if (!comparedElementsHold(sentence, assembled) || !rankingHolds(sentence, assembled) || !rangeHolds(sentence, assembled) || !comparisonClaimsHold(sentence, assembled)) return 'comparison';
+  if (!comparedElementsHold(sentence, assembled) || !rankingHolds(sentence, assembled) || !rangeHolds(sentence, assembled) || !gapClaimsHold(sentence, assembled) || !comparisonClaimsHold(sentence, assembled)) return 'comparison';
   if (!claimsAreBacked(sentence, assembled)) return 'citation';
   return 'name';
 }

@@ -507,7 +507,7 @@ describe.each([
 describe('what the model is told of a removed ranking', () => {
   it('says that the ranking cannot be verified against the cited values, and holds no value and no corrected answer', () => {
     const note = removalNoteOf([{ text: 'T is the largest.', reason: 'comparison' }]);
-    expect(note).toContain('Removed: "T is the largest." (it compares elements that the lines it cites do not all show, or ranks them (the largest, the smallest, the latest, the earliest, the most or the fewest) in a way that cannot be verified against the cited values: a tie, a value that is missing, masked or of another kind, an element that was not cited, or a property that is not named once;');
+    expect(note).toContain('Removed: "T is the largest." (it compares elements that the lines it cites do not all show, or ranks them (the largest, the smallest, the top, the latest, the earliest, the most or the fewest) in a way that cannot be verified against the cited values: a tie, a value that is missing, masked or of another kind, an element that was not cited, or a property that is not named once;');
     expect(note).not.toMatch(/\d/u);
   });
 });

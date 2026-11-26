@@ -16,7 +16,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-const NO_RANKING_TEST: Mutation = { name: 'the ranking test', from: '&& rankingHolds(sentence, assembled) && rangeHolds(sentence, assembled) && comparisonClaimsHold(', to: '&& rangeHolds(sentence, assembled) && comparisonClaimsHold(' };
+const NO_RANKING_TEST: Mutation = { name: 'the ranking test', from: '&& rankingHolds(sentence, assembled) && rangeHolds', to: '&& rangeHolds' };
 const NO_TIE_RULE: Mutation = { name: 'the tie rule', from: 'if (top === undefined || (next !== undefined && compareValues(dataClass, top[1].value, next[1].value) === 0)) return false;', to: 'if (top === undefined) return false;' };
 const NO_MASKED_RULE: Mutation = {
   name: 'the rule of a missing or masked value',
