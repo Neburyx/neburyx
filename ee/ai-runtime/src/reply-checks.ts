@@ -967,24 +967,31 @@ const REFUSED_AFTER = new RegExp(`^(?:\\s+(?!${LINKING_WORD}|${NOT_ABLE})[\\p{L}
 const REFUSED_BEFORE = new RegExp(`${WB}${NOT_ABLE}\\s+(?:name|identify|determine|tell|rank|establish|state|choose|pick\\s+out)\\s+(?:(?:which\\s+is\\s+)?(?:the|a)\\s+)?$`, 'iu');
 
 /** Words after a refusal that go on to say who holds the ranking after all. */
-const GOES_ON_TO_HOLD = /:|(?<![\p{L}\p{N}_-])(?:which\s+is|it\s+is|except|other\s+than|apart\s+from|besides|but)(?![\p{L}\p{N}_-])|\d/iu;
+const GOES_ON_TO_HOLD = /(?<![\p{L}\p{N}_-])(?:which\s+is|it\s+is|except|other\s+than|apart\s+from|besides)(?![\p{L}\p{N}_-])/iu;
 
 /**
- * Whether a sentence says that the ranking a word stands for cannot be made, naming no element and no figure as its holder: it ranks nothing. After `cannot name the …` nothing in the rest of the sentence may name a holder or a
- * figure; after `… cannot be named` nothing in the rest of the clause.
+ * Whether a sentence says that the ranking a word stands for cannot be made, and goes on to name no holder: it ranks nothing. In the rest of the sentence, for either form of the refusal, a holder is the name of an element
+ * that has a value that could be ranked, a figure that is such a value of a cited element or is not written on a cited line of a read, or words that lead to a holder (`it is`, `except`, `other than`).
  */
-function refusesToRank(text: string, written: string, claim: { readonly index: number; readonly end: number }): boolean {
-  // a name (blanked in the text read) is a holder the sentence speaks of
-  const holdsNothing = (from: number, until: number): boolean => written.slice(from, until) === text.slice(from, until) && !GOES_ON_TO_HOLD.test(text.slice(from, until));
-  const endOf = (from: number, mark: RegExp): number => {
-    const found = mark.exec(text.slice(from));
-    return found === null ? text.length : from + found.index;
+function refusesToRank(sentence: SummarySentence, assembled: CheckedText, text: string, claim: { readonly index: number; readonly end: number }): boolean {
+  const written = sentence.text.normalize('NFC');
+  const rankable = [...(assembled.rankedValues ?? [])].filter(([, properties]) => properties.some((property) => ORDERED_CLASSES.has(property.dataClass)));
+  const names = rankable.flatMap(([key]) => namesOfKey(key, assembled)).filter((name) => name !== '');
+  const holdsNothing = (from: number): boolean => {
+    const stop = /[.!?](?!\d)/u.exec(text.slice(from));
+    const until = stop === null ? text.length : from + stop.index;
+    const rest = written.slice(from, until);
+    if (GOES_ON_TO_HOLD.test(text.slice(from, until)) || names.some((name) => occursWhole(name, rest))) return false;
+    const read = new Set(sentence.cites.filter((cite) => assembled.readKeys?.has(cite) === true).flatMap((cite) => numbersIn(assembled.lines.get(cite) ?? '')));
+    const values = new Set(sentence.cites.flatMap((cite) => (assembled.rankedValues?.get(cite) ?? []).flatMap((property) => (property.value === undefined ? [] : [property.value]))));
+    return numbersIn(text.slice(from, until)).every((figure) => read.has(figure) && !values.has(figure));
   };
-  if (REFUSED_BEFORE.test(text.slice(Math.max(0, claim.index - 60), claim.index))) return holdsNothing(claim.end, endOf(claim.end, /[.!?](?!\d)/u));
+  if (REFUSED_BEFORE.test(text.slice(Math.max(0, claim.index - 60), claim.index))) return holdsNothing(claim.end);
   const found = REFUSED_AFTER.exec(text.slice(claim.end, claim.end + 200));
   if (found === null) return false;
   const after = claim.end + found[0].length;
-  return written.slice(claim.end, after) === text.slice(claim.end, after) && holdsNothing(after, endOf(after, /[.,;:!?](?!\d)/u));
+  // a name between the ranking word and the refusal (blanked in the text read) is a holder the sentence speaks of
+  return written.slice(claim.end, after) === text.slice(claim.end, after) && holdsNothing(after);
 }
 
 /**
@@ -1018,8 +1025,7 @@ function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolea
     });
     return asKey || /(?:^|\s)an?\s+$/iu.test(text.slice(0, claim.index));
   };
-  const written = sentence.text.normalize('NFC');
-  const claims = all.filter((claim) => !namesProperty(claim) && !exempt(claim) && !refusesToRank(text, written, claim));
+  const claims = all.filter((claim) => !namesProperty(claim) && !exempt(claim) && !refusesToRank(sentence, assembled, text, claim));
   if (claims.length === 0) return true;
   // one ranking claim in a sentence: a compound ranking is written as separate sentences
   const [claim] = claims;

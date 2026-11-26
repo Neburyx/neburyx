@@ -63,6 +63,21 @@ describe.each([
   });
 
   it.each([
+    `We cannot name the largest ${key}, as the read shows 3 matches, a lower bound.`,
+    `I cannot identify the largest ${key}, but the read lists 3 matches.`,
+    `The largest ${key} cannot be named, since the read shows 3 matches, a lower bound.`,
+  ])('keeps a refusal that goes on to the count of the read: %s', (text) => {
+    expect(verdict(text, ['s1', ...keys])).not.toBe('comparison');
+  });
+
+  it.each([
+    `The largest ${key} cannot be named, but it is ${b}'s 10.`,
+    `The largest ${key} cannot be named: ${b} holds 10.`,
+  ])('removes a holder said after a refusal though the read is cited too: %s', (text) => {
+    expect(verdict(text, ['s1', ...keys])).toBe('comparison');
+  });
+
+  it.each([
     `The smallest cannot be named, but ${b} has the largest ${key}, 10.`,
     `The smallest cannot be named and ${b} has the largest ${key}, 10.`,
     `The smallest cannot be named, so ${b} has the largest ${key}.`,
@@ -75,6 +90,12 @@ describe.each([
     `I cannot identify the largest ${key} except ${b} at 10.`,
     `I cannot name the largest ${key} other than ${b}.`,
     `The largest ${key} cannot be told apart from 10.`,
+    `The largest ${key} cannot be named, but it is ${b}'s 10.`,
+    `The largest ${key} cannot be named; it is ${b}'s 10.`,
+    `The largest ${key} cannot be named, it is ${b}'s 10.`,
+    `The largest ${key} cannot be named: ${b} holds 10.`,
+    `The largest ${key} cannot be named, and ${b} holds it.`,
+    `The largest ${key} cannot be named, so ${b} holds it with 10.`,
   ])('verifies a ranking asserted beside a refusal: %s', (text) => {
     expect(verdict(text, keys)).toBe('comparison');
   });

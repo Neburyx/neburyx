@@ -50,8 +50,8 @@ describe.each([
   const said = (sentence: string): SummarySentence => ({ text: sentence, cites: [...(base.elementTypes?.keys() ?? []), 's1'] });
   const kept = (sentence: string): boolean => judgeSentences([said(sentence)], text).kept.length === 1;
 
-  const LIMITS = [`This does not hold for all of the ${item}s.`, `The largest cannot be named from the read.`, `I cannot identify the largest of the ${item}s.`, `Item A has the top ${property}, 900, and this does not hold for every ${item}.`];
-  const CLAIMS = [`Item B has the largest ${property}, 10.`, `The smallest cannot be named, but Item B has the largest ${property}, 10.`, `The smallest cannot be named and Item B has the largest ${property}.`, `The read does not list all of the ${item}s, and Item B has the top ${property}.`, `Item B comes out on top with ${property} 10.`];
+  const LIMITS = [`This does not hold for all of the ${item}s.`, `The largest cannot be named from the read.`, `I cannot identify the largest of the ${item}s.`, `We cannot name the largest ${property}, as the read shows 3 matches, a lower bound.`, `I cannot identify the largest ${property}, but the read lists 3 matches.`, `The largest ${property} cannot be named, since the read shows 3 matches, a lower bound.`, `Item A has the top ${property}, 900, and this does not hold for every ${item}.`];
+  const CLAIMS = [`Item B has the largest ${property}, 10.`, `The smallest cannot be named, but Item B has the largest ${property}, 10.`, `The smallest cannot be named and Item B has the largest ${property}.`, `The read does not list all of the ${item}s, and Item B has the top ${property}.`, `Item B comes out on top with ${property} 10.`, `The largest ${property} cannot be named, but it is Item B's 10.`, `The largest ${property} cannot be named; it is Item B's 10.`, `The largest ${property} cannot be named, it is Item B's 10.`, `The largest ${property} cannot be named: Item B holds 10.`, `The largest ${property} cannot be named, and Item B holds it.`, `The largest ${property} cannot be named, so Item B holds it with 10.`];
 
   it.each(LIMITS)('keeps the limit: %s', (sentence) => {
     expect(kept(sentence)).toBe(true);
@@ -63,7 +63,7 @@ describe.each([
 
   it.each([
     [{ name: 'the denial of a claim about all', from: 'if (DENIED_ALL.test(before)) continue;', to: '' }, `This does not hold for all of the ${item}s.`],
-    [{ name: 'the refusal to rank', from: ' && !refusesToRank(text, written, claim)', to: '' }, 'The largest cannot be named from the read.'],
+    [{ name: 'the refusal to rank', from: ' && !refusesToRank(sentence, assembled, text, claim)', to: '' }, 'The largest cannot be named from the read.'],
   ] as const)('removes a limit again once its rule is taken out of the product: %o', async (mutation, sentence) => {
     // the read alone is cited: the set the sentence speaks of is not
     const limit: SummarySentence = { text: sentence, cites: ['s1'] };
