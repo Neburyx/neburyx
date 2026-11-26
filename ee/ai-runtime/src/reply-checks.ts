@@ -445,11 +445,14 @@ const KIND_FORMS: readonly (readonly [string, RegExp])[] = [
 
 const PLACE_PREPOSITION = '(?:between|among|amongst|across|within)';
 
-/** What a line of the server states about a kind: the number shown, from `<n> relationships shown`, and `no relationship listed`. */
+/** What a line of the server states about a kind: the number shown, from `<n> relationships shown`; `no relationship listed`; and the exact number of a degree read, from `all relationship ends <n> (exact)`. */
 function statedOfKind(line: string, forms: RegExp, kind: string): number | undefined {
   const shown = new RegExp(`(\\d+) (?:${forms.source}) shown`, 'iu').exec(line);
   if (shown?.[1] !== undefined) return Number(shown[1]);
-  return kind === 'relationship' && /no relationship listed/iu.test(line) ? 0 : undefined;
+  if (kind !== 'relationship') return undefined;
+  const ends = /all relationship ends (\d[\d,]*) \(exact\)/iu.exec(line)?.[1];
+  if (ends !== undefined) return Number(ends.replaceAll(',', ''));
+  return /no relationship listed/iu.test(line) ? 0 : undefined;
 }
 
 const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
