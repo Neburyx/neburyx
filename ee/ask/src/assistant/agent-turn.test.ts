@@ -139,10 +139,22 @@ describe('a view question on the agent', () => {
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }, { cites: ['n1'] }] }] });
     const sent = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
-    expect(sent).toMatch(/c1: view coverage: 2 entities shown \(2 [^)]+\) · 0 relationships shown · /u);
+    expect(sent).toMatch(/c1: view coverage: 2 entities shown \(exact\), by type: 2 [^(]+ \(exact\) · 0 relationships shown \(exact\) · /u);
     // the sentence that cites only the line gets a marker of its own, written by the server
     expect(answer).toMatchObject({ citations: expect.arrayContaining([expect.objectContaining({ key: 'c1', kind: 'read', label: 'View coverage', finding: expect.stringContaining('0 relationships shown') })]) });
-    expect(sent).toMatch(new RegExp(`c1: view coverage: 2 entities shown \\(2 ${V.anchor}\\)`, 'u'));
+    expect(sent).toContain(`c1: view coverage: 2 entities shown (exact), by type: 2 ${V.anchor} (exact)`);
+  });
+
+  it('tells the model that the line of a degree read counts relationship ends, with an example that says so, and nothing of connected elements', async () => {
+    const model = fakeModel().respondWithTools([{ name: 'answer', args: { blocks: [] } }]).respond(new AIMessage('Done.'));
+    const store = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model }, runStore: store });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const instructions = store.runs[0]?.callStarts.map((start) => start.instructionsText).find((text) => text.includes('# How you work')) ?? '';
+    expect(instructions).toContain('its line states the relationship ends by the type at the other end, and all relationship ends, each with its quality');
+    expect(instructions).toContain('<element title> has 169,756 relationship ends to <type name> (exact)');
+    expect(instructions).not.toContain('connected elements by type');
+    expect(instructions).not.toContain('has 169,756 <type name>');
   });
 
   it('keeps no sentence that cites a key of no line: c1 is not offered without a view', async () => {
@@ -320,14 +332,14 @@ describe('a view question on the agent', () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
       .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: 'The degree read states all types 184,533 (exact).', cites: ['s1'] }] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: 'The degree read states all relationship ends 184,533 (exact).', cites: ['s1'] }] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['n1'] }, { cites: ['s1'] }] }] });
     const citations = (answer as { citations: { key: string; kind: string; label?: string; finding?: string }[] }).citations;
     expect(citations.find((citation) => citation.key === 's1')).toMatchObject({ kind: 'read', label: 'degree-preview' });
-    expect(citations.find((citation) => citation.key === 's1')?.finding).toContain('all types 184,533 (exact)');
+    expect(citations.find((citation) => citation.key === 's1')?.finding).toContain('all relationship ends 184,533 (exact)');
     expect(citations.filter((citation) => citation.kind === 'read')).toHaveLength(1);
   });
 

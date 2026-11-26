@@ -7,7 +7,7 @@ const reading = (notRetrieved: { quality: string; value?: number }, extra: objec
 describe('the coverage line of the view', () => {
   it('counts the entities by type, by the name the mapping gives, and the relationships, and says what is not yet retrieved', () => {
     const covered = viewCoverageOf(reading({ quality: 'exact', value: 0 }), new Map([['widget', 'Widgets']]));
-    expect(covered.text).toBe('3 entities shown (1 gadget, 2 Widgets) · 0 relationships shown · 0 not yet retrieved (exact)');
+    expect(covered.text).toBe('3 entities shown (exact), by type: 1 gadget (exact), 2 Widgets (exact) · 0 relationships shown (exact) · 0 not yet retrieved (exact)');
     expect(covered.inexact).toBeUndefined();
   });
 

@@ -136,7 +136,7 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
     if (detail.unknownCount) unknownCountKeys.add(key);
     return detail.parts.length === 0 ? '' : ` | ${detail.parts.join(' | ')}`;
   };
-  // the reads whose result lists elements and no relationship: their line says so, and a direction is not known from them
+  // the reads whose result lists elements and no relationship: their line says so, and a direction is not known from them. A degree read counts relationships in its line, so it is never one of them
   const noRelationship = new Set<number>();
   const propertyKeys = new Map<string, readonly string[]>(view?.propertyKeys);
   const rankedValues = new Map<string, readonly RankedProperty[]>(view?.rankedValues);
@@ -156,7 +156,7 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
   };
   reads.forEach((read, readIndex) => {
     const listedOfRead = read.result === undefined ? undefined : listedElements(read.result);
-    if (listedOfRead !== undefined && listedOfRead.size > 0 && ![...listedOfRead.values()].some((item) => !('entityType' in item.element))) noRelationship.add(readIndex);
+    if (read.result?.templateId !== 'degree-preview' && listedOfRead !== undefined && listedOfRead.size > 0 && ![...listedOfRead.values()].some((item) => !('entityType' in item.element))) noRelationship.add(readIndex);
     const listedKeys: string[] = [];
     readElements.set(`s${readIndex + 1}`, listedKeys);
     for (const [id, listed] of listedOfRead ?? []) {

@@ -81,14 +81,14 @@ const countWords = (count: Count): string => {
 };
 
 /**
- * The counts a degree read states, as the inspector shows them: the connected elements by the display name of their type, then in all, each with its quality. The figures are the source's, never summed here; `names` maps
- * an entity type to its display name, and a type it does not hold is written as the type itself.
+ * The counts a degree read states, as the inspector shows them: the relationship ends of the entity by the display name of the type at the other end, then in all, each with its quality. They are ends, not elements: a
+ * relationship from an entity to itself counts at both. The figures are the source's, never summed here; `names` maps an entity type to its display name, and a type it does not hold is written as the type itself.
  */
 export function degreeCountsOf(run: AskRunResult, names: ReadonlyMap<string, string> = new Map()): string | undefined {
   if (run.templateId !== 'degree-preview') return undefined;
   const { total, byNeighborType } = run.result;
-  const parts = [...byNeighborType.map((entry) => `${names.get(entry.entityType) ?? entry.entityType} ${countWords(entry.count)}`), `all types ${countWords(total)}`];
-  return `connected elements by type: ${parts.join(' · ')}`;
+  const parts = [...byNeighborType.map((entry) => `${names.get(entry.entityType) ?? entry.entityType} ${countWords(entry.count)}`), `all relationship ends ${countWords(total)}`];
+  return `relationship ends by the type at the other end: ${parts.join(' · ')}`;
 }
 
 /** The count a read's line is written with: the count the result carries (of matches, or the rows of a file query), or the number of elements it lists, which is exact; `value` is absent when the count is not known. */

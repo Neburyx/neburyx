@@ -8,14 +8,16 @@ export function retrievalLine(reading: SummaryReading): string {
   return [`${reading.nodes.length.toLocaleString('en-US')} shown`, ...unretrievedParts(reading)].join(' · ');
 }
 
-/** What is not yet retrieved of a view and what the line says besides: the references that could not be read and the note that access may hide items. */
-const unretrievedParts = (reading: SummaryReading): string[] => [
+/** What is not yet retrieved of a view and what the line says besides: the references that could not be read, with `label` after their count, and the note that access may hide items. */
+const unretrievedParts = (reading: SummaryReading, label = ''): string[] => [
   notRetrievedText(reading.notRetrieved, reading.uncounted),
-  ...(reading.unresolved > 0 ? [`${reading.unresolved.toLocaleString('en-US')} references could not be read`] : []),
+  ...(reading.unresolved > 0 ? [`${reading.unresolved.toLocaleString('en-US')} references could not be read${label}`] : []),
   ...(reading.omitted ? [EXPORT_HIDDEN_NOTE] : []),
 ];
 
 const SIGNS = { estimated: '~ ', lowerBound: '≥ ' } as const;
+/** The label of a count of what the server itself holds: the elements it read again and the references it could not read. */
+const COUNTED = ' (exact)';
 
 /**
  * The coverage of the view as one citable line, in the words of the export header and with no word of any domain: how many entities it shows (and of which types, by the name the mapping gives each), how many relationships, and what is not yet retrieved.
@@ -24,9 +26,9 @@ const SIGNS = { estimated: '~ ', lowerBound: '≥ ' } as const;
 export function viewCoverageOf(reading: SummaryReading, names: ReadonlyMap<string, string> = new Map()): { readonly text: string; readonly inexact?: { readonly phrase: string; readonly value: string } | 'unknown' } {
   const byType = new Map<string, number>();
   for (const node of reading.nodes) byType.set(node.ref.entityType, (byType.get(node.ref.entityType) ?? 0) + 1);
-  const types = [...byType].map(([type, count]) => `${count.toLocaleString('en-US')} ${names.get(type) ?? type}`).sort();
-  const entities = `${reading.nodes.length.toLocaleString('en-US')} entities shown${types.length === 0 ? '' : ` (${types.join(', ')})`}`;
-  const text = [entities, `${reading.edges.length.toLocaleString('en-US')} relationships shown`, ...unretrievedParts(reading)].join(' · ');
+  const types = [...byType].map(([type, count]) => `${count.toLocaleString('en-US')} ${names.get(type) ?? type}${COUNTED}`).sort();
+  const entities = `${reading.nodes.length.toLocaleString('en-US')} entities shown${COUNTED}${types.length === 0 ? '' : `, by type: ${types.join(', ')}`}`;
+  const text = [entities, `${reading.edges.length.toLocaleString('en-US')} relationships shown${COUNTED}`, ...unretrievedParts(reading, COUNTED)].join(' · ');
   const count = reading.notRetrieved;
   if (count.quality === 'unknown' || count.value === undefined) return { text, inexact: 'unknown' };
   if (count.quality === 'exact') return { text };
