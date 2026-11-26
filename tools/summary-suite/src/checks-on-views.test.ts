@@ -104,7 +104,7 @@ describe('a verdict in the reply', () => {
 });
 
 describe('the helpers of the rules cannot be removed unseen (canaries)', () => {
-  const sent = 'Entities:\nn1 | "account" | title: "AC-1" | id: "AC-1" | note: "-5"\nn2 | "account" | title: "AC-2" | id: "AC-2" | ledger: "1,000"\nRelationships:\ne1 | "X" | n1 -> n2 | stored | members: not known';
+  const sent = 'Entities:\nn1 | "account" | title: "AC-1" | id: "AC-1" | note: "-5"\nn2 | "account" | title: "AC-2" | id: "AC-2" | ledger: "1,000"\nRelationships:\ne1 | "X" | n1 -> n2 | stored | relationships on this line: not known';
   const asked = (text: string, cites: string[]): SummarySentence[] => [{ text, cites }];
 
   it('canary: a sentence the checks should have removed is caught, for each of the citation, number, count, name and verdict rules', () => {
@@ -136,7 +136,7 @@ describe('the helpers of the rules cannot be removed unseen (canaries)', () => {
   });
 
   it('canary: the control sentences are clean, and a count is judged only when the sentence states its number', () => {
-    const counted = 'Entities:\nn1 | "a" | title: "T" | id: "AC-1"\nRelationships:\ne1 | "X" | n1 -> n1 | stored | members: ~40 (estimated)\ne2 | "Y" | n1 -> n1 | stored | members: 7 (exact)\ne3 | "Z" | n1 -> n1 | stored | members: not known';
+    const counted = 'Entities:\nn1 | "a" | title: "T" | id: "AC-1"\nRelationships:\ne1 | "X" | n1 -> n1 | stored | relationships on this line: ~40 (estimated)\ne2 | "Y" | n1 -> n1 | stored | relationships on this line: 7 (exact)\ne3 | "Z" | n1 -> n1 | stored | relationships on this line: not known';
     expect(() => expectClean(asked('The number of transfers is not known.', ['e3']), counted)).not.toThrow();
     expect(() => expectClean(asked('The accounts are linked.', ['e1']), counted)).not.toThrow();
     expect(() => expectClean(asked('There were 7 transfers.', ['e2']), counted)).not.toThrow();

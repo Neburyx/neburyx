@@ -49,7 +49,7 @@ export {
   testOutcomeSchema,
 } from './source-test.js';
 export type { DegreeBasis, DegreeChecks, DegreeType, MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';
-export { AGGREGATE_MEMBERS_SCOPE, AGGREGATE_SAMPLE_ORDERS, AGGREGATE_SAMPLE_SIZE, EVIDENCE_NOT_AVAILABLE, MAX_EDGE_REF_SEGMENT, NO_STABLE_ID, aggregateEdgeDetailSchema, aggregateEdgeRefSchema, aggregateSampleRowSchema, derivedEdgeDetailSchema, derivedEdgeRefSchema, derivedSupportGroupSchema, derivedSupportSchema, derivedSupportsSchema, edgeDetailSchema, storedEdgeDetailSchema, edgeEndSchema, edgeEvidenceRecordSchema, edgeEvidenceSchema, edgePathSchema, edgeRefSegmentOf, parseEdgeRefSegment } from './edge-detail.js';
+export { AGGREGATE_MEMBERS_SCOPE, AGGREGATE_SAMPLE_ORDERS, AGGREGATE_SAMPLE_SIZE, EVIDENCE_NOT_AVAILABLE, MAX_EDGE_REF_SEGMENT, NO_STABLE_ID, RELATIONSHIP_COUNT_LABEL, aggregateEdgeDetailSchema, aggregateEdgeRefSchema, aggregateSampleRowSchema, derivedEdgeDetailSchema, derivedEdgeRefSchema, derivedSupportGroupSchema, derivedSupportSchema, derivedSupportsSchema, edgeDetailSchema, storedEdgeDetailSchema, edgeEndSchema, edgeEvidenceRecordSchema, edgeEvidenceSchema, edgePathSchema, edgeRefSegmentOf, parseEdgeRefSegment } from './edge-detail.js';
 export type { AggregateEdgeDetail, AggregateEdgeRef, AggregateSampleRow, DerivedEdgeDetail, DerivedEdgeRef, DerivedSupport, DerivedSupportGroup, EdgeDetail, EdgeReadRef, StoredEdgeDetail, EdgeEnd, EdgeEvidence, EdgeEvidenceRecord } from './edge-detail.js';
 export { parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, sourceLinkSegmentOf } from './source-link.js';
 export type { EntityLinkRef, SourceLinkRef } from './source-link.js';

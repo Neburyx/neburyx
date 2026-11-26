@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { CaseSummaryOutcome, SummarySentence } from '@neburyx/contracts';
+import { RELATIONSHIP_COUNT_LABEL, type CaseSummaryOutcome, type SummarySentence } from '@neburyx/contracts';
 import { z } from 'zod';
 
 export class SuiteCheckFailed extends Error {}
@@ -281,12 +281,14 @@ export function expectNumbersCited(sentences: readonly SummarySentence[], sent: 
   }
 }
 
+const COUNT_ON_LINE = new RegExp(`\\| ${RELATIONSHIP_COUNT_LABEL}: ([^|]+)`, 'u');
+
 /** A sentence that states a number beside a count the text gives as not known, or the number of an inexact count without the phrase that labels it; an exact count needs no label. */
 export function countRuleBroken(sentence: SummarySentence, sent: string): boolean {
   const lines = linesOfKeys(sent);
   const stated = [...numbersIn(sentence.text), ...wordMentionsIn(sentence.text).filter((found) => Number(found.value) > 10 || (opensCount(found.after, lines) && !PAIRWISE.test(found.before))).map((found) => found.value)];
   return sentence.cites.some((key) => {
-    const members = /\| members: ([^|]+)/u.exec(lines.get(key) ?? '')?.[1]?.trim();
+    const members = COUNT_ON_LINE.exec(lines.get(key) ?? '')?.[1]?.trim();
     if (members === undefined) return false;
     if (members === 'not known') return stated.length > 0;
     if (members.endsWith('(exact)')) return false;

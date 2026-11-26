@@ -3,7 +3,7 @@ import { summaryResponseSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { el, exportWebRoot, startExportRig } from '../../../services/api/src/testing/export-rig.js';
 import { rmSync } from 'node:fs';
-import { expectEachIdOnce, expectNoText, expectSameText, keysOfSentText, SuiteCheckFailed } from './checks.js';
+import { countRuleBroken, expectEachIdOnce, expectNoText, expectSameText, keysOfSentText, SuiteCheckFailed } from './checks.js';
 import { keyMapOf, loadCases, readingOf } from './cases.js';
 import { replyOf, startRig } from './testing/rig.js';
 import { edge, node, prop, reading } from './view.js';
@@ -53,13 +53,30 @@ describe('what the model is sent: the text of the elements, written by hand', ()
       'n1 | "account" | title: "AC-1" | id: "AC-1" | phone: "***-1234" (masked); note: (not shown)',
       'n2 | "account" | title: "AC-2" | id: "AC-2"',
       'Relationships:',
-      'e1 | "TRANSFERRED_TO" | n1 -> n2 | stored | observed "2026-02-01" to "2026-02-09" | members: ~40 (estimated)',
+      'e1 | "TRANSFERRED_TO" | n1 -> n2 | stored | observed "2026-02-01" to "2026-02-09" | relationships on this line: ~40 (estimated)',
       'e2 | "SHARES_DEVICE" | n1 -> n2 | derived | derived by rule "shared-device" version 2',
       'e3 | "PAID_TO" | n2 -> an end that was not read ("merchant" "MR-9") | stored',
       '2 references could not be read.',
     ].join('\n');
     expectSameText(rig.requests[0]?.values ?? '', expected);
     expect(outcome.status === 'ok' && outcome.sent).toBe(expected);
+  });
+
+  it.each([
+    [{ value: 40, quality: 'estimated', scope: 'coverage' }, '~40 (estimated)', '40 transfers are listed.'],
+    [{ value: 40, quality: 'lowerBound', scope: 'coverage' }, '≥ 40 (lower bound)', '40 transfers are listed.'],
+    [{ quality: 'unknown', scope: 'coverage' }, 'not known', '40 transfers are listed.'],
+  ] as const)('writes a count the suite’s count check reads: %o', async (memberCount, phrase, bare) => {
+    const account = node('account', 'AC-1', 'AC-1');
+    const other = node('account', 'AC-2', 'AC-2');
+    const aggregate = edge('TRANSFERRED_TO', 'agg', account.ref, other.ref, { ref: { sourceId: 'demo', aggregate: { type: 'TRANSFERRED_TO', from: account.ref, to: other.ref } }, memberCount });
+    const rig = startRig({ replies: [okReply] });
+    await rig.summarize(reading([account, other], [aggregate]));
+    const sent = rig.requests[0]?.values ?? '';
+    // the line the product wrote: a check that no longer recognises it would pass every sentence
+    expect(sent).toContain(phrase);
+    expect(countRuleBroken({ text: bare, cites: ['e1'] }, sent)).toBe(true);
+    expect(countRuleBroken({ text: 'The transfers are listed.', cites: ['e1'] }, sent)).toBe(false);
   });
 
   it('canary: a text that drops a field, one that sends an element twice and one that adds a withheld value each fail the comparison', () => {

@@ -83,6 +83,9 @@ export const AGGREGATE_SAMPLE_SIZE = 25;
 /** The scope of an aggregate's member count: every relationship of the type between the two ends, whatever filters a view applied. */
 export const AGGREGATE_MEMBERS_SCOPE = 'aggregate:members';
 
+/** The label a relationship's line, in the text a model is sent, gives the count of relationships the line stands for. Whatever writes that line or reads the count from it takes the label from here. */
+export const RELATIONSHIP_COUNT_LABEL = 'relationships on this line';
+
 /** `observed-newest`: the rows are newest first by observed time. `source-order`: the first members the source returned, in no order the product chose, which says nothing about time. */
 export const AGGREGATE_SAMPLE_ORDERS = ['observed-newest', 'source-order'] as const;
 

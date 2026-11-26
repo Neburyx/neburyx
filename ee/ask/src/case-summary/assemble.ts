@@ -1,6 +1,6 @@
 import { canonicalText } from '../questions/canonical.js';
 import { decimalKey, temporalKey, type RankedProperty } from '@neburyx/ee-ai-runtime';
-import { SENSITIVE_TITLE_KEY } from '@neburyx/contracts';
+import { RELATIONSHIP_COUNT_LABEL, SENSITIVE_TITLE_KEY } from '@neburyx/contracts';
 import type { Count, ElementRef, GraphEdge, GraphNode, GraphProperty, SummaryReading } from '@neburyx/contracts';
 
 /**
@@ -125,7 +125,7 @@ export function edgeDetailOf(edge: GraphEdge): EdgeDetail {
   let unknownCount = false;
   if (edge.memberCount !== undefined) {
     const phrase = countPhrase(edge.memberCount);
-    parts.push(`relationships on this line: ${phrase}`);
+    parts.push(`${RELATIONSHIP_COUNT_LABEL}: ${phrase}`);
     if (edge.memberCount.quality === 'unknown' || edge.memberCount.value === undefined) unknownCount = true;
     else if (edge.memberCount.quality !== 'exact') inexact = { phrase, value: String(edge.memberCount.value) };
   }
