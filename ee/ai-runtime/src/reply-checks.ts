@@ -1841,7 +1841,7 @@ function listedItems(text: string, from: number): { readonly raw: string; readon
   const items: { raw: string; words: string; examples: string[] }[] = [];
   const segment = /^(?:[^.;!?(]|\([^)]*\)|\.(?=\d))*/u.exec(text.slice(from))?.[0] ?? '';
   const turn = /(?<![\p{L}\p{N}_-])(?:but|while|whereas|so|yet|although)(?![\p{L}\p{N}_-])(?![^(]*\))/iu.exec(segment);
-  for (const piece of segment.slice(0, turn?.index ?? segment.length).split(/(?:,|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-]))(?![^()]*\))/iu)) {
+  for (const piece of segment.slice(0, turn?.index ?? segment.length).split(/(?:,|(?<![\p{L}\p{N}_-])(?:and|or|as\s+well\s+as)(?![\p{L}\p{N}_-]))(?![^()]*\))/iu)) {
     const examples = [...piece.matchAll(/\(([^)]*)\)/gu)].flatMap((found) => (found[1] ?? '').replace(/^\s*(?:for example|for instance|e\.g\.|such as|including)[\s,:]*/iu, '').split(/(?<!\d),|,(?!\d{3}(?!\d))|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-])/iu)).map((example) => example.trim().replace(/^["\u201c]|["\u201d]$/gu, '')).filter((example) => example !== '' && !/^etc/iu.test(example));
     const words = piece.replace(/\([^)]*\)/gu, ' ').trim().replace(/^(?:(?:in|their|its|the|also|each|one|all)\s+)+/iu, '');
     if (words !== '') items.push({ raw: piece.trim(), words, examples });
@@ -1868,7 +1868,7 @@ function differsInHolds(evidence: Evidence, claimEnd: number, reading: Reading):
   const named = items.map((item) => propertiesNamed(evidence, item.words));
   if ((named[0]?.length ?? 0) === 0) return undefined;
   if (items.length > MOST_LISTED || (evidence.text.length - from > LONGEST_LIST && items.length > 1)) return false;
-  const ends = items.findIndex((item, index) => index > 0 && (afterTheList(item.raw) || OPENS_ANOTHER.has(item.words.split(/\s+/u)[0]?.toLowerCase() ?? '')));
+  const ends = items.findIndex((item, index) => index > 0 && ((named[index]?.length === 0 && afterTheList(item.raw)) || OPENS_ANOTHER.has(item.words.split(/\s+/u)[0]?.toLowerCase() ?? '')));
   return items.slice(0, ends < 0 ? items.length : ends).every((item, index) => {
     const [property, other] = named[index] ?? [];
     if (property === undefined || other !== undefined) return false;
