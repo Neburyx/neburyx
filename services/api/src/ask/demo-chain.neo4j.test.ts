@@ -242,6 +242,7 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))(`every demo quest
       const matches = await queryMatches(rig.server, query, name ?? '');
       expect(matches, 'the demo graph holds the name').toBeGreaterThan(0);
       const open = readAnswer((await post(rig.app, '/v1/ask', { sourceId: rig.sourceId, question: question.wording, mask: false })).json());
+      expect(open.answered, 'the name query runs with masking off').toBeDefined();
       const result = open.answered?.result as { result?: { nodes: unknown[]; count: { quality: string; value: number } } } | undefined;
       expect(result?.result?.nodes.length).toBe(Math.min(matches, result?.result?.count.value ?? 0));
       if (result?.result?.count.quality === 'exact') expect(result.result.count.value).toBe(matches);
