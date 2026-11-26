@@ -29,10 +29,15 @@ export function failureText(failure: ApiFailure, source: string = UNNAMED_SOURCE
 
 export function FailureNotice({ failure, prefix = '' }: { readonly failure: ApiFailure; readonly prefix?: string }) {
   return (
-    <p role="alert">
+    <p role="alert" className="failure-notice">
       {prefix}
       {failureText(failure)}
-      {'traceId' in failure ? ` · trace ${failure.traceId}` : ''}
+      {'traceId' in failure ? (
+        <>
+          {' · trace '}
+          <span className="failure-trace">{failure.traceId}</span>
+        </>
+      ) : null}
     </p>
   );
 }

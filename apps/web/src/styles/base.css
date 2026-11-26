@@ -237,16 +237,18 @@ section {
   align-items: center;
 }
 
-/* the sentence of a framed failure is set as the interface text, in the frames' red, wherever the box stands */
-.failure-box.failure-box > [role='alert'],
-.mapping-example > p[role='alert'],
-.search-failed > p[role='alert'],
-.notice-text > [role='alert'] {
+/* the sentence of a failure is set as the interface text, in the frames' red, wherever it stands; only the trace ID is an ID */
+p.failure-notice.failure-notice,
+.search-failed > p[role='alert'] {
   margin: 0;
   color: var(--color-danger-action);
   font-family: var(--font-family);
   font-size: var(--font-size-small);
   line-height: var(--line-height-note);
+}
+
+.failure-trace {
+  font-family: var(--font-mono);
 }
 
 :focus-visible {

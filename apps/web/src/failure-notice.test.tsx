@@ -50,3 +50,13 @@ describe('whether a failed read offers Try again', () => {
     expect(offersRetry(unavailable(reason))).toBe(SOURCE_UNAVAILABLE_ENTRIES[reason].retryable);
   });
 });
+
+describe('the look of the notice', () => {
+  it('writes only the trace ID as an ID, apart from the sentence', () => {
+    render(<FailureNotice failure={serverFailure('SOURCE_BUSY')} />);
+    const notice = screen.getByRole('alert');
+    expect(notice.className).toBe('failure-notice');
+    expect(notice.querySelector('.failure-trace')?.textContent).toBe('tr-1');
+    expect(notice.textContent).toBe('The source is busy. No read slot freed within the wait. · trace tr-1');
+  });
+});

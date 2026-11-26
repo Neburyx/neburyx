@@ -71,7 +71,7 @@ describe('what shows of an expansion started outside the submenu', () => {
     act(() => void store.expand(ref('a', 'type-a', 'n1'), ['type-b']));
     await act(async () => asked[0]?.answer({ ok: false, failure: { code: 'SOURCE_BUSY', message: 'x', retryable: true, traceId: 'tr-2' } }));
     act(() => void store.expand(ref('a', 'type-a', 'n2'), ['type-b']));
-    expect(within(screen.getByRole('alert')).getByText('The source is busy. No read slot freed within the wait. · trace tr-2')).not.toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe('The source is busy. No read slot freed within the wait. · trace tr-2');
     expect(screen.getByRole('status').textContent).toBe('Expanding 1 item');
   });
 

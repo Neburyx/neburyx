@@ -170,7 +170,7 @@ describe('the failures of a load', () => {
     const user = userEvent.setup();
     await user.click(button('Load 25 per type'));
     await failExpand(expansions[0], 'SOURCE_BUSY');
-    expect(within(inPanel().getByRole('alert').parentElement as HTMLElement).getByText('The source is busy. No read slot freed within the wait. · trace tr-9')).not.toBeNull();
+    expect(inPanel().getByRole('alert').textContent).toBe('The source is busy. No read slot freed within the wait. · trace tr-9');
     expect(state.loadedGraph().edges).toHaveLength(0);
     await user.click(button('Retry'));
     expect(expansions).toHaveLength(2);
