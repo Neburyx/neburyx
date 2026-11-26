@@ -36,6 +36,15 @@ describe('the sealed summary token', () => {
     expect(opened.ok && opened.payload.inputRefs.map((entry) => entry.key)).toEqual(['n1', 'n2', 'n3']);
   });
 
+  it('never opens with the first character of its tag changed, over some hundreds of tokens', () => {
+    for (let index = 0; index < 400; index += 1) {
+      const token = sealToken(KEYS, INPUT, NOW);
+      const tagAt = token.lastIndexOf('.') + 1;
+      const altered = `${token.slice(0, tagAt)}${token[tagAt] === 'A' ? 'B' : 'A'}${token.slice(tagAt + 1)}`;
+      expect(openToken(KEYS, altered, { ...CONTEXT, now: NOW + 1 }), altered).toEqual({ ok: false });
+    }
+  });
+
   it('is sealed with AES-256-GCM, names the key in its header and holds no sentence in the clear', () => {
     const token = sealToken(KEYS, INPUT, NOW);
     expect(token.split('.').slice(0, 2)).toEqual(['v1', 'cur00001']);

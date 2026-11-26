@@ -121,7 +121,9 @@ describe('a follow-up answered with an attached summary', () => {
   it('ends the turn before any read and any model call for a token that does not open', async () => {
     const t = await withSummary({ view: reply([{ text: 'Account A-1 is in view.', cites: ['n1'] }]) });
     const token = tokenOf();
-    const altered = `${token.slice(0, -2)}${token.endsWith('A') ? 'B' : 'A'}A`;
+    // the first character of the tag always changes its first byte; the last ones may hold only padding bits
+    const tagAt = token.lastIndexOf('.') + 1;
+    const altered = `${token.slice(0, tagAt)}${token[tagAt] === 'A' ? 'B' : 'A'}${token.slice(tagAt + 1)}`;
     expect(await answerOf(turn(t, altered))).toEqual({ status: 'summary-invalid', sentence: ASSISTANT_SUMMARY_INVALID_SENTENCE });
     expect(await answerOf(turn(t, tokenOf({ investigationId: 'inv-2' })))).toMatchObject({ status: 'summary-invalid' });
     expect(t.elementReads).toHaveLength(0);
