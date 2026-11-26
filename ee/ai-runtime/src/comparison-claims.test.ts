@@ -141,6 +141,12 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
       expect(verdict(apart, `These two have different ${statusWords}s, Wire and cash.`, two)).toBe('comparison');
     });
 
+    it('holds a stated value of several words to a subject too', () => {
+      const apart = held('Wire', 'cash machine');
+      expect(verdict(apart, `These two have different ${statusWords}s, wire and cash machine.`, two)).toBe('kept');
+      expect(verdict(apart, `These two have different ${statusWords}s, wire and point of sale.`, two)).toBe('comparison');
+    });
+
     it('removes what it cannot test: a missing or masked value, one subject, a wrong number, an unnamed aspect', () => {
       expect(verdict(held('Wire', 'Wire', undefined), `These ${items} share the same ${statusWords}.`, three)).toBe('comparison');
       expect(verdict(textOf([element(1, 'W***'), element(2, 'W***', [], true)]), `Both have the same ${statusWords}.`, two)).toBe('comparison');
@@ -260,6 +266,17 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
       for (const text of [`Alpha and Beta have the same ${items}.`, `Alpha and Beta have identical ${items}.`, `In view, the ${items} of Alpha and Beta are different.`, `In view, Alpha and Beta have ${items} that differ.`, `In view, the ${items} Alpha and Beta have are distinct.`]) expect(verdict(lopsided, text, cites), text).toBe('comparison');
     });
 
+    it('reads a type whose name ends in an s as one entity, not several', () => {
+      const place = `${holder}ss`;
+      const both = textOf([entity('a', item, 'Item A'), entity('b', item, 'Item B'), entity('d', place, 'Delta'), entity('e', place, 'Epsilon'), link('e1', pack.send, 'a', 'd'), link('e2', pack.send, 'b', 'd'), link('e3', pack.send, 'a', 'e')]);
+      expect(verdict(both, `Item A and Item B have the same ${place}, Delta.`, ['a', 'b', 'd', 'e1', 'e2'])).toBe('kept');
+    });
+
+    it('keeps a shared entity named before it is said to be shared, and tests it', () => {
+      expect(verdict(held, 'Gamma is shared by Item A, Item B and Item C.', [...sends, 'n1', 'n2', 'n3'])).toBe('kept');
+      expect(verdict(held, 'Delta is shared by Item A, Item B and Item C.', [...all, 'n1', 'n2', 'n3', 'h1'])).toBe('comparison');
+    });
+
     it('does not take pointing words for a limit where the view states that not all of it was retrieved', () => {
       const partial = (line: string): CheckedText => textOf(elements, { c1: { line: `view coverage: ${line}`, lists: [] } });
       const text = `None of these three share a ${pack.receiver} ${holder}.`;
@@ -337,6 +354,14 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
     it('does not take a negated verb that another assertion carries for a clause that cannot tell', () => {
       expect(verdict(held, `These two share a ${holder} and its keeper is not known.`, ['n1', 'n2', 'c1'])).toBe('comparison');
       expect(verdict(held, `The view does not show their keepers and these two share a ${holder}.`, ['n1', 'n2', 'c1'])).toBe('comparison');
+    });
+
+    it('tests a claim that a later negated verb does not take as its subject', () => {
+      expect(verdict(held, `These two have the same ${statusWords} whose keeper is not known.`, ['n1', 'n2', 'c1'])).toBe('comparison');
+      expect(verdict(held, `These two have the same keeper not yet retrieved.`, ['n1', 'n2', 'c1'])).toBe('comparison');
+      expect(verdict(held, 'Item A and Item B differ in a way not yet established.', ['n1', 'n2', 'c1'])).toBe('comparison');
+      expect(verdict(held, `The view is coverage only, so shared ${holder}s cannot be seen.`, ['c1'])).toBe('kept');
+      expect(verdict(held, `No shared ${holder} can be shown.`, ['c1'])).toBe('kept');
     });
 
     it('reads no claim in a name, a quoted text or a restated read, and removes any other claim that cites no element', () => {
