@@ -737,8 +737,44 @@ function readDescribedHolds(sentence: SummarySentence, assembled: CheckedText): 
   return true;
 }
 
+/** The English words that make what follows a name's, or a thing's before it: `<thing> of <name>`, `<thing> held by <name>`. */
+const BELONGING = '(?:of|belonging\\s+to|owned\\s+by|held\\s+by)';
+
+/**
+ * A sentence that ties a named entity to others by a possessive (`<name>'s <things>`, `<things> of <name>`), where the thing is a type of an element or a kind (an entity, a relationship), cites a relationship with that entity at
+ * an end: a name found anywhere in what was sent shows nothing of what is said to be its own. Which relationship it is does not matter, and a property of the named entity (`<name>'s <property>`) is no such claim.
+ */
+function possessivesAreLinked(sentence: SummarySentence, assembled: CheckedText): boolean {
+  const types = assembled.elementTypes;
+  const cited = citedElements(sentence, assembled);
+  if (types === undefined || cited.length === 0) return true;
+  const entities = [...types].filter(([, type]) => type.startsWith('entity '));
+  const things = [...new Set([...typesSent(assembled).map(({ word }) => word), ...(assembled.elementEnds === undefined ? [] : [...assembled.elementEnds.values()].flatMap((ends) => ends.map(([type]) => flatten(type)))), ...KIND_FORMS.map(([kind]) => kind), 'link'])];
+  const thing = `(?:${things.map(termPattern).join('|')})`;
+  const linked = new Set(cited.filter((key) => types.get(key)?.startsWith('relationship ') === true).flatMap((key) => assembled.elementEnds?.get(key) ?? []).map(identityOf));
+  let left = withoutQuoted(sentence.text);
+  for (const name of namesOfElements(assembled)) {
+    const holders = entities.filter(([key]) => namesOfKey(key, assembled).includes(name)).map(([key]) => key);
+    const written = new RegExp(`${WB}${ESCAPED(name)}(?![\\p{L}\\p{N}_])`, 'gu');
+    const mentions = holders.length === 0 ? [] : [...left.matchAll(written)];
+    // nothing is tied to the name where the sentence cites no element but the one named
+    const untied = cited.some((key) => !holders.includes(key)) && !holders.some((key) => (assembled.elementEnds?.get(key) ?? []).some((end) => linked.has(identityOf(end))));
+    const properties = holders.flatMap((key) => (assembled.rankedValues?.get(key) ?? []).map((entry) => flatten(entry.key)));
+    for (const mention of untied ? mentions : []) {
+      const after = flatten(left.slice(mention.index + name.length, mention.index + name.length + 80));
+      const owns = new RegExp(`^['\u2019]s?(?![\\p{L}])\\s+(?:[\\p{L}-]+\\s+){0,2}?${thing}(?![\\p{L}\\p{N}_])`, 'iu').exec(after);
+      const ownProperty = properties.some((property) => after.replace(/^['\u2019]s?\s+/u, '').startsWith(property));
+      const belongs = new RegExp(`${WB}${thing}\\s+${BELONGING}\\s+(?:the\\s+)?$`, 'iu').test(flatten(left.slice(Math.max(0, mention.index - 80), mention.index)));
+      if ((owns !== null && !ownProperty) || belongs) return false;
+    }
+    left = left.replace(written, (found) => ' '.repeat(found.length));
+  }
+  return true;
+}
+
 /** Whether the claims a sentence makes about absence, about all of a set and about what a read returned are backed by the lines it cites. */
-const claimsAreBacked = (sentence: SummarySentence, assembled: CheckedText): boolean => absenceHolds(sentence, assembled) && universalHolds(sentence, assembled) && readDescribedHolds(sentence, assembled);
+const claimsAreBacked = (sentence: SummarySentence, assembled: CheckedText): boolean =>
+  absenceHolds(sentence, assembled) && universalHolds(sentence, assembled) && readDescribedHolds(sentence, assembled) && possessivesAreLinked(sentence, assembled);
 
 /** A property of an element that a ranking may rest on: its key and data class, and its value as exact text when it is shown, not masked and valid in its class (a decimal for `number`, an instant in nanoseconds for `dateTime`, the fixed-width text of the moment key for `date` and `localDateTime`). */
 export interface RankedProperty {
