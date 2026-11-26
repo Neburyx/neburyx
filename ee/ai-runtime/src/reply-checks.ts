@@ -114,7 +114,7 @@ export function descriptionHoldsVerdict(description: string, ownNames: readonly 
 /** The longest sentence that is checked, in characters: ten times the longest the recorded answers hold. */
 const LONGEST_SENTENCE = 4000;
 
-export const REMOVAL_REASONS = ['verdict', 'key', 'citation', 'number', 'count', 'comparison', 'name', 'label', 'cell', 'row', 'length'] as const;
+export const REMOVAL_REASONS = ['verdict', 'key', 'citation', 'number', 'count', 'comparison', 'name', 'label', 'cell', 'row'] as const;
 export type RemovalReason = (typeof REMOVAL_REASONS)[number];
 
 export interface RejectedSentence {
@@ -2064,11 +2064,11 @@ export function judgeSentences(sentences: readonly SummarySentence[], input: Che
   let keysRemoved = 0;
   let previous: { readonly cites: ReadonlySet<string>; readonly reason: RemovalReason } | undefined;
   for (const original of sentences) {
-    // a sentence far longer than any answer writes is not read at all: several of the checks take time that grows faster than its length
+    // a sentence far longer than any answer writes is not read at all: several of the checks take time that grows faster than its length. It takes the reason of a sentence that cannot be checked against its citations, one of the stored reasons
     if (original.text.length > LONGEST_SENTENCE) {
       removed += 1;
-      rejected.push({ text: original.text, reason: 'length' });
-      previous = { cites: new Set(original.cites), reason: 'length' };
+      rejected.push({ text: original.text, reason: 'citation' });
+      previous = { cites: new Set(original.cites), reason: 'citation' };
       continue;
     }
     if (holdsVerdict(original, assembled)) {

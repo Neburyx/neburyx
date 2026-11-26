@@ -101,8 +101,9 @@ describe.each([
   }, 120_000);
 
   it('removes a sentence far longer than any answer writes, without reading it', async () => {
-    const judged = await judgeEach(held, ['these two share a thing '.repeat(6000), `${'two '.repeat(1100)}.`], cites, 500);
-    expect(judged).toEqual([{ kept: 0, reason: 'length' }, { kept: 0, reason: 'length' }]);
+    const long = ['these two share a thing ', 'no two ', 'two '].map((unit) => unit.repeat(Math.ceil(128_000 / unit.length)).slice(0, 128_000));
+    const judged = await judgeEach(held, long, cites, 500);
+    expect(judged).toEqual(long.map(() => ({ kept: 0, reason: 'citation' })));
   }, 60_000);
 
   it('removes a sentence with dozens of comparison words, which it does not read one by one', async () => {
