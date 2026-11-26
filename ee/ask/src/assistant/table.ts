@@ -50,8 +50,15 @@ export function subjectPluralOf(subject: { readonly type: string; readonly text:
 
 export const rowsPhrase = tableRowsPhrase;
 
-/** The words a column label may use besides the properties and the types of the text sent: a fixed list of the code (a label names what a column holds, never a count or a free column). */
-const FIXED_LABEL_WORDS: ReadonlySet<string> = new Set(['element', 'type', 'title', 'name', 'id', 'date', 'time', 'status', 'direction', 'description', 'currency', 'cite']);
+/** The kinds of thing a line can be, in the words the model is offered for a column label. */
+const LABEL_KINDS = ['element', 'entity', 'relationship'] as const;
+/**
+ * The words a column label may use besides the properties and the types of the text sent: a fixed list of the code (a label names what a column holds, never a count or a free column). The one definition of those words:
+ * the check accepts them and the `answer` tool offers them from here.
+ */
+export const OFFERED_LABEL_WORDS: readonly string[] = [...LABEL_KINDS, 'type', 'title', 'name', 'id', 'date', 'time', 'status', 'direction', 'description', 'currency', 'cite'];
+const PLURAL_KINDS = ['elements', 'entities', 'relationships'] as const;
+const FIXED_LABEL_WORDS: ReadonlySet<string> = new Set([...OFFERED_LABEL_WORDS, ...PLURAL_KINDS]);
 
 const wordsOfKey = (token: string): string[] => token.replace(/([a-z0-9])([A-Z])/gu, '$1 $2').toLowerCase().split(/[^a-z]+/u).filter((word) => word.length > 1);
 

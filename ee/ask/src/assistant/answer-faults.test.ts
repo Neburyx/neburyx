@@ -6,6 +6,7 @@ import { askRunResultSchema, type AiNotesCapability, type AskRunResult } from '@
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, VIEW_KEYS, V, answerOf, expandResult, nodeOf, ok, rig, routeAsk } from '../testing/assistant-rig.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
+import { OFFERED_LABEL_WORDS, labelsHold } from './table.js';
 import { READ_VIEW_FIRST, answerDescription } from './agent-turn.js';
 import { assembleResults } from './tool-answer.js';
 
@@ -169,6 +170,43 @@ describe('a list of connected elements', () => {
     const rule = readFileSync(fileURLToPath(new URL('../../prompts/assistant-view.md', import.meta.url)), 'utf8');
     expect(rule).toContain('a row for every connected element the lines hold, in the order of the lines, never a sample of your own choosing');
     for (const table of [true, false]) expect(answerDescription(table)).toContain('an item or a row for every connected element the lines you were given hold, in the order of the lines and never a sample you choose');
+  });
+});
+
+describe('the column labels a table may use', () => {
+  const lines = `n1 | "${V.anchor}" | title: "${V.title} A-1" | id: "A-1" | amountValue: 1\ne1 | "${V.links[1]}" | n1 -> n2 | stored`;
+  const rule = readFileSync(fileURLToPath(new URL('../../prompts/assistant-view.md', import.meta.url)), 'utf8').split('\n').find((line) => line.startsWith('12. ')) ?? '';
+  const clause = /label of words from the property names, types or kinds of the elements given \(a kind is ([^;]+); for example ([^)]+)\)/u.exec(rule);
+
+  it('accepts every kind word and every example the instructions offer', () => {
+    const offered = [...(clause?.[1] ?? '').split(/,| or /u), ...(clause?.[2] ?? '').split(',')].map((word) => word.trim()).filter((word) => word !== '');
+    expect(offered.length).toBeGreaterThanOrEqual(8);
+    for (const word of offered) expect([word, labelsHold([word], lines)]).toEqual([word, true]);
+  });
+
+  it('accepts every word the answer tool offers, and tells the model exactly those', () => {
+    for (const word of OFFERED_LABEL_WORDS) expect([word, labelsHold([word], lines)]).toEqual([word, true]);
+    expect(answerDescription(true)).toContain(`or of these words: ${OFFERED_LABEL_WORDS.join(', ')}`);
+    expect(answerDescription(false)).not.toContain('A column label');
+  });
+
+  it.each(['Element', 'Entities', 'Relationship', 'relationships', V.anchor, 'Amount'])('accepts %s', (label) => {
+    expect(labelsHold([label], lines)).toBe(true);
+  });
+
+  it.each(['Connected', 'Suspect', 'Total 4'])('still refuses %s', (label) => {
+    expect(labelsHold([label], lines)).toBe(false);
+  });
+
+  it('keeps the rows of a table whose columns name an element and its relationship', async () => {
+    const nodes = [nodeOf('A-1'), nodeOf('A-2')];
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([answer([{ kind: 'table', columns: ['Element', 'Type', 'Relationship'], rows: [{ cells: [`${V.title} A-1`, V.anchor, ''], cites: ['n1'] }] }])])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: TABLE, agent: { model, maxInputTokens: 200_000 }, viewNodes: nodes });
+    const given = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: VIEW_KEYS })));
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { columns: ['Element', 'Type', 'Relationship'], rows: [{ cells: [`${V.title} A-1`, V.anchor, ''] }] } }] });
   });
 });
 
