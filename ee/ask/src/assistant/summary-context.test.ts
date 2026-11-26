@@ -18,7 +18,7 @@ const DRAFT: SealInput = {
   modelRef: 'claude-sonnet-5-5',
   promptId: 'case-summary',
   promptVersion: '1',
-  sentences: [{ text: 'Account A-1 and account A-3 share a device.', cites: ['n1', 'n3'] }],
+  sentences: [{ text: 'Account A-1 and account A-3 are both listed.', cites: ['n1', 'n3'] }],
   inputRefs: [
     { key: 'n1', kind: 'entity', ref: ref('A-1') },
     { key: 'n2', kind: 'entity', ref: ref('A-2') },
@@ -39,7 +39,7 @@ const turn = (t: Awaited<ReturnType<typeof rig>>, token: string | undefined, ove
 
 describe('a follow-up answered with an attached summary', () => {
   it('reads the view, then the elements only the summary cites, and keeps a sentence that cites one only the summary cites', async () => {
-    const t = await withSummary({ view: reply([{ text: 'Account A-3 shares a device with account A-1.', cites: ['n3', 'n1'] }]) });
+    const t = await withSummary({ view: reply([{ text: 'Account A-3 is listed with account A-1.', cites: ['n3', 'n1'] }]) });
     const answer = await answerOf(turn(t, tokenOf()));
     expect(answer).toMatchObject({ status: 'answered', route: 'view' });
     if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
@@ -50,7 +50,7 @@ describe('a follow-up answered with an attached summary', () => {
   });
 
   it('drops the same reply when no summary is attached, since it cites a key that was not given', async () => {
-    const t = await withSummary({ view: reply([{ text: 'Account A-3 shares a device with account A-1.', cites: ['n3', 'n1'] }]) });
+    const t = await withSummary({ view: reply([{ text: 'Account A-3 is listed with account A-1.', cites: ['n3', 'n1'] }]) });
     expect(await answerOf(turn(t, undefined))).toMatchObject({ status: 'not-answered', route: 'view' });
     expect(t.elementReads[0]?.refs).toMatchObject({ entities: [{ stableId: 'A-1' }, { stableId: 'A-2' }] });
   });
@@ -61,7 +61,7 @@ describe('a follow-up answered with an attached summary', () => {
     const [router, view] = t.fixture.calls;
     expect(router?.values).toContain('An AI case summary of this investigation is attached to this turn.');
     expect(router?.values).not.toContain('Account A-1 and account A-3');
-    expect(view?.values).toContain('s1: Account A-1 and account A-3 share a device. (keys: n1, n3)');
+    expect(view?.values).toContain('s1: Account A-1 and account A-3 are both listed. (keys: n1, n3)');
   });
 
   it('checks a reply against the elements alone: the summary section is not part of the text the checks read', async () => {
@@ -72,11 +72,11 @@ describe('a follow-up answered with an attached summary', () => {
     await answerOf(turn(t, tokenOf()));
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.join('')).not.toContain('Sentences of an AI case summary');
-    expect(seen.join('')).not.toContain('share a device');
+    expect(seen.join('')).not.toContain('are both listed');
   });
 
   it('counts the elements in view only in the coverage lines', async () => {
-    const t = await withSummary({ view: reply([{ text: 'Account A-3 shares a device with account A-1.', cites: ['n3', 'n1'] }]) });
+    const t = await withSummary({ view: reply([{ text: 'Account A-3 is listed with account A-1.', cites: ['n3', 'n1'] }]) });
     const answer = await answerOf(turn(t, tokenOf()));
     if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect(answer.coverage.retrieval.startsWith('2 shown')).toBe(true);
@@ -150,7 +150,7 @@ describe('the bounds of the summary\'s part of a turn', () => {
     const t = await withSummary({ viewMaxInputTokens: 700, view: reply([{ text: 'Account A-1 is in view.', cites: ['n1'] }]) });
     const bare = await answerOf(turn(t, undefined));
     expect(bare).toMatchObject({ status: 'answered' });
-    const long = tokenOf({ sentences: [{ text: `Account A-1 and account A-3 share a device${' and so on'.repeat(80)}.`, cites: ['n1', 'n3'] }] });
+    const long = tokenOf({ sentences: [{ text: `Account A-1 and account A-3 are both listed${' and so on'.repeat(80)}.`, cites: ['n1', 'n3'] }] });
     expect(await answerOf(turn(t, long))).toMatchObject({ status: 'too-large' });
   });
 
@@ -184,7 +184,7 @@ describe('a sentence of the summary cited as a whole', () => {
   };
 
   it('replaces the key of a summary sentence by the elements it cites, and says which sentence the answer rests on', async () => {
-    const answer = await answered('Account A-1 shares a device with account A-3.', ['s1']);
+    const answer = await answered('Account A-1 is listed with account A-3.', ['s1']);
     if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n3']);
     expect((answer as { summarySentencesCited?: number[] }).summarySentencesCited).toEqual([1]);
@@ -192,13 +192,13 @@ describe('a sentence of the summary cited as a whole', () => {
   });
 
   it('removes a sentence key in brackets from the text, as an element key is', async () => {
-    const answer = await answered('Account A-1 shares a device with account A-3 (s1).', ['s1']);
+    const answer = await answered('Account A-1 is listed with account A-3 (s1).', ['s1']);
     if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect(sentencesOfBlocks(answer.blocks)[0]?.text).not.toContain('s1');
   });
 
   it('drops a sentence that holds a sentence key outside brackets', async () => {
-    expect(await answered('As s1 says, account A-1 shares a device.', ['s1'])).toMatchObject({ status: 'not-answered' });
+    expect(await answered('As s1 says, account A-1 is listed.', ['s1'])).toMatchObject({ status: 'not-answered' });
   });
 
   it('drops a sentence that cites the key of a summary sentence that was dropped or never given', async () => {
@@ -258,7 +258,7 @@ describe('a summary that cannot be used refuses the turn', () => {
     const closed = closingTurn(t);
     expect(closed).toMatchObject({ outcome: 'refused', cause: 'summary-invalid', modelCalls: 0 });
     expect(closed.summarySentencesKept).toBeUndefined();
-    expect(JSON.stringify(t.events)).not.toContain('share a device');
+    expect(JSON.stringify(t.events)).not.toContain('are both listed');
   });
 
   it('is turned away after the router call and the read, with the counts of its sentences in the event, when no sentence holds, and leaves nothing in the thread', async () => {
@@ -277,7 +277,7 @@ describe('a summary that cannot be used refuses the turn', () => {
     await drain();
     const closed = closingTurn(t);
     expect(closed).toMatchObject({ outcome: 'answered', summarySentencesKept: 1, summarySentencesDropped: 1 });
-    expect(JSON.stringify(t.events)).not.toContain('share a device');
+    expect(JSON.stringify(t.events)).not.toContain('are both listed');
   });
 });
 
@@ -289,9 +289,9 @@ describe('what holds the summary\'s sentences after a follow-up', () => {
     await answerOf(turn(t, tokenOf()));
     await drain();
     const [run] = store.runs;
-    expect(run?.callStarts[1]?.valuesText).toContain('s1: Account A-1 and account A-3 share a device. (keys: n1, n3)');
+    expect(run?.callStarts[1]?.valuesText).toContain('s1: Account A-1 and account A-3 are both listed. (keys: n1, n3)');
     expect(run?.callStarts[0]?.valuesText).not.toContain('Account A-1 and account A-3');
-    expect(JSON.stringify([...threads.threads.values()])).not.toContain('share a device');
+    expect(JSON.stringify([...threads.threads.values()])).not.toContain('are both listed');
   });
 });
 
@@ -321,7 +321,7 @@ describe('the sentence keys in the text of a reply', () => {
   };
 
   it.each([['(s1, n1)'], ['(n1; s1)'], ['[s1 and n1]']])('takes a sentence key out of a bracketed group that also holds an element key: %s', async (group) => {
-    const answer = await answeredWith(`Account A-1 shares a device with account A-3 ${group}.`, ['s1']);
+    const answer = await answeredWith(`Account A-1 is listed with account A-3 ${group}.`, ['s1']);
     if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect(sentencesOfBlocks(answer.blocks)[0]?.text).not.toMatch(/s1/);
     expect((answer as { summarySentencesCited?: number[] }).summarySentencesCited).toEqual([1]);

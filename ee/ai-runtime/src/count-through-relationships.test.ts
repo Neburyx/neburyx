@@ -69,6 +69,11 @@ describe.each(VOCABULARIES)('a count of the $name that the sentence cites throug
     for (const sentence of vocabulary.sentences) expect(kept(sentence, ['r1', 'r2', 'r3', 'r4', 'r5', 'r6']), sentence).toBe(true);
   });
 
+  it('removes the same claims of no shared element once a read listed the relationships and the sentence only points at the three', () => {
+    const listed: CheckedText = { ...text, readElements: new Map([['s1', links]]) };
+    for (const sentence of vocabulary.sentences.filter((each) => /share|same/u.test(each))) expect(judgeSentences([{ text: sentence, cites: links }], listed).rejected.map((entry) => entry.reason), sentence).toEqual(['comparison']);
+  });
+
   it('removes a count that is not the number of distinct entities of that type the cited relationships end at, in words and in digits', () => {
     for (const wrong of ['two', 'four', '2', '4']) expect(kept(`The senders of ${wrong} ${vocabulary.things} were read.`, links), wrong).toBe(false);
     // two relationships that end at one entity name one, not two or three
@@ -102,11 +107,11 @@ describe.each(VOCABULARIES)('a count of the $name that the sentence cites throug
     const owner = vocabulary.owner.toLowerCase();
     const without: CheckedText = { ...text, elementEnds: undefined };
     for (const opening of ['No two', 'Any two']) {
-      const sentence = `${opening} ${vocabulary.things} share a ${owner}.`;
+      const sentence = `${opening} ${vocabulary.things} have one ${owner}.`;
       expect(kept(sentence, links), sentence).toBe(true);
       expect(kept(sentence, links, without), sentence).toBe(true);
     }
-    for (const digit of [`No 2 ${vocabulary.things} share a ${owner}.`, `Any 2 ${vocabulary.things} share a ${owner}.`]) expect(kept(digit, links), digit).toBe(kept(digit, links, without));
+    for (const digit of [`No 2 ${vocabulary.things} have one ${owner}.`, `Any 2 ${vocabulary.things} have one ${owner}.`]) expect(kept(digit, links), digit).toBe(kept(digit, links, without));
     // a count that is no pair stays a count
     expect(kept(`Four ${vocabulary.things} share a ${owner}.`, links)).toBe(false);
   });

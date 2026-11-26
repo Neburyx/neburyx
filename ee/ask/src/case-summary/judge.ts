@@ -38,4 +38,6 @@ export const checkedTextOf = (assembled: AssembledText, instructions?: string): 
   elementEnds: endsOf(assembled),
   ...(assembled.rankedValues === undefined ? {} : { rankedValues: assembled.rankedValues }),
   ...(assembled.propertyKeys === undefined ? {} : { propertyKeys: assembled.propertyKeys }),
+  // the values as they were sent, a masked one as its mask: what a claim of sameness or difference is tested against
+  ...(assembled.sentValues === undefined ? {} : { elementValues: assembled.sentValues }),
   ...(assembled.readElements === undefined ? {} : { readElements: assembled.readElements }), lines: assembled.lines, inexactCounts: assembled.inexactCounts, unknownCountKeys: assembled.unknownCountKeys });

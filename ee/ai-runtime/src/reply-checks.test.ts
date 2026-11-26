@@ -340,6 +340,8 @@ describe.each([
     unknownCountKeys: new Set(),
     elementTypes: new Map([['n1', `entity ${one}`], ['n2', `entity ${one}`], ['n3', `entity ${one}`], ['n4', `entity ${other}`], ['e1', `relationship ${link}`]]),
     propertyKeys: new Map([['n1', [property]], ['n2', [property]], ['n3', [property]], ['n4', ['otherProperty']], ['e1', []]]),
+    rankedValues: new Map(['n1', 'n2', 'n3'].map((key) => [key, [{ key: property, dataClass: 'number', value: '5' }]])),
+    elementValues: new Map(['n1', 'n2', 'n3'].map((key) => [key, [{ key: property, text: '5', masked: false }]])),
     readKeys: new Set(['s1', 'c1', 'c2']),
     readElements: new Map([['s1', ['n1', 'n2', 'n3']]]),
   };
@@ -372,8 +374,8 @@ describe.each([
     [`All the ${many} are listed.`, ['n1', 'n2'], false],
     [`All the ${many} are listed.`, ['n1', 'n2', 'n3'], true],
     [`Each of the ${many} is listed.`, ['n1'], false],
-    [`The ${many} on screen share a value.`, ['n1', 'n2'], false],
-    [`The ${many} on screen share a value.`, ['n1', 'n2', 'n3'], true],
+    [`The ${many} on screen carry a value.`, ['n1', 'n2'], false],
+    [`The ${many} on screen carry a value.`, ['n1', 'n2', 'n3'], true],
     [`Every ${one} is listed.`, ['n1', 'n2'], false],
     [`All the ${others} are listed.`, ['n4'], true],
     [`All the ${others} are listed.`, ['n1'], false],
@@ -421,7 +423,7 @@ describe.each([
     it('takes the set a claim speaks of: the elements a read listed, or those on screen', () => {
       expect(keptIn(extended, `The read lists all the ${many}.`, ['n1', 'n2', 'n3', 's1'])).toBe(true);
       const offScreen: CheckedText = { ...extended, keys: new Map([...extended.keys, ['r1', true]]), lines: new Map([...extended.lines, ['r1', `r1: ${one}: Item Z`]]), elementTypes: new Map([...(extended.elementTypes ?? []), ['r1', `entity ${one}`]]) };
-      expect(keptIn(offScreen, `The ${many} on screen share a value.`, ['n1', 'n2', 'n3', 'n5', 'n6'])).toBe(true);
+      expect(keptIn(offScreen, `The ${many} on screen carry a value.`, ['n1', 'n2', 'n3', 'n5', 'n6'])).toBe(true);
     });
 
     it('asks the line of the read for a description of a read, and only the members of that read back it', () => {
@@ -473,7 +475,7 @@ describe.each([
       expect(kept(`${M} all carry ${property} "5".`, ['n1', 'n2', 'n3'])).toBe(true);
       expect(kept(`${M} Item A and Item B are all shown.`, ['n1', 'n2'])).toBe(true);
       expect(kept(`${M} Item A and Item B were sent from ${others} that are all owned by Holder D.`, ['n1', 'n2', 'n4'])).toBe(true);
-      expect(kept(`${M} in view all share one ${property} and are shown.`, ['n1', 'n2', 'n3'])).toBe(true);
+      expect(kept(`${M} in view all carry one ${property} and are shown.`, ['n1', 'n2', 'n3'])).toBe(true);
       expect(kept(`${M} in view are all shown, with ${property} of "5".`, ['n1', 'n2', 'n3'])).toBe(true);
     });
 
