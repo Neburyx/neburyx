@@ -3,21 +3,23 @@ import { expect, test, type Page } from '@playwright/test';
 const STATUS = { ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000, model: 'claude-sonnet-5-5' } };
 const EMPTY = { turns: [], earlierTurns: 0, previousThreadClearedAt: null };
 
-const day = (daysBefore: number): string => new Date(Date.now() - daysBefore * 86_400_000 - 3_600_000).toISOString();
-const row = (n: number, daysBefore: number, over: Record<string, unknown> = {}) => ({
+/** The start of the local day so many days before `now`: a chat dated there belongs to that day whatever the hour of the run. */
+const day = (daysBefore: number, now: Date): string => new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBefore).toISOString();
+const row = (n: number, daysBefore: number, over: Record<string, unknown> = {}, now: Date = new Date()) => ({
   investigationId: `0192f000-0000-7000-8000-${String(n).padStart(12, '0')}`,
   title: `Chat title ${n}`,
   caseRef: null,
   sourceId: 'banking-demo',
   sourceAlias: 'banking-demo',
   sourceState: 'available',
-  lastQuestionAt: day(daysBefore),
+  lastQuestionAt: day(daysBefore, now),
   turns: 1,
   lastQuestion: `The last question of chat ${n}`,
   lastQuestionCut: false,
   ...over,
 });
-const CHATS = [row(1, 0), row(2, 0), row(3, 3), row(4, 4), row(5, 30), row(6, 40, { sourceState: 'removed' })];
+const chatsAt = (now: Date) => [row(1, 0, {}, now), row(2, 0, {}, now), row(3, 3, {}, now), row(4, 4, {}, now), row(5, 30, {}, now), row(6, 40, { sourceState: 'removed' }, now)];
+const CHATS = chatsAt(new Date());
 
 async function routes(page: Page, pages: readonly { readonly items: readonly unknown[]; readonly nextCursor: string | null }[] = [{ items: CHATS, nextCursor: null }], asked: string[] = []): Promise<void> {
   await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: STATUS }));
@@ -146,13 +148,21 @@ test.describe('The chat list column of the Assistant page', () => {
     await expect(first.getByRole('link', { name: /Chat title 3/ })).toHaveCount(0);
   });
 
-  test('names a list for each group, so the rows are announced as list items', async ({ page }) => {
-    await routes(page);
-    await openPage(page);
-    await expect(page.getByRole('list', { name: 'Today' }).getByRole('listitem')).toHaveCount(3);
-    await expect(page.getByRole('list', { name: 'Previous 7 days' }).getByRole('listitem')).toHaveCount(2);
-    await expect(page.getByRole('list', { name: 'Older' }).getByRole('listitem')).toHaveCount(2);
-  });
+  const justAfterMidnight = (): Date => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 30);
+  };
+  for (const [when, clock] of [['at the hour of the run', undefined], ['half an hour after midnight', justAfterMidnight]] as const) {
+    test(`names a list for each group, so the rows are announced as list items, ${when}`, async ({ page }) => {
+      const now = clock?.();
+      if (now !== undefined) await page.clock.setFixedTime(now);
+      await routes(page, [{ items: now === undefined ? CHATS : chatsAt(now), nextCursor: null }]);
+      await openPage(page);
+      await expect(page.getByRole('list', { name: 'Today' }).getByRole('listitem')).toHaveCount(3);
+      await expect(page.getByRole('list', { name: 'Previous 7 days' }).getByRole('listitem')).toHaveCount(2);
+      await expect(page.getByRole('list', { name: 'Older' }).getByRole('listitem')).toHaveCount(2);
+    });
+  }
 
   test('moves the focus to the first new row after Show more by the keyboard, and does not scroll a pointer away', async ({ page }) => {
     await routes(page, [{ items: CHATS.slice(0, 2), nextCursor: '1' }, { items: CHATS.slice(2), nextCursor: null }]);
