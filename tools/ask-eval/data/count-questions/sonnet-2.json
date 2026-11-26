@@ -1,0 +1,72 @@
+{
+  "model": "claude-sonnet-5-5",
+  "folders": {
+    "banking-demo": "bea1390a38302192e9e540513e816446b1912ce87bcaf318392b6a2221ebbca4",
+    "insurance-demo": "b0a54c544626defbe4a9fcacf8f8c5490cf66042d66cdfbe2eae964bac1a1b38"
+  },
+  "answers": {
+    "Message:\nHow many transactions does AC-0002000 have in total?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"latest-transactions-of-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}\n\nWait — this asks for a count, which no listed intent counts; the closest intent only shows the latest transactions and does not give a total.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many transactions does AC-0002000 have in total?\n\nIn view:\n(none)\n\nYour last reply was not a route. Reply with one route object only: start with { and write nothing before or after it, no reasoning.": {
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many devices and addresses is AC-0002000 connected to?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"devices-and-addresses-of-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Message:\nHow many accounts use DV-000010?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-using-a-device\",\"entities\":{\"device\":\"DV-000010\"}}"
+    },
+    "Message:\nHow many accounts connect from the same address as AC-0002000?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-on-the-same-address\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Message:\nHow many merchants has AC-0002000 paid?\n\nIn view:\n(none)": {
+      "reply": "The question asks for a count of merchants paid by an account. The intent `merchants-an-account-paid` lists merchants, and the answer can be derived from the list. The question names the account and states no period, so this intent fits.\n\n{\"route\":\"ask\",\"intent\":\"merchants-an-account-paid\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Message:\nHow many accounts are on screen?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhat am I looking at?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nHow many transactions does this account have in total?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002000\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\" (also in the earlier turns) (selected)": {
+      "reply": "The message asks for a count of transactions for the account. The intents don't include a count of transactions. `devices-and-addresses-of-an-account` counts devices and addresses only. `latest-transactions-of-an-account` shows the latest transactions, not a total. It's also not a question about what is shown. So no intent fits.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nDescribe the accounts on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nHow many things is this account connected to?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002000\" | \"account\"\nc2 | \"AC-0002001\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\" (also in the earlier turns)\nc2 | \"account\" | \"AC-0002001\" (also in the earlier turns) (selected)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"devices-and-addresses-of-an-account\",\"entities\":{},\"elements\":{\"account\":\"c2\"}}"
+    },
+    "Message:\nHow many claims does CT-00100 have in total?\n\nIn view:\n(none)": {
+      "reply": "The question asks for a count of claims. `claims-filed-by-a-claimant` lists claims, but the \"Answer null for\" list covers counts over a set, so no listed intent answers this. I refuse it as unplaced.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many claimants share a phone with CT-00100?\n\nIn view:\n(none)": {
+      "reply": "The message asks for a count (\"How many\"), but the intent `claimants-sharing-a-phone` lists the claimants who share a phone with the named claimant. The null list covers \"a ranking or a count over a set\", which would apply here. The count, though, is simply the size of the list that intent returns, not a count across a set of claimants, and \"how many things are on screen\" is a different case. The question is about the graph and names a claimant by identifier, so the intent fits the question. The rule says a question stating a count only fits an intent whose line states that same count. This intent states no count, so the null route applies, and I refuse as unplaced.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many claims involve the same vehicle as CL-001007?\n\nIn view:\n(none)": {
+      "reply": "The question asks for a count, and the source lists \"a ranking or a count over a set\" among the things to answer null for. The `claims-on-the-same-vehicle` intent lists the claims rather than counting them, so no listed intent fits. Nothing in view or in the earlier turns changes this, so `unplaced` is the closest refusal cause.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many policies are the claims of CT-00100 under?\n\nIn view:\n(none)": {
+      "reply": "The message asks \"how many\", which is a count, and the source's null list covers a count over a set. But the intent `policies-of-a-claimants-claims` lists the policies, and the question asks for a count of those policies. The intent line says a count only fits an intent whose line states that same count. A count over a set is listed as null, so no intent answers it.\n\nStill, this could be read as asking for the list of policies for claimant CT-00100. The question asks \"how many\", though, and the rule says a count question fits only an intent whose line states that count. So the route is a refusal with the cause `unplaced`.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many links does CL-001007 have?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many claims are on screen?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001007\"\nc2 | \"claim\" | \"CL-001008\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhat is shown here?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nHow many records is this claimant connected to in total?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00100\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\" (also in the earlier turns) (selected)": {
+      "reply": "The message asks for a count of connected records for the claimant. That is a count over a set, and no listed intent answers it. It is also not a question about what is currently shown, so `view` does not fit either.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nSummarize the claims on screen for me.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001007\"\nc2 | \"claim\" | \"CL-001008\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nHow many claims did the repairer of this one repair?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001007\" | \"claim\"\nc2 | \"CL-001008\" | \"claim\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001007\" (also in the earlier turns) (selected)\nc2 | \"claim\" | \"CL-001008\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"claims-by-the-same-repairer\",\"entities\":{},\"elements\":{\"claim\":\"c1\"}}"
+    }
+  }
+}

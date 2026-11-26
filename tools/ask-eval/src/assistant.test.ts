@@ -417,6 +417,27 @@ describe('the first replies of the router', () => {
     return { code, result: JSON.parse(out.out.join('\n')) as { firstReplies: Record<string, unknown> }, text: out.out.join('\n') };
   };
 
+  it('counts a request as routed from its first reply only when that reply gave its route: after other text on a line of its own too, never after a repeat or with a brace in the text', async () => {
+    const replay = committed();
+    const found = await requests();
+    const at = (name: string) => {
+      const request = found.get(name);
+      if (request === undefined) throw new Error(`no request ${name}`);
+      return request;
+    };
+    const route = '{"route":"view"}';
+    replay.answers[at('banking-fraud/describe-the-view').first] = { reply: `It asks about the view.\n\n${route}` };
+    const own = await json(replay);
+    expect(own.result.firstReplies).toMatchObject({ routedOnFirst: 214, textAround: 1, rescued: 0 });
+    for (const first of [`Here you go: ${route}`, `A {brace} first.\n\n${route}`]) {
+      replay.answers[at('banking-fraud/describe-the-view').first] = { reply: first };
+      replay.answers[at('banking-fraud/describe-the-view').repeat] = { reply: route };
+      const repeated = await json(replay);
+      expect(repeated.result.firstReplies).toMatchObject({ routedOnFirst: 213, rescued: 1 });
+    }
+    expect((await json(replay)).result).toMatchObject({ messages: 214 });
+  });
+
   it('counts each kind on a replay with a known number of each, and the rate of the first replies that were not a bare route', async () => {
     const replay = committed();
     const found = await requests();

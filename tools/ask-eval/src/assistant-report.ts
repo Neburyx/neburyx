@@ -10,6 +10,8 @@ interface FirstReplies {
   readonly didNotFit: number;
   readonly failed: number;
   readonly noFirstReply: number;
+  /** The requests the router routed from their first reply, with no second call. */
+  readonly routedOnFirst: number;
   readonly rescued: number;
   readonly unplaced: number;
   /** The share of the first replies that were a route or not a bare one (`counted` excludes the failed calls and the requests with no first reply). */
@@ -30,6 +32,7 @@ function firstRepliesOf(scored: readonly AssistantScored[]): FirstReplies {
     didNotFit: count('did-not-fit'),
     failed: count('failed'),
     noFirstReply: scored.filter((entry) => entry.first === undefined).length,
+    routedOnFirst: scored.filter((entry) => entry.routedOnFirst === true).length,
     rescued: scored.filter((entry) => entry.first !== undefined && entry.first !== 'bare' && entry.first !== 'failed' && entry.unplaced !== true && entry.calls === 2 && entry.miss !== 'unplaced').length,
     unplaced: scored.filter((entry) => entry.unplaced === true).length,
     notBare,
@@ -72,6 +75,7 @@ export function assistantReportLines(result: AssistantResult, label: string, mod
   const first = result.firstReplies;
   lines.push(`first replies counted: ${first.counted}; bare route: ${first.bare}; text around the route: ${first.textAround}; no route in it: ${first.wrongForm}; a route the turn did not accept: ${first.didNotFit}`);
   lines.push(`first replies failed: ${first.failed}; requests with no first reply: ${first.noFirstReply}; rescued by the repeat: ${first.rescued}; ended unplaced: ${first.unplaced}`);
+  lines.push(`requests routed from their first reply: ${first.routedOnFirst} of ${result.messages}`);
   lines.push(`first replies that were not a bare route: ${first.notBare} of ${first.counted} (${percent(first.notBare, first.counted)})`);
   for (const entry of first.ids) lines.push(`first reply: ${entry.name} ${entry.kind}`);
   for (const miss of result.misses) lines.push(`miss: ${miss.name} ${miss.cause}`);

@@ -14,6 +14,8 @@ export interface AssistantScored extends Scored {
   readonly calls?: number;
   /** The router ended without a route after its repeat. */
   readonly unplaced?: boolean;
+  /** The router took the route of its first reply: a route, in one call. */
+  readonly routedOnFirst?: boolean;
 }
 
 /** The kinds of first reply: a bare route; a route with text before or after it; a reply with no route in it; a route the turn did not accept (a clarification of elements not in the context); a failed or refused call. */
@@ -102,7 +104,7 @@ export async function scoreAssistantReplay(sets: readonly AssistantSet[], replay
     const miss = missOf(unit.expect, outcome);
     const calls = 'calls' in outcome ? outcome.calls : 1;
     const kind = firstOf(answers.get(first), calls);
-    scored.push({ name: unit.name, expect, ...(miss === undefined ? {} : { miss }), unsupported: false, ...refusalCause, calls, ...(kind === undefined ? {} : { first: kind }), ...(outcome.status === 'unplaced' ? { unplaced: true } : {}) });
+    scored.push({ name: unit.name, expect, ...(miss === undefined ? {} : { miss }), unsupported: false, ...refusalCause, calls, ...(kind === undefined ? {} : { first: kind }), ...(outcome.status === 'unplaced' ? { unplaced: true } : {}), ...(outcome.status === 'routed' && outcome.calls === 1 ? { routedOnFirst: true } : {}) });
   }
   return scored;
 }

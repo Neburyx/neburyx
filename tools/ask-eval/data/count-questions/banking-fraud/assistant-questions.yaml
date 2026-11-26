@@ -1,0 +1,35 @@
+# Count questions for the router, on this pack's source: each must be routed from the first reply. Kept apart from the pack's own router set, so that its hash and baselines stay. Synthetic ids only.
+messages:
+  - id: count-transactions-total
+    wording: "How many transactions does AC-0002000 have in total?"
+    expect: { route: refuse, cause: unplaced }
+  - id: count-devices-and-addresses
+    wording: "How many devices and addresses is AC-0002000 connected to?"
+    expect: { route: ask, intent: devices-and-addresses-of-an-account, entities: { account: AC-0002000 } }
+  - id: count-accounts-on-device
+    wording: "How many accounts use DV-000010?"
+    expect: { route: ask, intent: accounts-using-a-device, entities: { device: DV-000010 } }
+  - id: count-same-address
+    wording: "How many accounts connect from the same address as AC-0002000?"
+    expect: { route: ask, intent: accounts-on-the-same-address, entities: { account: AC-0002000 } }
+  - id: count-merchants-paid
+    wording: "How many merchants has AC-0002000 paid?"
+    expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002000 } }
+  - id: count-on-screen
+    wording: "How many accounts are on screen?"
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: account, stableId: AC-0002001 }] }
+threads:
+  - id: count-this-total
+    turns:
+      - message: "What am I looking at?"
+        expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }] }
+      - message: "How many transactions does this account have in total?"
+        selected: [{ entityType: account, stableId: AC-0002000 }]
+        expect: { route: refuse, cause: unplaced }
+  - id: count-this-connected
+    turns:
+      - message: "Describe the accounts on screen."
+        expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: account, stableId: AC-0002001 }] }
+      - message: "How many things is this account connected to?"
+        selected: [{ entityType: account, stableId: AC-0002001 }]
+        expect: { route: refuse, cause: unplaced }

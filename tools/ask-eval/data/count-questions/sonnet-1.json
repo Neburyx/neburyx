@@ -1,0 +1,69 @@
+{
+  "model": "claude-sonnet-5-5",
+  "folders": {
+    "banking-demo": "bea1390a38302192e9e540513e816446b1912ce87bcaf318392b6a2221ebbca4",
+    "insurance-demo": "b0a54c544626defbe4a9fcacf8f8c5490cf66042d66cdfbe2eae964bac1a1b38"
+  },
+  "answers": {
+    "Message:\nHow many transactions does AC-0002000 have in total?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many devices and addresses is AC-0002000 connected to?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"devices-and-addresses-of-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Message:\nHow many accounts use DV-000010?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-using-a-device\",\"entities\":{\"device\":\"DV-000010\"}}"
+    },
+    "Message:\nHow many accounts connect from the same address as AC-0002000?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-on-the-same-address\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Message:\nHow many merchants has AC-0002000 paid?\n\nIn view:\n(none)": {
+      "reply": "The message asks how many merchants an account has paid. The intent `merchants-an-account-paid` lists the merchants an account has paid, and the list can be counted, so I treat this as an `ask`. It does not state 30 days, so the 30-day intent does not apply. The question is about the graph, not about what is on screen, because nothing is in view.\n\n{\"route\":\"ask\",\"intent\":\"merchants-an-account-paid\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Message:\nHow many accounts are on screen?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhat am I looking at?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nHow many transactions does this account have in total?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002000\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\" (also in the earlier turns) (selected)": {
+      "reply": "The question asks for a count of transactions. The nearest intents are `latest-transactions-of-an-account`, which shows the latest transactions rather than a total, and `devices-and-addresses-of-an-account`, which counts devices and addresses only. Neither answers a total of transactions.\n\nThe message does not ask about what is on screen. It asks about the account's data in the graph, so `view` does not fit. No listed intent answers it, so this is `unplaced`.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nDescribe the accounts on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nHow many things is this account connected to?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002000\" | \"account\"\nc2 | \"AC-0002001\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\" (also in the earlier turns)\nc2 | \"account\" | \"AC-0002001\" (also in the earlier turns) (selected)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"devices-and-addresses-of-an-account\",\"entities\":{},\"elements\":{\"account\":\"c2\"}}"
+    },
+    "Message:\nHow many claims does CT-00100 have in total?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many claimants share a phone with CT-00100?\n\nIn view:\n(none)": {
+      "reply": "The message asks for a count (\"How many claimants...\"), but the intent lists claimants sharing a phone. The null list says a ranking or a count over a set is null. However, \"how many things are on screen\" is about display; this is a count of graph results. The instruction says a count only fits an intent whose line states that count, and this line states none, so no intent fits.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many claims involve the same vehicle as CL-001007?\n\nIn view:\n(none)": {
+      "reply": "The question asks for a count, but the intent `claims-on-the-same-vehicle` only lists claims. The source says to answer null for \"a ranking or a count over a set\", so no listed intent fits. A count over a set is not a verdict, a query or another source, and nothing in view fits, so the cause is `unplaced`.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many policies are the claims of CT-00100 under?\n\nIn view:\n(none)": {
+      "reply": "The message asks how many policies the claims of CT-00100 are under. The intent `policies-of-a-claimants-claims` lists the policies, but the question asks for a count. The null list says \"a ranking or a count over a set\" gets null. The intent's line states no count, so none of the lines answers a count. That points to refuse with the cause `unplaced`.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many links does CL-001007 have?\n\nIn view:\n(none)": {
+      "reply": "Nothing in view, and the question asks for a count of links on a specific entity. This is a count over a set, which none of the listed intents answers. It is not about what is shown, since nothing is in view, and it is not a verdict or another source. So `refuse` with the cause `unplaced`.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nHow many claims are on screen?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001007\"\nc2 | \"claim\" | \"CL-001008\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhat is shown here?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nHow many records is this claimant connected to in total?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00100\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\" (also in the earlier turns) (selected)": {
+      "reply": "The message asks for a count of connected records for a claimant. No listed intent counts connections, and the source's null list covers counts over a set. It is also arguably about what is displayed. The question is about the graph rather than the view, but it is not answerable by any intent, so I refuse it as unplaced.\n\n{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nSummarize the claims on screen for me.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001007\"\nc2 | \"claim\" | \"CL-001008\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nHow many claims did the repairer of this one repair?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001007\" | \"claim\"\nc2 | \"CL-001008\" | \"claim\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001007\" (also in the earlier turns) (selected)\nc2 | \"claim\" | \"CL-001008\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"claims-by-the-same-repairer\",\"entities\":{},\"elements\":{\"claim\":\"c1\"}}"
+    }
+  }
+}

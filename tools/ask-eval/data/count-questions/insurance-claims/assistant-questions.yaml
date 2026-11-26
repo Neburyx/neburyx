@@ -1,0 +1,36 @@
+# Count questions for the router, on this pack's source: each must be routed from the first reply. Kept apart from the pack's own router set, so that its hash and baselines stay. Synthetic ids only.
+# The source's list of questions says to answer none for a ranking or a count over a set, so such a count is labelled as one that cannot be placed.
+messages:
+  - id: count-claims-total
+    wording: "How many claims does CT-00100 have in total?"
+    expect: { route: refuse, cause: unplaced }
+  - id: count-claimants-sharing-phone
+    wording: "How many claimants share a phone with CT-00100?"
+    expect: { route: refuse, cause: unplaced }
+  - id: count-claims-same-vehicle
+    wording: "How many claims involve the same vehicle as CL-001007?"
+    expect: { route: refuse, cause: unplaced }
+  - id: count-policies
+    wording: "How many policies are the claims of CT-00100 under?"
+    expect: { route: refuse, cause: unplaced }
+  - id: count-links-of-claim
+    wording: "How many links does CL-001007 have?"
+    expect: { route: refuse, cause: unplaced }
+  - id: count-on-screen
+    wording: "How many claims are on screen?"
+    expect: { route: view, view: [{ entityType: claim, stableId: CL-001007 }, { entityType: claim, stableId: CL-001008 }] }
+threads:
+  - id: count-this-total
+    turns:
+      - message: "What is shown here?"
+        expect: { route: view, view: [{ entityType: claimant, stableId: CT-00100 }] }
+      - message: "How many records is this claimant connected to in total?"
+        selected: [{ entityType: claimant, stableId: CT-00100 }]
+        expect: { route: refuse, cause: unplaced }
+  - id: count-this-amounts
+    turns:
+      - message: "Summarize the claims on screen for me."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-001007 }, { entityType: claim, stableId: CL-001008 }] }
+      - message: "How many claims did the repairer of this one repair?"
+        selected: [{ entityType: claim, stableId: CL-001007 }]
+        expect: { route: refuse, cause: unplaced }
