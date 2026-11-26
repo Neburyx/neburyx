@@ -128,6 +128,19 @@ test.describe('Clear chat in the Assistant panel', () => {
     await expect(dialog(page)).toBeHidden();
   });
 
+  test('takes the chat off the screen with the access-lost notice, and focuses the composer, when the clear is answered not found', async ({ page }) => {
+    await openWithThread(page, failsOnce((route) => route.fulfill({ status: 404, json: { error: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 't' } } })));
+    await panel(page).getByLabel('Your message').fill('typed but not sent');
+    await panel(page).getByRole('button', { name: 'Clear chat' }).click();
+    await dialog(page).getByRole('button', { name: 'Clear chat' }).click();
+    await expect(dialog(page)).toBeHidden();
+    await expect(panel(page).getByRole('alert')).toHaveText('You no longer have access to this investigation, so the thread was cleared.');
+    await expect(panel(page).locator('.assistant-stored')).toHaveCount(0);
+    await expect(panel(page).getByRole('button', { name: 'Clear chat' })).toHaveCount(0);
+    await expect(panel(page).getByLabel('Your message')).toHaveValue('');
+    await expect(panel(page).getByLabel('Your message')).toBeFocused();
+  });
+
   test('empties the other window of the browser: by the notice at once, and by a read of the server when the window is shown again if the notice is missed', async ({ context, page }) => {
     let cleared = false;
     await context.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: cleared ? { ...NO_THREAD, epoch: 1 } : { ...STORED, epoch: 0 } }));

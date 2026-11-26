@@ -227,7 +227,7 @@ describe('the confirmation of Clear chat', () => {
     expect(shown.textContent).not.toMatch(/nothing was deleted/i);
   });
 
-  it.each([['INTERNAL_ERROR', 'Something went wrong. Quote the trace ID if you contact support.'], ['NOT_FOUND', 'Not found.'], ['RATE_LIMITED', 'Too many requests. Try again shortly.']] as const)('says nothing was deleted when the server answers with %s, keeps the thread on screen, and lets the clearing be asked again', async (code, message) => {
+  it.each([['INTERNAL_ERROR', 'Something went wrong. Quote the trace ID if you contact support.'], ['RATE_LIMITED', 'Too many requests. Try again shortly.']] as const)('says nothing was deleted when the server answers with %s, keeps the thread on screen, and lets the clearing be asked again', async (code, message) => {
     let calls = 0;
     const h = await withStoredThread(async () => (++calls === 1 ? { ok: false, failure: { code, message, retryable: false, traceId: 't' } } : ok({ cleared: true })));
     await open();
@@ -238,5 +238,85 @@ describe('the confirmation of Clear chat', () => {
     await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
     await waitFor(() => expect(dialog()).toBeNull());
     expect(h.clears).toEqual(['inv-1', 'inv-1']);
+  });
+});
+
+const aiOff = { code: 'ACCESS_DENIED', message: 'x', retryable: false, traceId: 't', details: { reason: 'ai-off' } } as const;
+const LOST = [
+  ['NOT_FOUND', { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 't' }],
+  ['ACCESS_DENIED', { code: 'ACCESS_DENIED', message: 'x', retryable: false, traceId: 't' }],
+] as const;
+const confirmClear = async () => {
+  await open();
+  await userEvent.click(within(openDialog()).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
+};
+const field = () => screen.getByLabelText<HTMLTextAreaElement>(ASSISTANT_COPY.fieldLabel);
+
+describe('a clear that finds the access lost', () => {
+  it.each(LOST)('takes the stored and live turns and the typed text off the screen on %s, with the access-lost notice, no cleared status, no new read and focus on the composer', async (_name, lost) => {
+    const h = await withStoredThread(async () => ({ ok: false, failure: lost }));
+    await typeAndSend('a live question');
+    await screen.findByText('a live question');
+    await userEvent.type(field(), 'typed but not sent');
+    const readsBefore = h.reads.length;
+    await confirmClear();
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(screen.getByRole('alert').textContent).toBe(ASSISTANT_COPY.accessLost);
+    expect(screen.queryByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeNull();
+    expect(screen.queryByText('a live question')).toBeNull();
+    expect(field().value).toBe('');
+    expect(screen.queryByText(ASSISTANT_COPY.cleared)).toBeNull();
+    expect(button()).toBeNull();
+    await waitFor(() => expect(field()).toBe(document.activeElement));
+    await act(async () => Promise.resolve());
+    expect(h.reads).toHaveLength(readsBefore);
+    expect(h.session.store.getState().turns).toEqual([]);
+    expect(h.session.stored.getState()).toEqual({ kind: 'denied' });
+  });
+
+  it.each([
+    ['the Assistant being off (access denied)', aiOff],
+    ['the Assistant not supported', { code: 'ASK_UNSUPPORTED', message: 'x', retryable: false, traceId: 't' }],
+  ] as const)('keeps the thread, the typed text and the dialog saying nothing was deleted for %s', async (_name, refusal) => {
+    await withStoredThread(async () => ({ ok: false, failure: refusal }));
+    await userEvent.type(field(), 'typed but not sent');
+    await confirmClear();
+    expect(await within(openDialog()).findByText(ASSISTANT_COPY.clearRefused)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: ASSISTANT_COPY.storedHeading, hidden: true })).toBeTruthy();
+    expect(screen.queryByText(ASSISTANT_COPY.accessLost)).toBeNull();
+    expect(screen.getByDisplayValue('typed but not sent')).toBeTruthy();
+  });
+
+  it.each([
+    ['another person', { principalId: 'another-person' }],
+    ['another investigation', { investigationId: 'inv-2' }],
+  ])('does not touch the thread now on screen when the answer arrives after %s', async (_name, change) => {
+    const gate = deferred<ApiResult<AssistantThreadClearResponse>>();
+    const other: AssistantThreadResponse = { ...STORED, turns: [storedTurn('0192f000-0000-7000-8000-0000000000bb')] };
+    let server = STORED;
+    const h = harness(async () => ok(REFUSE), 1000, async () => ok(server), false, undefined, async () => gate.promise);
+    render(h.tree());
+    await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading });
+    await confirmClear();
+    server = other;
+    act(() => h.session.clear(change));
+    await waitFor(() => expect(h.session.stored.getState()).toEqual({ kind: 'ready', thread: other }));
+    await act(async () => gate.resolve({ ok: false, failure: LOST[0][1] }));
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(h.session.stored.getState()).toEqual({ kind: 'ready', thread: other });
+    expect(screen.queryByText(ASSISTANT_COPY.accessLost)).toBeNull();
+  });
+
+  it('still takes the chat off the screen when the same person and investigation were cleared meanwhile, as a masking change does', async () => {
+    const gate = deferred<ApiResult<AssistantThreadClearResponse>>();
+    const h = await withStoredThread(async () => gate.promise);
+    await confirmClear();
+    act(() => h.session.clear({ mask: true }));
+    await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading, hidden: true });
+    await act(async () => gate.resolve({ ok: false, failure: LOST[0][1] }));
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(screen.getByRole('alert').textContent).toBe(ASSISTANT_COPY.accessLost);
+    expect(screen.queryByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeNull();
+    expect(h.session.stored.getState()).toEqual({ kind: 'denied' });
   });
 });

@@ -176,15 +176,26 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
     if (clearedNote) focusInside(field.current, null);
   }, [clearedNote]);
   // the clearing belongs to the person and investigation it was confirmed for: a completion that arrives after the panel moved on to another does not touch the thread now on screen
+  const isElsewhere = (scope: NonNullable<typeof confirming>): boolean => {
+    const now = session.store.getState();
+    return (now.investigationId !== null && now.investigationId !== scope.investigationId) || (now.principalId !== null && now.principalId !== scope.principalId);
+  };
   const cleared = (scope: NonNullable<typeof confirming>): void => {
     session.notice?.announce(scope.principalId, scope.investigationId);
     sync.announceChanged();
     setConfirming(undefined);
-    const now = session.store.getState();
-    if ((now.investigationId !== null && now.investigationId !== scope.investigationId) || (now.principalId !== null && now.principalId !== scope.principalId) || now.epoch !== scope.epoch) return;
+    if (isElsewhere(scope) || session.store.getState().epoch !== scope.epoch) return;
     session.clear({});
     session.stored.setState({ kind: 'ready', thread: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
     setClearedNote(true);
+  };
+  // access that is lost holds for the person and investigation whatever else cleared the thread meanwhile, so no epoch is compared
+  const accessLost = (scope: NonNullable<typeof confirming>): void => {
+    setConfirming(undefined);
+    if (isElsewhere(scope)) return;
+    session.clear({ notice: { kind: 'access-lost' } });
+    session.stored.setState({ kind: 'denied' });
+    queueMicrotask(() => focusInside(field.current, null));
   };
   const pressPopOut = (): void => {
     if (investigationId === null) return;
@@ -294,7 +305,7 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
       <p className="visually-hidden" aria-live="polite" data-narrowed-note>
         {narrowedNote ?? ''}
       </p>
-      {confirming === undefined ? null : <ClearChatDialog send={() => client.clearAssistantThread(confirming.investigationId)} onCleared={() => cleared(confirming)} onClose={closeConfirm} />}
+      {confirming === undefined ? null : <ClearChatDialog send={() => client.clearAssistantThread(confirming.investigationId)} onCleared={() => cleared(confirming)} onAccessLost={() => accessLost(confirming)} onClose={closeConfirm} />}
       {collapsed ? <PoppedOutNote onShow={() => {
         popOutNote.clear();
         setShowHere(true);

@@ -99,6 +99,24 @@ describe('the Assistant page: Clear chat', () => {
   });
 });
 
+describe('the Assistant page: a clear that finds the access lost', () => {
+  it.each(['NOT_FOUND', 'ACCESS_DENIED'] as const)('takes the stored turns and the typed text off the page on %s, with the access-lost notice, no new read and focus on the composer', async (code) => {
+    const h = setup(`/assistant/${INVESTIGATION_A}`, { thread: async () => ok(STORED), clear: async () => ({ ok: false, failure: { code, message: 'x', retryable: false, traceId: 't' } }) });
+    await screen.findByText('earlier question');
+    await userEvent.type(screen.getByLabelText(ASSISTANT_COPY.fieldLabel), 'typed but not sent');
+    const reads = h.threads.length;
+    await userEvent.click(clearButton() as HTMLElement);
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: ASSISTANT_COPY.clearChat }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getAllByRole('alert').map((note) => note.textContent)).toContain(ASSISTANT_COPY.accessLost);
+    expect(screen.queryByText('earlier question')).toBeNull();
+    expect(screen.getByLabelText<HTMLTextAreaElement>(ASSISTANT_COPY.fieldLabel).value).toBe('');
+    expect((clearButton() as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(screen.getByLabelText(ASSISTANT_COPY.fieldLabel)).toBe(document.activeElement));
+    expect(h.threads).toHaveLength(reads);
+  });
+});
+
 describe('the Assistant page: the thread follows the investigation, the masking switch and the person', () => {
   it('clears the thread and drops a late answer when another investigation is opened', async () => {
     let finish: (value: ApiResult<AssistantTurnAnswer>) => void = () => undefined;
@@ -174,10 +192,13 @@ describe('the Assistant page: the thread follows the investigation, the masking 
 describe('the Assistant page: a changed source', () => {
   it('opens the saved layout with the paused message and sends nothing', async () => {
     const changed = { ...A, investigation: { ...A.investigation, sourceState: 'repointed' as const } };
-    const h = setup(`/assistant/${INVESTIGATION_A}`, { known: [changed, B] });
+    const h = setup(`/assistant/${INVESTIGATION_A}`, { known: [changed, B], thread: async () => ok(STORED) });
     expect(await screen.findByText(ASSISTANT_COPY.sourceChanged)).toBeTruthy();
     await userEvent.type(screen.getByLabelText(ASSISTANT_COPY.fieldLabel), 'question{Enter}');
     expect(h.sent).toEqual([]);
+    // the stored turns of a changed source are neither read nor shown
+    expect(h.threads).toEqual([]);
+    expect(screen.queryByText('earlier question')).toBeNull();
   });
 });
 
@@ -225,6 +246,19 @@ describe('the Assistant page: a failed turn and a clear with a pending turn', ()
     await act(async () => finish(ok(REFUSE)));
     expect(screen.queryByText('pending question')).toBeNull();
     expect(h.session.store.getState().turns).toEqual([]);
+  });
+
+  it('keeps Clear chat disabled while a turn is pending, so no clear cancels it, and enables it once the answer is in', async () => {
+    let finish: (value: ApiResult<AssistantTurnAnswer>) => void = () => undefined;
+    const h = setup(`/assistant/${INVESTIGATION_A}`, { turn: () => new Promise((resolve) => (finish = resolve)) });
+    await userEvent.type(await screen.findByLabelText(ASSISTANT_COPY.fieldLabel), 'pending question{Enter}');
+    await screen.findByText('pending question');
+    expect((clearButton() as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(clearButton() as HTMLElement);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(h.clears).toEqual([]);
+    await act(async () => finish(ok(REFUSE)));
+    await waitFor(() => expect((clearButton() as HTMLButtonElement).disabled).toBe(false));
   });
 
   it('clears the thread when the investigation is closed while the page is open', async () => {
