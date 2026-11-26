@@ -78,11 +78,11 @@ const OPEN: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await expect(page.locator('.assistant-panel')).toBeVisible();
     await page.locator('.assistant-panel').getByRole('button', { name: 'Wide', exact: true }).click();
     await expect(page.locator('.assistant-panel').getByRole('button', { name: 'Normal width' })).toBeVisible();
-    const at = await screenOf(page, 'AC-2');
-    await page.mouse.click(at.x, at.y);
+    // by the keyboard: the Wide panel covers the elements, so a click would land on it
+    await selectFirst(page, 1);
     await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
     // the Assistant went back to its normal width, and said so politely
-    await expect(page.locator('.assistant-panel').getByRole('button', { name: 'Wide', exact: true })).toBeVisible();
+    await expect(page.locator('.assistant-panel').getByRole('button', { name: /^Wide/ })).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator('.assistant-panel [data-narrowed-note]').filter({ hasText: 'back to its normal width because the inspector is open' })).toHaveCount(1);
   },
   ask: async (page) => {
