@@ -20,6 +20,7 @@ export const WIDTH_DEPENDENT: readonly string[] = [
   'first-run.spec.ts',
   'help-menu.spec.ts',
   'home-controls.spec.ts',
+  'hung-reads.spec.ts',
   'inspector.spec.ts',
   'layouts.spec.ts',
   'page-shell.spec.ts',
