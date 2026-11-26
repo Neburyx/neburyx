@@ -133,12 +133,12 @@ describe('the line of a folded relationship', () => {
     const [from, to] = [nodeOf('A-1').ref, nodeOf('A-2').ref];
     const folded = { ref: { sourceId: from.sourceId, aggregate: { type: V.links[1], from, to } }, from, to, type: V.links[1], direction: 'out', semantics: 'stored', memberCount: { ...memberCount, scope: 'test' }, properties: [], evidenceRefs: [], qualityFlags: [] };
     const result = askRunResultSchema.parse({ ...base, result: { ...base.result, edges: [folded] } });
-    return [...assembleResults([{ tool: 'shared', result }]).assembled.lines.values()].find((found) => found.includes('members'));
+    return [...assembleResults([{ tool: 'shared', result }]).assembled.lines.values()].find((found) => found.includes('this line'));
   };
 
   it.each([
-    [{ quality: 'exact', value: 3 }, 'members: 3 (exact)'],
-    [{ quality: 'lowerBound', value: 1 }, 'members: ≥ 1 (lower bound)'],
+    [{ quality: 'exact', value: 3 }, '| relationships on this line: 3 (exact)'],
+    [{ quality: 'lowerBound', value: 1 }, '| relationships on this line: ≥ 1 (lower bound)'],
   ] as const)('carries its member count with its label: %o', (count, expected) => {
     expect(lineOf(count)).toContain(expected);
   });
@@ -151,7 +151,9 @@ describe('the line of a folded relationship', () => {
     for (let step = 0; step < 10; step += 1) await Promise.resolve();
     const told = runStore.runs[0]?.callStarts[1]?.instructionsText ?? '';
     expect(told).toContain('the number of relationships of the source that the one line stands for');
-    expect(told).toContain('Never write the word members, and state that figure only when the message asks how many relationships there are');
+    expect(told).toContain('relationships on this line: <count>');
+    expect(told).toContain('State that figure only when the message asks how many relationships there are');
+    expect(told).not.toContain('members');
     expect(told).toContain('keeping the quality as the line writes it');
   });
 });

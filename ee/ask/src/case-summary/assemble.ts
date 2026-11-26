@@ -125,7 +125,7 @@ export function edgeDetailOf(edge: GraphEdge): EdgeDetail {
   let unknownCount = false;
   if (edge.memberCount !== undefined) {
     const phrase = countPhrase(edge.memberCount);
-    parts.push(`members: ${phrase}`);
+    parts.push(`relationships on this line: ${phrase}`);
     if (edge.memberCount.quality === 'unknown' || edge.memberCount.value === undefined) unknownCount = true;
     else if (edge.memberCount.quality !== 'exact') inexact = { phrase, value: String(edge.memberCount.value) };
   }

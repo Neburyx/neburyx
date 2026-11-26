@@ -83,7 +83,9 @@ describe('the text sent to the model', () => {
     expect(countPhrase(count)).toBe(phrase);
     const a = node('W-1', 'A');
     const aggregate = edge('L-1', a.ref, a.ref, { memberCount: count, ref: { sourceId: 'demo', aggregate: { type: 'USES', from: a.ref, to: a.ref } } });
-    expect(assembleText(reading([a], [aggregate])).text).toContain(`members: ${phrase}`);
+    const { text } = assembleText(reading([a], [aggregate]));
+    expect(text).toContain(`| relationships on this line: ${phrase}`);
+    expect(text).not.toContain('members');
   });
 
   it('says how many references could not be read, with no cause', () => {
