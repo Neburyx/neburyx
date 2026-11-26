@@ -44,6 +44,9 @@ describe.each([
     `None of the ${many} is hidden.`,
     `It is not hidden that all ${many} are listed.`,
     `${a} is not hidden; all the ${many} are listed.`,
+    `This does not cover all as every ${type} is listed.`,
+    `This does not cover all because every ${type} is listed.`,
+    `This does not cover all while all ${many} are listed.`,
   ])('judges a claim about all that is not denied as before: %s', (text) => {
     expect(verdict(text, ['s1', 'n1'])).toBe('citation');
   });
@@ -67,6 +70,11 @@ describe.each([
     `${b} has the largest ${key}, 10, which cannot be named otherwise.`,
     `The largest ${key} of ${b} cannot be doubted.`,
     `The largest, 10, cannot be said to be small.`,
+    `We cannot name the largest ${key}, which is ${b}'s 10.`,
+    `I cannot tell the largest ${key}: it is ${b}'s 10.`,
+    `I cannot identify the largest ${key} except ${b} at 10.`,
+    `I cannot name the largest ${key} other than ${b}.`,
+    `The largest ${key} cannot be told apart from 10.`,
   ])('verifies a ranking asserted beside a refusal: %s', (text) => {
     expect(verdict(text, keys)).toBe('comparison');
   });

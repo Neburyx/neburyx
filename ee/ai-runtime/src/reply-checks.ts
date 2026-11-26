@@ -638,8 +638,8 @@ const CARDINAL = '(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleve
 const SUBJECT_BEFORE = new RegExp(`^\\s*(?:(?:in view|on screen|in the view|on the screen|here)\\s*,?\\s*)?(?:the\\s+)?(?:(?!(?:\\d|${CARDINAL}|a|an|several|some|many|few|both|these|those|no|other|another|most|half)(?![\\p{L}\\p{N}_-]))\\S+\\s+)?$`, 'iu');
 const PLACE_AFTER = /^\s+(?:\S+\s+){0,1}?(?:on screen|in view|on the screen|in the view)(?![\p{L}\p{N}_-])/iu;
 
-/** A negation directly before `all`, `every` or `each`, or before a verb of holding or covering that leads to it, with only the words of the set after: the sentence denies that something is so of the whole set. */
-const DENIED_ALL = /(?:(?<![\p{L}\p{N}_-])(?:not|never)|n['\u2019]t)\s+(?:(?:necessarily|yet)\s+)?(?:(?:hold|holds|apply|applies|cover|covers|speak|speaks|extend|extends|stand|stands|list|lists|show|shows|include|includes|describe|describes)\s+(?:(?:for|to|over|about|across|of)\s+)?)?(?:all|every|each)(?:\s+(?!(?:and|or|but|so)(?![\p{L}]))[\p{L}\p{N}_'\u2019-]+){0,4}?\s*$/iu;
+/** A negation directly before `all`, `every` or `each`, or before a verb of holding or covering that leads to it, with only the noun phrase of the set after (a determiner, a possessive, two words at most): the sentence denies that something is so of the whole set. A word that opens another assertion, or another quantifier, ends it. */
+const DENIED_ALL = /(?:(?<![\p{L}\p{N}_-])(?:not|never)|n['\u2019]t)\s+(?:(?:necessarily|yet)\s+)?(?:(?:hold|holds|apply|applies|cover|covers|speak|speaks|extend|extends|stand|stands|list|lists|show|shows|include|includes|describe|describes)\s+(?:(?:for|to|over|about|across|of)\s+)?)?(?:all|every|each)(?:\s+one)?(?:\s+of)?(?:\s+(?:the|these|those|its|their))?(?:\s+[\p{L}\p{N}_-]+['\u2019]s)?(?:\s+(?!(?:as|because|since|while|though|whereas|yet|then|and|or|but|so|all|every|each|is|are|was|were|of)(?![\p{L}]))[\p{L}_-]+){0,2}?\s*$/iu;
 
 /**
  * A sentence that says all, each or every of a type, or the elements of a type on screen, cites every element of that type that it speaks of, like a count: it speaks of a set, and a part of the set does not back it. Every quantified group
@@ -966,12 +966,25 @@ const REFUSED_AFTER = new RegExp(`^(?:\\s+(?!${LINKING_WORD}|${NOT_ABLE})[\\p{L}
 /** `cannot identify the <ranking word>`. */
 const REFUSED_BEFORE = new RegExp(`${WB}${NOT_ABLE}\\s+(?:name|identify|determine|tell|rank|establish|state|choose|pick\\s+out)\\s+(?:(?:which\\s+is\\s+)?(?:the|a)\\s+)?$`, 'iu');
 
-/** Whether a sentence says that the ranking a word stands for cannot be made, naming no element and no figure as its holder: it ranks nothing. */
+/** Words after a refusal that go on to say who holds the ranking after all. */
+const GOES_ON_TO_HOLD = /:|(?<![\p{L}\p{N}_-])(?:which\s+is|it\s+is|except|other\s+than|apart\s+from|besides|but)(?![\p{L}\p{N}_-])|\d/iu;
+
+/**
+ * Whether a sentence says that the ranking a word stands for cannot be made, naming no element and no figure as its holder: it ranks nothing. After `cannot name the …` nothing in the rest of the sentence may name a holder or a
+ * figure; after `… cannot be named` nothing in the rest of the clause.
+ */
 function refusesToRank(text: string, written: string, claim: { readonly index: number; readonly end: number }): boolean {
-  if (REFUSED_BEFORE.test(text.slice(Math.max(0, claim.index - 60), claim.index))) return true;
+  // a name (blanked in the text read) is a holder the sentence speaks of
+  const holdsNothing = (from: number, until: number): boolean => written.slice(from, until) === text.slice(from, until) && !GOES_ON_TO_HOLD.test(text.slice(from, until));
+  const endOf = (from: number, mark: RegExp): number => {
+    const found = mark.exec(text.slice(from));
+    return found === null ? text.length : from + found.index;
+  };
+  if (REFUSED_BEFORE.test(text.slice(Math.max(0, claim.index - 60), claim.index))) return holdsNothing(claim.end, endOf(claim.end, /[.!?](?!\d)/u));
   const found = REFUSED_AFTER.exec(text.slice(claim.end, claim.end + 200));
-  // a name between them (blanked in the text read) is a holder the sentence speaks of
-  return found !== null && written.slice(claim.end, claim.end + found[0].length) === text.slice(claim.end, claim.end + found[0].length);
+  if (found === null) return false;
+  const after = claim.end + found[0].length;
+  return written.slice(claim.end, after) === text.slice(claim.end, after) && holdsNothing(after, endOf(after, /[.,;:!?](?!\d)/u));
 }
 
 /**
