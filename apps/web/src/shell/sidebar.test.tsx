@@ -129,7 +129,7 @@ describe('a later read of the shell data', () => {
     render(<Harness client={client} state={createClientState()} />);
     await screen.findByText(/Source a · read-only · connected/);
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
-    expect((await within(screen.getByRole('region', { name: 'Source' })).findByRole('alert')).textContent).toBe('Unavailable · NETWORK_UNAVAILABLE');
+    expect((await within(screen.getByRole('region', { name: 'Source' })).findByRole('alert')).textContent).toBe('Unavailable · The server could not be reached.');
     expect(screen.getByText(/Source a · read-only · connected/)).toBeTruthy();
     expect(screen.getByText('Local workspace')).toBeTruthy();
   });

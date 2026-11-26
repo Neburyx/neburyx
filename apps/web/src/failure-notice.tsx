@@ -1,6 +1,6 @@
 import { SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS } from '@neburyx/contracts';
 import type { ApiFailure } from './api/client.js';
-import { failureWords } from './failure-words.js';
+import { failureWords, type FailureCode } from './failure-words.js';
 
 /** What the sentences call the source when the place that shows them has no name for it. */
 const UNNAMED_SOURCE = 'The source';
@@ -15,11 +15,16 @@ export function offersRetry(failure: ApiFailure): boolean {
   return canRetry(failure) && failureWords(failure, UNNAMED_SOURCE).action === 'try-again';
 }
 
+/** The sentence of a code that comes without the rest of its failure, as a group of an answer gives it. */
+export function codeText(code: FailureCode, source: string = UNNAMED_SOURCE): string {
+  return code === 'SOURCE_UNAVAILABLE' ? SOURCE_UNAVAILABLE_ENTRIES.unreachable.message : failureWords({ code }, source).text;
+}
+
 /** A failure in one sentence with no code in it; an unavailable source of the server says the sentence of its reason (`unreachable` when it gives none). */
 export function failureText(failure: ApiFailure, source: string = UNNAMED_SOURCE): string {
   if (!('traceId' in failure) || failure.code !== 'SOURCE_UNAVAILABLE') return failureWords(failure, source).text;
-  const reason = SOURCE_UNAVAILABLE_REASONS.find((candidate) => candidate === failure.details?.reason) ?? 'unreachable';
-  return SOURCE_UNAVAILABLE_ENTRIES[reason].message;
+  const reason = SOURCE_UNAVAILABLE_REASONS.find((candidate) => candidate === failure.details?.reason);
+  return reason === undefined ? codeText(failure.code) : SOURCE_UNAVAILABLE_ENTRIES[reason].message;
 }
 
 export function FailureNotice({ failure }: { readonly failure: ApiFailure }) {

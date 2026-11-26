@@ -1,11 +1,11 @@
 import type { ApiFailure } from '../api/client.js';
-import { FailureNotice } from '../failure-notice.js';
+import { FailureNotice, failureText } from '../failure-notice.js';
 import { retainedFailure, useShellData } from './shell-data.js';
 import { SourceStatusText } from './source-status-text.js';
 import { useCurrentSource } from './use-current-source.js';
 
 function Unreachable({ failure }: { readonly failure: ApiFailure }) {
-  if (failure.code === 'NETWORK_UNAVAILABLE') return <p role="alert">Unavailable · {failure.code}</p>;
+  if (failure.code === 'NETWORK_UNAVAILABLE') return <p role="alert">Unavailable · {failureText(failure)}</p>;
   return <FailureNotice failure={failure} />;
 }
 

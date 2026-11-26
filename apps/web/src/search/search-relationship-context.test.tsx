@@ -99,11 +99,11 @@ describe('a relationship context read that failed', () => {
     expect(within(main()).getByText('1 exact match · 2 related records · 0.18 s')).toBeDefined();
   });
 
-  it('names the code when it is not a timeout', async () => {
+  it('says the sentence of a failure that is not a timeout', async () => {
     const kit = searchKit(['demo'], async () => ok(failed({ code: 'SOURCE_BUSY', timeoutMs: undefined })));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
     await screen.findByRole('region', { name: /^Related records/ });
-    expect(within(main()).getByRole('alert').textContent).toBe('Relationship context not read (SOURCE_BUSY).');
+    expect(within(main()).getByRole('alert').textContent).toBe('Relationship context not read. The source is busy. No read slot freed within the wait.');
   });
 
   it('repeats the whole search on Retry, and the lines come with the answer that follows', async () => {

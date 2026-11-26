@@ -38,7 +38,7 @@ describe('an evidence read that failed', () => {
     const kit = searchKit(['demo'], async () => ok(answer));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
     expect(await screen.findByRole('heading', { level: 2, name: 'Evidence records · Supporting relationships (1)' })).toBeDefined();
-    expect(within(main()).getByRole('alert').textContent).toBe('Exact matches were not read (SOURCE_BUSY).');
+    expect(within(main()).getByRole('alert').textContent).toBe('Exact matches were not read. The source is busy. No read slot freed within the wait.');
     expect(screen.queryByRole('heading', { level: 2, name: /Exact ID match/ })).toBeNull();
   });
 
@@ -49,10 +49,10 @@ describe('an evidence read that failed', () => {
     expect(screen.queryByRole('heading', { level: 2, name: 'No matching entities' })).toBeNull();
   });
 
-  it('says any code other than a timeout by its code', async () => {
+  it('says any failure other than a timeout in its sentence', async () => {
     const kit = searchKit(['demo'], async () => ok(evidenceFailed({ code: 'RATE_LIMITED', timeoutMs: undefined })));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
-    expect((await within(main()).findByRole('alert')).textContent).toBe('Evidence records were not read (RATE_LIMITED).');
+    expect((await within(main()).findByRole('alert')).textContent).toBe('Evidence records were not read. Too many requests. Try again in a moment.');
   });
 
   it('shows Retry, which repeats the whole search, and keeps the earlier answer, labelled, until the repeated one arrives', async () => {

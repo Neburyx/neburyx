@@ -7,7 +7,7 @@ const timeoutOf = (failure: ApiFailure): number | undefined => ('details' in fai
 
 function headlineOf(failure: ApiFailure, sourceId: string): string {
   if (failure.code === 'QUERY_TIMEOUT') return timedOutText(timeoutOf(failure));
-  return failure.code === 'NOT_FOUND' ? unknownSourceText(sourceId) : failureText(failure);
+  return failure.code === 'NOT_FOUND' ? unknownSourceText(sourceId) : failureText(failure, sourceId);
 }
 
 export function SearchFailure({ failure, sourceId, onRetry }: { readonly failure: ApiFailure; readonly sourceId: string; readonly onRetry: () => void }) {
@@ -30,7 +30,7 @@ export function EntityFailure({ failure }: { readonly failure: ApiFailure }) {
   const trace = traceOf(failure);
   return (
     <div className="search-failure" role="alert">
-      <p>{failure.code === 'NOT_FOUND' ? ENTITY_NOT_FOUND : `${ENTITY_NOT_LOADED} ${failure.code}`}</p>
+      <p>{failure.code === 'NOT_FOUND' ? ENTITY_NOT_FOUND : `${ENTITY_NOT_LOADED} ${failureText(failure)}`}</p>
       {trace === undefined ? null : <p>trace {trace}</p>}
     </div>
   );

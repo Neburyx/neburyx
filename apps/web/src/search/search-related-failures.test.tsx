@@ -40,7 +40,7 @@ describe('a group whose read failed', () => {
     const kit = searchKit(['demo'], async () => ok(exactFailed({ code: 'SOURCE_BUSY', timeoutMs: undefined })));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
     expect(await screen.findByRole('heading', { level: 2, name: 'Related records · Referenced ID (2)' })).toBeDefined();
-    expect(within(main()).getByRole('alert').textContent).toBe('Exact matches were not read (SOURCE_BUSY).');
+    expect(within(main()).getByRole('alert').textContent).toBe('Exact matches were not read. The source is busy. No read slot freed within the wait.');
     expect(within(main()).getByText('exact matches not read · 2 related records · 0.18 s')).toBeDefined();
     expect(screen.queryByRole('heading', { level: 2, name: /Exact ID match/ })).toBeNull();
     expect(screen.queryByText(/0 exact/)).toBeNull();

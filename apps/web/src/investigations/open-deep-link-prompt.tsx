@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { MAX_CASE_REF_LENGTH, MAX_REFERENCE_VALUE_CHARACTERS, MAX_STABLE_ID_LENGTH } from '@neburyx/contracts';
 import { useApiClient } from '../api/client-context.js';
+import { failureText } from '../failure-notice.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { useClientState, useSessionMask } from '../state/context.js';
@@ -82,7 +83,7 @@ export function OpenDeepLinkPrompt() {
       if (answer.kind === 'shown') navigate(`${EXPLORE_PATH}/${answer.id}`, { state: { resumed: answer.created === false } });
       else if (answer.failure.code === 'INVALID_REQUEST' && mask) setPartsProblem(PROMPT_MASKED_VALUE);
       else if (answer.failure.code === 'NOT_FOUND') setPartsProblem(PROMPT_NOT_FOUND);
-      else setPartsProblem(`The entity could not be opened (${answer.failure.code}).`);
+      else setPartsProblem(`The entity could not be opened. ${failureText(answer.failure, parts.sourceId)}`);
     });
   };
 

@@ -56,9 +56,9 @@ describe('the source status line', () => {
     expect(await within(line()).findByText('No source connected')).toBeTruthy();
   });
 
-  it('shows an explicit Unavailable state with the code when the API cannot be reached, and the sidebar and the navigation stay', async () => {
+  it('shows an explicit Unavailable state in words when the API cannot be reached, and the sidebar and the navigation stay', async () => {
     renderApp('/', clientWith({ me: me() }));
-    expect((await within(line()).findByRole('alert')).textContent).toBe('Unavailable · NETWORK_UNAVAILABLE');
+    expect((await within(line()).findByRole('alert')).textContent).toBe('Unavailable · The server could not be reached.');
     expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources', 'Investigations', 'Saved views']);
     expect(screen.getByText('Local workspace')).toBeTruthy();
   });

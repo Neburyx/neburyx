@@ -62,7 +62,7 @@ function Presets({ patterns }: { readonly patterns: Listed }) {
     return (
       <div role="alert" className="pattern-failure">
         <p>{COPY.couldNotRead(patterns.sourceName)}</p>
-        <p>{failureText(list.failure)}</p>
+        <p>{failureText(list.failure, patterns.sourceName)}</p>
         {offersRetry(list.failure) ? (
           <button type="button" className="secondary" onClick={patterns.reload}>
             {COPY.tryAgain}

@@ -150,7 +150,7 @@ describe('a group that fails while the other is answered', () => {
     const exactFailed = { ...base, failures: [failure('exact', 'SOURCE_BUSY')], counts: { exact: { quality: 'unknown' as const, scope: 'search:exact' } } };
     await answered('ACC-10', exactFailed);
     expect(within(screen.getByRole('list', { name: 'Starts with the text' })).getAllByRole('listitem')).toHaveLength(2);
-    expect(screen.getByText('The exact ID matches could not be read (SOURCE_BUSY), so those records were not read.')).toBeDefined();
+    expect(screen.getByText('The exact ID matches could not be read, so those records were not read. The source is busy. No read slot freed within the wait.')).toBeDefined();
     expect(document.querySelector('.search-panel-summary')?.textContent).toBe('exact ID matches not read · 2 start with the text · 0.18 s');
   });
 

@@ -21,17 +21,20 @@ export const tryAgainIn = (seconds: number): string => (seconds > 0 ? `Try again
 /** The sentence of a rate limit that names the wait, or says the wait is over. */
 export const rateLimitedSentence = (seconds: number): string => (seconds > 0 ? `You can try again in ${seconds} s.` : 'You can try again now.');
 
-const detailOf = (failure: ApiFailure, key: string): unknown => ('details' in failure && failure.details !== undefined ? Object.getOwnPropertyDescriptor(failure.details, key)?.value : undefined);
-const numberDetail = (failure: ApiFailure, key: string): number | undefined => {
+/** What the sentences read of a failure: its code, and the details of an answer of the server. */
+type Worded = ApiFailure | { readonly code: FailureCode; readonly details?: undefined };
+
+const detailOf = (failure: Worded, key: string): unknown => ('details' in failure && failure.details !== undefined ? Object.getOwnPropertyDescriptor(failure.details, key)?.value : undefined);
+const numberDetail = (failure: Worded, key: string): number | undefined => {
   const value = detailOf(failure, key);
   return typeof value === 'number' ? value : undefined;
 };
 
-export const retryAfterMsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'retryAfterMs');
-const timeoutMsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'timeoutMs');
-export const maxHopsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'maxHops');
-export const maxPageOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'maxPage');
-export const reasonOf = (failure: ApiFailure): string | undefined => {
+export const retryAfterMsOf = (failure: Worded): number | undefined => numberDetail(failure, 'retryAfterMs');
+const timeoutMsOf = (failure: Worded): number | undefined => numberDetail(failure, 'timeoutMs');
+export const maxHopsOf = (failure: Worded): number | undefined => numberDetail(failure, 'maxHops');
+export const maxPageOf = (failure: Worded): number | undefined => numberDetail(failure, 'maxPage');
+export const reasonOf = (failure: Worded): string | undefined => {
   const reason = detailOf(failure, 'reason');
   return typeof reason === 'string' ? reason : undefined;
 };
@@ -41,7 +44,7 @@ export const personalConditionSentence = 'A condition of this pattern uses a pro
 
 export const nameTakenSentence = 'This name is already used on this source. Choose another.';
 
-type Entry = (failure: ApiFailure, source: string) => FailureWords;
+type Entry = (failure: Worded, source: string) => FailureWords;
 const said = (text: string, action?: FailureAction): Entry => () => ({ text, ...(action === undefined ? {} : { action }) });
 
 /** A failure of a call in words, one entry for each code (a missing one does not compile): what happened, and what the person can do. */
@@ -91,7 +94,7 @@ const TABLE: { readonly [C in FailureCode]: Entry } = {
 };
 
 /** A failure in words. `source` is the name of the source the person works on, which the four sentences about a source state use. */
-export const failureWords = (failure: ApiFailure, source: string): FailureWords => TABLE[failure.code](failure, source);
+export const failureWords = (failure: Worded, source: string): FailureWords => TABLE[failure.code](failure, source);
 
 /** Every code the table has an entry for, so that a test can check it against the contract's list. */
 export const FAILURE_CODES_WITH_WORDS = Object.keys(TABLE) as readonly FailureCode[];

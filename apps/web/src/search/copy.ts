@@ -1,4 +1,6 @@
 import type { Count, DisabledType, EvidenceRecord, ExactMatch, SearchFailureGroup, SearchPagedGroup } from '@neburyx/contracts';
+import { codeText } from '../failure-notice.js';
+import type { FailureCode } from '../failure-words.js';
 import { elementKey } from '../state/keys.js';
 
 export const SEARCH_COPY = {
@@ -67,11 +69,11 @@ export const RELATED_MASKED = 'Related records cannot be searched while personal
 const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', evidence: 'Evidence records', startsWith: 'Matches that start with the text', facets: 'Facet counts', context: 'Relationship context' } as const;
 const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', evidence: 'evidence records not read', startsWith: 'matches that start with the text not read', facets: 'facet counts not read', context: 'relationship context not read' } as const;
 export const groupNotReadSummary = (group: SearchFailureGroup): string => PAGE_GROUP_NOT_READ[group];
-export function groupFailedText(group: SearchFailureGroup, code: string, timeoutMs: number | undefined): string {
+export function groupFailedText(group: SearchFailureGroup, code: FailureCode, timeoutMs: number | undefined): string {
   const name = PAGE_GROUP_NAMES[group];
-  if (group === 'context') return code === 'QUERY_TIMEOUT' ? (timeoutMs === undefined ? `${name} not read: the source did not answer in time.` : `${name} not read: the source did not answer within ${secondsOf(timeoutMs)} s.`) : `${name} not read (${code}).`;
+  if (group === 'context') return code === 'QUERY_TIMEOUT' ? (timeoutMs === undefined ? `${name} not read: the source did not answer in time.` : `${name} not read: the source did not answer within ${secondsOf(timeoutMs)} s.`) : `${name} not read. ${codeText(code)}`;
   if (code === 'QUERY_TIMEOUT') return timeoutMs === undefined ? `${name} were not read: the source did not answer in time.` : `${name} were not read: the source did not answer within ${secondsOf(timeoutMs)} s.`;
-  return `${name} were not read (${code}).`;
+  return `${name} were not read. ${codeText(code)}`;
 }
 export const RETRY = 'Retry';
 
@@ -123,10 +125,10 @@ export const MORE_COPY = {
 /** The accessible name of Show more under a group: what it reads more of. */
 export const showMoreLabel = (group: SearchPagedGroup): string => `${MORE_COPY.showMore}: ${PAGE_GROUP_NAMES[group]}`;
 /** The line that says the next page of a group could not be read: the group's hits stay. */
-export function moreFailedText(group: SearchPagedGroup, code: string, timeoutMs: number | undefined): string {
+export function moreFailedText(group: SearchPagedGroup, code: FailureCode, timeoutMs: number | undefined): string {
   const name = PAGE_GROUP_NAMES[group];
   if (code === 'QUERY_TIMEOUT') return timeoutMs === undefined ? `More ${name.toLowerCase()} were not read: the source did not answer in time.` : `More ${name.toLowerCase()} were not read: the source did not answer within ${secondsOf(timeoutMs)} s.`;
-  return `More ${name.toLowerCase()} were not read (${code}).`;
+  return `More ${name.toLowerCase()} were not read. ${codeText(code)}`;
 }
 
 export const FILTERS_COPY = {
@@ -203,9 +205,10 @@ const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', evi
 export const groupNotRead = (group: keyof typeof GROUP_NAMES): string => `${GROUP_NAMES[group]} not read`;
 
 /** The line that stands in place of a group whose read failed: what failed, and that its records were not read. */
-export function groupFailureText(group: keyof typeof GROUP_NAMES, code: string, timeoutMs: number | undefined): string {
-  const why = code === 'QUERY_TIMEOUT' ? `timed out${timeoutMs === undefined ? '' : ` after ${secondsOf(timeoutMs)} s`}` : code;
-  return `The ${GROUP_NAMES[group]} could not be read (${why}), so those records were not read.`;
+export function groupFailureText(group: keyof typeof GROUP_NAMES, code: FailureCode, timeoutMs: number | undefined): string {
+  const unread = `The ${GROUP_NAMES[group]} could not be read`;
+  if (code === 'QUERY_TIMEOUT') return `${unread} (timed out${timeoutMs === undefined ? '' : ` after ${secondsOf(timeoutMs)} s`}), so those records were not read.`;
+  return `${unread}, so those records were not read. ${codeText(code)}`;
 }
 
 export const ENTITY_NOT_FOUND = 'That entity is not in the source.';
