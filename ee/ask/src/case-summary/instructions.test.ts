@@ -77,6 +77,11 @@ describe('the shipped summary files', () => {
     expect(shipped(name)).toContain('Never copy that label and its colon as a word of your answer; when you state the count, write it into a sentence that names the two elements, and keep its quality as the line writes it.');
   });
 
+  it('says in the table rule how a cell holds that count, since a cell is no sentence', () => {
+    const rule = shipped('assistant-view.md').split('\n').find((line) => line.startsWith('12. ')) ?? '';
+    expect(rule).toContain('The count of a relationship line is written in a cell as the line writes it, with its quality; its row names the two elements in its other cells and cites the line.');
+  });
+
   it.each(['Fan-in', 'Fan-out', 'Cycle', 'Rapid pass-through', 'Shared device or address'])('describes the shape %s of the banking pack as a structure', (shape) => {
     expect(readFileSync(fileURLToPath(new URL('../../../../domain-packs/banking-fraud/ask/typologies.md', import.meta.url)), 'utf8')).toContain(`- ${shape}:`);
   });
