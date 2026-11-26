@@ -162,6 +162,13 @@ describe('the source of the page', () => {
     expect(tableRows()).toHaveLength(1);
   });
 
+  it('says that the sources cannot be read, and why, in one alert with Try again', async () => {
+    await libraryPage({ getSources: async () => ({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
+    const alerts = within(screen.getByRole('main')).getAllByRole('alert');
+    expect(alerts.map((alert) => alert.textContent)).toEqual(['The sources could not be read. The server could not be reached.']);
+    expect(within(screen.getByRole('main')).getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
   it('says there is nothing to show when no source is configured', async () => {
     await libraryPage({ sources: [] });
     expect(screen.getByText('No source is configured, so there are no patterns to show.')).toBeTruthy();

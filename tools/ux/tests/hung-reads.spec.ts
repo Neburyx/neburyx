@@ -40,8 +40,9 @@ test.describe('a read that gets no answer', () => {
     await page.goto('/patterns');
     await expect(page.getByText('Loading saved patterns…')).toBeVisible();
     await page.clock.runFor(PAST_A_READ);
-    await expect(failureIn(page).or(page.getByRole('main').getByRole('alert')).first()).toBeVisible();
-    await expect(page.getByRole('main').getByRole('button', { name: /^Try again/ }).first()).toBeVisible();
+    const failure = page.getByRole('main').locator('.patterns-state[role="alert"]');
+    await expect(failure.locator('p').first()).toHaveText(UNREACHABLE);
+    await expect(failure.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
     await expect(page.getByText('Loading saved patterns…')).toHaveCount(0);
   });
 
@@ -67,6 +68,8 @@ test.describe('a read that gets no answer', () => {
     await expect(page.getByText('Reading the earlier turns…')).toBeVisible();
     await page.clock.runFor(PAST_A_READ);
     await expect(page.getByText('Reading the earlier turns…')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
+    const failure = page.getByRole('alert').filter({ hasText: 'The earlier turns of this thread could not be read.' });
+    await expect(failure).toHaveText('The earlier turns of this thread could not be read. Try again');
+    await expect(failure.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
   });
 });

@@ -27,9 +27,15 @@ export function failureText(failure: ApiFailure, source: string = UNNAMED_SOURCE
   return reason === undefined ? codeText(failure.code) : SOURCE_UNAVAILABLE_ENTRIES[reason].message;
 }
 
-export function FailureNotice({ failure, prefix = '' }: { readonly failure: ApiFailure; readonly prefix?: string }) {
+/** `headline` is a line over the sentence, said with it as one alert. */
+export function FailureNotice({ failure, prefix = '', headline }: { readonly failure: ApiFailure; readonly prefix?: string; readonly headline?: string }) {
   return (
     <p role="alert" className="failure-notice">
+      {headline === undefined ? null : (
+        <>
+          <span className="failure-headline">{headline}</span>{' '}
+        </>
+      )}
       {prefix}
       {failureText(failure)}
       {'traceId' in failure ? (

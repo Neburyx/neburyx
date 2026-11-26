@@ -268,8 +268,7 @@ export function LibraryPage() {
         <p role="status">{LIBRARY_COPY.loadingSources}</p>
       ) : source.kind === 'failed' ? (
         <div className="sources-failure">
-          <p>{LIBRARY_COPY.sourcesFailed}</p>
-          <FailureNotice failure={source.failure} />
+          <FailureNotice failure={source.failure} headline={LIBRARY_COPY.sourcesFailed} />
           {offersRetry(source.failure) ? (
             <button type="button" className="secondary" onClick={source.retry}>
               {LIBRARY_COPY.tryAgain}

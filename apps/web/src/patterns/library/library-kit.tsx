@@ -16,6 +16,7 @@ interface LibraryCall {
 export interface LibraryOptions {
   readonly path?: string;
   readonly sources?: readonly SourceSummary[];
+  readonly getSources?: ApiClient['getSources'];
   readonly state?: ClientState;
   readonly templates?: () => Promise<ApiResult<TemplateListResponse>>;
   readonly profile?: ApiClient['getProfile'];
@@ -31,6 +32,7 @@ export async function libraryPage(options: LibraryOptions = {}) {
   const base = clientWith({ me: me(), sources: options.sources ?? [source('a')] });
   const client = fakeClient({
     ...base,
+    ...(options.getSources === undefined ? {} : { getSources: options.getSources }),
     ...(options.profile === undefined ? {} : { getProfile: options.profile }),
     listTemplates: options.templates ?? (async () => ({ ok: true, value: listOf() })),
     listPatterns: async (query, signal) => {
