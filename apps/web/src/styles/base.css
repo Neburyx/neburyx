@@ -329,6 +329,7 @@ h1[tabindex='-1']:focus-visible,
 }
 
 .skeleton-bar {
+  min-width: 0;
   max-width: 100%;
   height: var(--skeleton-line);
 }
@@ -382,7 +383,7 @@ h1[tabindex='-1']:focus-visible,
 
 .skeleton-table-row {
   display: grid;
-  grid-template-columns: 26% 24% 12% 16% 1fr;
+  grid-template-columns: 26% 24% 12% 16% minmax(0, 1fr);
   gap: var(--space-12);
   align-items: start;
   padding: var(--space-14) var(--space-12) var(--space-8);
@@ -398,7 +399,7 @@ h1[tabindex='-1']:focus-visible,
 
 .skeleton-result {
   display: grid;
-  grid-template-columns: max-content 1fr max-content;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   gap: var(--space-12);
   align-items: center;
   height: var(--skeleton-result);
@@ -432,7 +433,7 @@ h1[tabindex='-1']:focus-visible,
 
 .skeleton-facet {
   display: grid;
-  grid-template-columns: max-content 1fr max-content;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   gap: var(--space-10);
   align-items: center;
 }
@@ -444,7 +445,7 @@ h1[tabindex='-1']:focus-visible,
 
 .skeleton-pair {
   display: grid;
-  grid-template-columns: var(--skeleton-name-column) 1fr;
+  grid-template-columns: minmax(0, var(--skeleton-name-column)) minmax(0, 1fr);
   gap: var(--space-12);
   padding-bottom: var(--space-8);
 }

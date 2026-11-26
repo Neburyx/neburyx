@@ -1,12 +1,12 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Locator } from '@playwright/test';
 import { lookOf, tokenColour, focusWidth } from './support/controls.ts';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
 
 const OUTLINE = ['outline-style', 'outline-width', 'outline-color'] as const;
 
-async function expectSecondary(page: Page, name: string): Promise<void> {
-  const retry = page.getByRole('main').getByRole('button', { name });
+async function expectSecondary(page: Page, name: string, within: Locator = page.getByRole('main')): Promise<void> {
+  const retry = within.getByRole('button', { name });
   await expect(retry).toBeVisible();
   expect(await lookOf(retry)).toMatchObject({ 'background-color': await tokenColour(page, '--color-surface'), 'border-top-color': await tokenColour(page, '--color-control-border'), color: await tokenColour(page, '--color-text'), height: '34px' });
 }
@@ -65,6 +65,6 @@ test.describe('the controls of Sources and of the failure pages', () => {
     const path = new URL(page.url()).pathname;
     await page.route((url) => url.pathname === path.replace('/explore/', '/v1/investigations/'), (route) => route.abort());
     await page.reload();
-    await expectSecondary(page, 'Try again');
+    await expectSecondary(page, 'Try again', page.getByRole('group', { name: 'Opening failed' }));
   });
 });
