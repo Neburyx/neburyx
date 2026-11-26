@@ -14,16 +14,28 @@
     "services/api": {},
     "packages/test-containers": {},
     "tools/cancellation-suite": {
-      // Imported by the shared assistant helper of services/api that the suite compiles; the package is declared so that the suite builds on its own in the image.
-      "ignoreDependencies": ["@neburyx/ee-ask"]
+      // Imported by the shared assistant helper and the Neo4j server helper of services/api that the suite compiles; the packages are declared so that the suite builds on its own in the image.
+      "ignoreDependencies": ["@neburyx/ee-ask", "@neburyx/test-neo4j"]
     },
-    "tools/concurrency-suite": {},
+    "tools/concurrency-suite": {
+      // Imported by services/api source that this package compiles through a relative path; declared so that a build from a clean tree makes it first.
+      "ignoreDependencies": ["@neburyx/test-neo4j"]
+    },
     "tools/dco-check": {},
-    "tools/demo-graph": {},
+    "tools/demo-graph": {
+      // Imported by services/api source that this package compiles through a relative path; declared so that a build from a clean tree makes it first.
+      "ignoreDependencies": ["@neburyx/contracts"]
+    },
     "tools/driver-check": {},
     "tools/release-checks": {},
-    "tools/save-suite": {},
-    "tools/workspace-checks": {},
+    "tools/save-suite": {
+      // Imported by services/api source that this package compiles through a relative path; declared so that a build from a clean tree makes it first.
+      "ignoreDependencies": ["@neburyx/test-containers", "@neburyx/test-neo4j"]
+    },
+    "tools/workspace-checks": {
+      // Imported by services/api source that this package compiles through a relative path; declared so that a build from a clean tree makes it first.
+      "ignoreDependencies": ["@neburyx/contracts"]
+    },
     "apps/web": {
       // Built one by one by production-absence.test.ts, which reads each path.
       "entry": ["src/dev/controls/*.ts"]
