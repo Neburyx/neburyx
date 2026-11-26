@@ -1,5 +1,6 @@
 import type { NamedView, ViewListResponse } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
+import { boundedRead } from '../api/read-wait.js';
 import type { ClientState } from '../state/client-state.js';
 import { noteReadOnlyRefusal } from './read-only.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
@@ -60,7 +61,7 @@ export function createViewList(client: ApiClient, shown: ClientState): ViewList 
     readOf = id;
     // what is shown stays while it is read again, but never the list of another investigation
     if (store.getState().kind !== 'ready' || !sameInvestigation) store.setState({ kind: 'loading' });
-    const result = await client.listViews(id, {});
+    const result = await boundedRead((signal) => client.listViews(id, {}, signal));
     if (mine !== read) return;
     if (!result.ok) {
       store.setState({ kind: 'failed', failure: result.failure });
@@ -75,7 +76,8 @@ export function createViewList(client: ApiClient, shown: ClientState): ViewList 
     if (current.kind !== 'ready' || current.nextCursor === null || current.loadingMore || id === null || id !== investigationId()) return;
     const mine = read;
     store.setState({ ...current, loadingMore: true, moreFailed: false });
-    const result = await client.listViews(id, { cursor: current.nextCursor });
+    const cursor = current.nextCursor;
+    const result = await boundedRead((signal) => client.listViews(id, { cursor }, signal));
     if (mine !== read) return;
     const now = store.getState();
     if (now.kind !== 'ready') return;

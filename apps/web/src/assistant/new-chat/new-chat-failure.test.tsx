@@ -8,7 +8,7 @@ import { ApiClientProvider } from '../../api/client-context.js';
 import { fakeClient } from '../../api/fake-client.js';
 import { pagedClient, rowsOf } from '../../investigations-page/page-fixtures.js';
 import { REMOVED_CHIP } from '../../lifecycle/copy.js';
-import { READ_WAIT_MS } from '../read-wait.js';
+import { READ_WAIT_MS } from '../../api/read-wait.js';
 import { NewChatPicker } from './new-chat-picker.js';
 import { NEW_CHAT_COPY } from './copy.js';
 

@@ -1,7 +1,9 @@
 import { rmSync } from 'node:fs';
-import { readRefsResponseSchema, MAX_READ_REFS } from '@neburyx/contracts';
+import { SOURCE_READS_IN_A_ROW, readRefsResponseSchema, MAX_READ_REFS } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
+import type { Gate, IndexReader } from '../gate/types.js';
+import { inRounds } from '../testing/read-rounds.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { AGGREGATE_SAMPLE_ID, AGGREGATE_SUMMARY_ID } from '../gate/templates/aggregate-evidence.js';
 import { DERIVED_EDGE_SUPPORT_ID } from '../gate/templates/derived-edge-support.js';
@@ -46,6 +48,7 @@ interface Options {
   readonly mapping?: typeof mapping;
   readonly hideNode?: string;
   readonly hideEdge?: string;
+  readonly between?: (parts: { readonly gate: Gate; readonly indexes: IndexReader }) => { readonly gate: Gate };
 }
 
 async function started(options: Options = {}) {
@@ -62,7 +65,7 @@ async function started(options: Options = {}) {
   };
   const redact = options.hideNode !== undefined ? hidingRedact(options.hideNode, redactItems) : options.hideEdge !== undefined ? hidingEdgeRedact(options.hideEdge, redactItems) : undefined;
   const parts = testSourceGate(chosen, { executor, seams, referenceKeys: TEST_REFERENCE_KEYS, ...(redact === undefined ? {} : { redact }) });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: chosen, gate: parts.gate, seams, referenceKeys: TEST_REFERENCE_KEYS });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: chosen, gate: (options.between?.(parts) ?? parts).gate, seams, referenceKeys: TEST_REFERENCE_KEYS });
   return { app, executor, events };
 }
 
@@ -394,6 +397,24 @@ describe('POST /v1/graph/read-refs: aggregate and derived edges', () => {
     const response = await post(app, { sourceId: 'demo', derived: [derivedRef] });
     expect(response.statusCode).toBe(504);
     expect(response.json()).not.toHaveProperty('edges');
+    await app.close();
+  });
+});
+
+describe('how long a read of cited aggregates can take', () => {
+  it('reads the source as many times in a row as the clients are told to wait for', async () => {
+    const aggregates = parseMapping(fileOf(baseSource({ id: 'demo', entities: DERIVED_ENTITIES, relationships: [...DERIVED_AGGREGATE] })), 'neburyx.yaml');
+    const end = (stableId: string, entityType: string) => ({ sourceId: 'demo', entityType, stableId });
+    let counter: ReturnType<typeof inRounds> | undefined;
+    const { app } = await started({
+      mapping: aggregates,
+      between: (parts) => (counter = inRounds(parts)),
+      answer: (call) => ({ status: 'rows', rows: call.templateId === AGGREGATE_SAMPLE_ID ? [{ a: account('A-1'), b: device('D-1'), sample: [{}] }] : call.templateId === AGGREGATE_SUMMARY_ID ? [{ members: 1, first: null, last: null }] : [] }),
+    });
+    if (counter === undefined) throw new Error('the reads are not counted');
+    const { rounds, answer } = await counter.roundsOf(async () => await post(app, { sourceId: 'demo', aggregates: [{ sourceId: 'demo', aggregate: { type: 'USES_TOOL', from: end('A-1', 'maker'), to: end('D-1', 'tool') } }] }));
+    expect(answer.statusCode).toBe(200);
+    expect(rounds).toBe(SOURCE_READS_IN_A_ROW.aggregateRefs);
     await app.close();
   });
 });

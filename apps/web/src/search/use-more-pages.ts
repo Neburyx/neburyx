@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Count, DisabledType, EvidenceHit, ExactMatch, GraphNode, GroupFailure, RelatedHit, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchResult, UnreferencedHit } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { UNEXPECTED } from '../api/use-request.js';
+import { boundedRead, SEARCH_MORE_WAIT_MS } from '../api/read-wait.js';
 
 /** The groups that page with Show more: those of the Search results page, and the exact group of the canvas Search panel. */
 export type PagedGroup = SearchPagedGroup;
@@ -223,7 +224,7 @@ export function useMorePages(client: ApiClient, shown: SearchShown | undefined, 
       const request: SearchMoreRequest = { sourceId: current.sourceId, text: current.text, group, cursor, ...(current.mask ? { mask: true } : {}), ...(current.entityTypes.length === 0 ? {} : { entityTypes: [...current.entityTypes] }), ...(exactRefs.length === 0 ? {} : { exactRefs }) };
       const send = async (): Promise<ApiResult<SearchMoreResult>> => {
         try {
-          return await client.searchMore(request, controller.signal);
+          return await boundedRead((signal) => client.searchMore(request, signal), controller.signal, SEARCH_MORE_WAIT_MS);
         } catch {
           return UNEXPECTED;
         }

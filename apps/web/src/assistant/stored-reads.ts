@@ -1,6 +1,7 @@
 import { MAX_READ_REFS, type EdgeRef, type ElementRef, type GraphEdge, type GraphNode } from '@neburyx/contracts';
 import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { useApiClient } from '../api/client-context.js';
+import { AGGREGATE_REFS_WAIT_MS, boundedRead, READ_WAIT_MS } from '../api/read-wait.js';
 import { edgeKey, elementKey } from '../state/keys.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
@@ -120,7 +121,9 @@ export function useRefReads(refs: readonly Ref[], enabled = true): RefReads {
       mine.chunks.set(chunk.id, 'loading');
       const controller = new AbortController();
       mine.controllers.add(controller);
-      void client.readRefs({ sourceId, ...(mask ? { mask: true } : {}), ...chunk.request }, controller.signal).then((result) => {
+      // a chunk holds one kind of reference: one read of the source (10 s at most), or two for aggregates
+      const wait = chunk.request.aggregates.length > 0 ? AGGREGATE_REFS_WAIT_MS : READ_WAIT_MS;
+      void boundedRead((signal) => client.readRefs({ sourceId, ...(mask ? { mask: true } : {}), ...chunk.request }, signal), controller.signal, wait).then((result) => {
         mine.controllers.delete(controller);
         // a response of another holder (another epoch, or a list read anew) is dropped
         if (held.current !== mine || controller.signal.aborted) return;

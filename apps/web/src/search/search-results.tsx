@@ -12,6 +12,7 @@ import { SearchAnswer } from './search-answer.js';
 import { SearchFailure } from './search-failure.js';
 import { FiltersPanel } from './filters-panel.js';
 import { requestFieldsOf, sameSelection, type Selection } from './selection.js';
+import { boundedRead, SEARCH_WAIT_MS } from '../api/read-wait.js';
 
 interface Searched {
   readonly key: QueryKey;
@@ -40,7 +41,7 @@ export interface SearchResultsProps {
 export function SearchResults({ client, source, principalId, profile, text, mask, selection, onSelect, busy, repeats, onOpen }: SearchResultsProps) {
   const load = useCallback(
     async (signal: AbortSignal): Promise<ApiResult<Searched>> => {
-      const result = await client.searchEntities({ sourceId: source.id, text, ...(mask ? { mask: true } : {}), ...requestFieldsOf(selection) }, signal);
+      const result = await boundedRead((own) => client.searchEntities({ sourceId: source.id, text, ...(mask ? { mask: true } : {}), ...requestFieldsOf(selection) }, own), signal, SEARCH_WAIT_MS);
       return result.ok ? { ok: true, value: { key: searchKeyOf({ sourceId: source.id, principalId, text, mask, selection }), text, selection, result: result.value } } : result;
     },
     [client, source.id, principalId, text, mask, selection],

@@ -5,6 +5,7 @@ import type { FailureReporter } from './failure-reporter.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import { createRequestStore, type RequestStore } from './request-store.js';
 import type { RequestState } from './use-request.js';
+import { boundedRead } from './read-wait.js';
 
 export interface PreviewStore {
   /** The request for the degree preview of a node: made once, when the node's menu asks for it, and kept for the session; ask again with its `reload`. */
@@ -31,6 +32,8 @@ export function createPreviewStore(client: ApiClient, person: () => string, repo
   const requests = new Map<string, RequestStore<DegreePreview>>();
   const changes = createStore(0);
   const answers = createStore(0);
+  // one read of the source: 10 s at most
+  const read = (ref: ElementRef, mask: boolean, own?: AbortSignal) => boundedRead((signal) => client.previewExpansion({ sourceId: ref.sourceId, ref: { entityType: ref.entityType, stableId: ref.stableId }, ...(mask ? { mask } : {}) }, signal), own);
   const open = (ref: ElementRef, mask: boolean, reported: boolean): RequestStore<DegreePreview> => {
     const key = keyOf(person(), ref, mask);
     const held = requests.get(key);
@@ -39,9 +42,9 @@ export function createPreviewStore(client: ApiClient, person: () => string, repo
     // only the menu's own request is shown on the banner: a read made for the check before an expansion is waited for by that check, which a cancel would leave waiting
     const shown = reported ? tracker : undefined;
     const request: RequestStore<DegreePreview> = createRequestStore(
-      (signal) => {
+      (own) => {
         const tracked = shown?.begin({ kind: 'preview', ref, cancel: () => request.cancel(), again: () => request.reload() });
-        return client.previewExpansion({ sourceId: ref.sourceId, ref: { entityType: ref.entityType, stableId: ref.stableId }, ...(mask ? { mask } : {}) }, signal).finally(() => tracked?.finish());
+        return read(ref, mask, own).finally(() => tracked?.finish());
       },
       reported ? (failure, reload) => void report?.(failure, ref.sourceId, reload) : undefined,
     );
@@ -75,7 +78,7 @@ export function createPreviewStore(client: ApiClient, person: () => string, repo
       // a menu's request that failed earlier, or that the person cancelled, is not an answer: read once more, quietly, and keep nothing of it
       const heldPhase = held?.getState().phase;
       if (heldPhase === 'failed' || heldPhase === 'idle') {
-        const result = await client.previewExpansion({ sourceId: ref.sourceId, ref: { entityType: ref.entityType, stableId: ref.stableId }, ...(mask ? { mask } : {}) }).catch(() => undefined);
+        const result = await read(ref, mask).catch(() => undefined);
         return result?.ok === true ? result.value : undefined;
       }
       const request = held ?? open(ref, mask, false);

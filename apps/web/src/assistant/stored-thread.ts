@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useApiClient } from '../api/client-context.js';
+import { boundedRead } from '../api/read-wait.js';
 import { usePrincipalIdWhenProvided } from '../shell/shell-data.js';
 import { isSourceChanged } from '../state/investigation-state.js';
 import { useClientState } from '../state/context.js';
@@ -35,7 +36,7 @@ export function useStoredThread(available: boolean): StoredThreadState {
     inflight.current = controller;
     open.add(controller);
     stored.setState({ kind: 'loading' });
-    void client.assistantThread(investigationId, store.getState().mask, controller.signal).then((result) => {
+    void boundedRead((signal) => client.assistantThread(investigationId, store.getState().mask, signal), controller.signal).then((result) => {
       open.delete(controller);
       if (store.getState().epoch !== epoch) return;
       // a notice of a clearing came while this read was out: it began before it, so it is read again

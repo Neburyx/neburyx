@@ -46,6 +46,7 @@ import { SAVED_COPY, UNAVAILABLE_TEXT, refusalText } from './saved/saved-copy.js
 import { SavedPresetRun } from './saved/saved-run-area.js';
 import { createSavedRunStore } from './saved/saved-run-store.js';
 import { kindLineOf } from './saved/saved-model.js';
+import { boundedRead } from '../api/read-wait.js';
 
 type Reason = Extract<ListedPattern['availability'], { status: 'unavailable' }>['reasons'][number];
 
@@ -121,7 +122,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const [presetId, setPresetId] = useState<string | undefined>(undefined);
   // the run of a built-in pattern is kept while the panel is open, so that choosing its card again after closing the form shows the result under its own pattern
   const presetRun = usePatternRun(client, sourceId ?? '', mask);
-  const loadTemplates = useCallback((signal: AbortSignal) => sourceId === null ? Promise.resolve({ ok: true as const, value: { sourceId: '', templates: [], presets: [] } }) : client.listTemplates(sourceId, signal), [client, sourceId]);
+  const loadTemplates = useCallback((own: AbortSignal) => sourceId === null ? Promise.resolve({ ok: true as const, value: { sourceId: '', templates: [], presets: [] } }) : boundedRead((signal) => client.listTemplates(sourceId, signal), own), [client, sourceId]);
   const templates = useRequest(loadTemplates);
   const templateData = templates.state.phase === 'ready' || templates.state.phase === 'loading' ? templates.state.data : undefined;
   useEffect(() => {

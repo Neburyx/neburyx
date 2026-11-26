@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MAX_SEARCH_TEXT_LENGTH, MIN_TYPEAHEAD_TEXT_LENGTH, type SearchResult } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
+import { boundedRead, TYPEAHEAD_WAIT_MS } from '../api/read-wait.js';
 import { UNEXPECTED } from '../api/use-request.js';
 
 export const TYPEAHEAD_DEBOUNCE_MS = 250;
@@ -57,7 +58,7 @@ export function useTypeahead(client: ApiClient, sourceId: string, mask: boolean,
     const timer = setTimeout(() => {
       const send = async (): Promise<ApiResult<SearchResult>> => {
         try {
-          return await client.searchEntities({ sourceId, text, typeahead: true, ...(mask ? { mask: true } : {}) }, controller.signal);
+          return await boundedRead((signal) => client.searchEntities({ sourceId, text, typeahead: true, ...(mask ? { mask: true } : {}) }, signal), controller.signal, TYPEAHEAD_WAIT_MS);
         } catch {
           return UNEXPECTED;
         }

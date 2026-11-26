@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { InvestigationListItem } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
+import { boundedRead } from '../api/read-wait.js';
 
 const keyOf = (item: InvestigationListItem): string => `${item.sourceId}\u0000${item.startingEntity?.entityType ?? ''}\u0000${item.startingEntity?.stableId ?? ''}`;
 
@@ -11,7 +12,7 @@ export const labelOf = (labels: Labels, item: InvestigationListItem): string | u
 
 /**
  * Reads the labels of the starting entities of the rows shown, one call for each source, after the rows are drawn. Only rows not asked for before are read, a row of a source that is removed or
- * re-pointed is not, and an answer that comes after the filters changed is dropped, its rows being asked for again if they are still shown. Nothing is written back and a failure leaves the row as it is.
+ * re-pointed is not, and an answer that comes after the filters changed is dropped, its rows being asked for again if they are still shown. Nothing is written back, and a failure leaves the row as it is until the list is read again.
  */
 export function useRowLabels(client: ApiClient, items: readonly InvestigationListItem[] | undefined, listKey: string): Labels {
   const [labels, setLabels] = useState<Labels>(new Map());
@@ -41,14 +42,19 @@ export function useRowLabels(client: ApiClient, items: readonly InvestigationLis
     }
     for (const [sourceId, rows] of bySource) {
       const entities = rows.flatMap((item) => (item.startingEntity === null || item.startingEntity.stableId === undefined ? [] : [{ sourceId, entityType: item.startingEntity.entityType, stableId: item.startingEntity.stableId }]));
-      void client.readRefs({ sourceId, mask: true, entities, edges: [], aggregates: [], derived: [] }, abort.current.signal).then((result) => {
+      // one read of the source: 10 s at most
+      void boundedRead((signal) => client.readRefs({ sourceId, mask: true, entities, edges: [], aggregates: [], derived: [] }, signal), abort.current.signal).then((result) => {
         if (abort.current.signal.aborted) return;
         if (current.current !== listKey) {
           for (const item of rows) asked.current.delete(keyOf(item));
           setDropped((count) => count + 1);
           return;
         }
-        if (!result.ok) return;
+        if (!result.ok) {
+          // asked again at the next read of the list
+          for (const item of rows) asked.current.delete(keyOf(item));
+          return;
+        }
         setLabels((held) => {
           const next = new Map(held);
           for (const node of result.value.nodes) next.set(`${node.ref.sourceId}\u0000${node.ref.entityType}\u0000${node.ref.stableId}`, node.display.title);

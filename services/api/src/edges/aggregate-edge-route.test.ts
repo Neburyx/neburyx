@@ -1,7 +1,9 @@
 import { rmSync } from 'node:fs';
-import { aggregateEdgeDetailSchema, edgeRefSegmentOf, type AggregateEdgeRef } from '@neburyx/contracts';
+import { SOURCE_READS_IN_A_ROW, aggregateEdgeDetailSchema, edgeRefSegmentOf, type AggregateEdgeRef } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
+import type { Gate, IndexReader } from '../gate/types.js';
+import { inRounds } from '../testing/read-rounds.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { redactItems } from '../gate/redact/index.js';
 import { AGGREGATE_SAMPLE_ID, AGGREGATE_SUMMARY_ID } from '../gate/templates/aggregate-evidence.js';
@@ -39,6 +41,7 @@ interface Options {
   readonly deny?: boolean;
   readonly hideStableId?: string;
   readonly summaryError?: AppError;
+  readonly between?: (parts: { readonly gate: Gate; readonly indexes: IndexReader }) => { readonly gate: Gate };
 }
 
 async function started(options: Options = {}) {
@@ -56,7 +59,7 @@ async function started(options: Options = {}) {
     audit: { record: (event) => (events.push(event), Promise.resolve()) },
   };
   const parts = testSourceGate(mapping, { executor, seams, ...(options.hideStableId !== undefined ? { redact: hidingRedact(options.hideStableId, redactItems) } : {}) });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: (options.between?.(parts) ?? parts).gate, seams });
   return { app, executor, events };
 }
 
@@ -209,5 +212,17 @@ describe('the count of an aggregate that cannot be read in time', () => {
     const summary = await answered({ summary: { status: 'unavailable', reason: 'database' } });
     expect(summary.response.statusCode).toBe(503);
     expect(summary.response.json()).toMatchObject({ error: { code: 'SOURCE_UNAVAILABLE' } });
+  });
+});
+
+describe('how long the evidence of an aggregate can take', () => {
+  it('reads the source as many times in a row as the clients are told to wait for', async () => {
+    let counter: ReturnType<typeof inRounds> | undefined;
+    const { app } = await started({ between: (parts) => (counter = inRounds(parts)) });
+    if (counter === undefined) throw new Error('the reads are not counted');
+    const { rounds, answer } = await counter.roundsOf(async () => await get(app, urlOf(REF)));
+    expect(answer.statusCode).toBe(200);
+    expect(rounds).toBe(SOURCE_READS_IN_A_ROW.aggregateEvidence);
+    await app.close();
   });
 });

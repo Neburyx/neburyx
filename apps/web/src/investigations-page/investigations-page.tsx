@@ -63,7 +63,7 @@ export function InvestigationsPage() {
   const { state } = list;
   // the count of the Saved views tab is the list's last answer less the views deleted since
   useEffect(() => setViewsDeleted(0), [state.savedViews]);
-  const profiles = useSourceProfiles(client, (state.items ?? []).map((item) => item.sourceId));
+  const profiles = useSourceProfiles(client, state.items);
   // a deleted investigation is not read from its source, so its row carries no label
   const labels = useRowLabels(client, filters.deleted === true ? undefined : state.items, JSON.stringify([filters.status, filters.sourceId, filters.text]));
 

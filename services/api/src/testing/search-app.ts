@@ -4,6 +4,7 @@ import { buildApp } from '../app.js';
 import type { AssembleOptions } from '../gate/assemble.js';
 import { lookupAnswer } from './held-elements.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
+import type { Gate, IndexReader } from '../gate/types.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
 import type { MappingModel } from '../mapping/model.js';
@@ -60,6 +61,8 @@ export interface SearchAppOptions {
   readonly redact?: AssembleOptions['redact'];
   readonly catalog?: AssembleOptions['catalog'];
   readonly fileQueries?: AssembleOptions['fileQueries'];
+  /** Puts a stand-in between the application and the gate's reads, which the application then calls. */
+  readonly between?: (parts: { readonly gate: Gate; readonly indexes: IndexReader }) => { readonly gate: Gate; readonly indexes: IndexReader };
   /** Further options of the application, which win over the ones this rig sets. */
   readonly appOptions?: Partial<Parameters<typeof buildApp>[0]>;
 }
@@ -86,7 +89,8 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
     referenceKeys: TEST_REFERENCE_KEYS,
   });
   const store = memoryAppStore();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS, ...options.appOptions });
+  const used = options.between?.(parts) ?? parts;
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, seams: { ...defaults, ...seams }, gate: used.gate, indexes: used.indexes, referenceKeys: TEST_REFERENCE_KEYS, ...options.appOptions });
   return { app, executor, events, lines, gate: parts.gate, mapping, store };
 }
 

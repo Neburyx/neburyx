@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { AiStatusResponse, MeResponse, SourcesResponse } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
+import { boundedRead } from '../api/read-wait.js';
 import { createRequestStore } from '../api/request-store.js';
 import type { RequestState } from '../api/use-request.js';
 import { createStore, useStoreSelector, type ReadableStore } from '../state/store.js';
@@ -17,7 +18,7 @@ export interface ShellData {
 export function createShellData(client: ApiClient): ReadableStore<ShellData> {
   const me = createRequestStore((signal) => client.getMe(signal));
   const aiStatus = createRequestStore((signal) => client.getAiStatus(signal));
-  const sources = createRequestStore((signal) => client.getSources(signal));
+  const sources = createRequestStore((own) => boundedRead((signal) => client.getSources(signal), own));
   const reload = (): void => {
     me.reload();
     aiStatus.reload();

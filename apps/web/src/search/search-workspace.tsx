@@ -12,6 +12,7 @@ import { focusSearchRequested } from './search-shortcut.js';
 import { SearchResults } from './search-results.js';
 import { addressOf, NO_SELECTION, selectionOf, type Selection } from './selection.js';
 import { useOpenResult } from './use-open-result.js';
+import { boundedRead } from '../api/read-wait.js';
 
 const codePoints = (text: string): number => Array.from(text).length;
 
@@ -43,7 +44,7 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
   const [repeats, setRepeats] = useState(0);
   const loadProfile = useCallback(
     async (signal: AbortSignal): Promise<ApiResult<SourceProfile>> => {
-      const result = await client.getProfile(source.id, signal);
+      const result = await boundedRead((own) => client.getProfile(source.id, own), signal);
       return result.ok && result.value.sourceId !== source.id ? { ok: false, failure: { code: 'SCHEMA_MISMATCH' } } : result;
     },
     [client, source.id],

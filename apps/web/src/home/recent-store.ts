@@ -1,5 +1,6 @@
 import type { InvestigationListItem, InvestigationListResponse, SourceProfile } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
+import { boundedRead } from '../api/read-wait.js';
 import { createRequestStore, type RequestStore } from '../api/request-store.js';
 import type { RequestState } from '../api/use-request.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
@@ -35,8 +36,8 @@ export function createRecentInvestigations(client: ApiClient): RecentInvestigati
         existing.reload();
         continue;
       }
-      const request = createRequestStore(async (signal) => {
-        const result = await client.getProfile(sourceId, signal);
+      const request = createRequestStore(async (own) => {
+        const result = await boundedRead((signal) => client.getProfile(sourceId, signal), own);
         return result.ok && result.value.sourceId !== sourceId ? ({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } } as const) : result;
       });
       profileRequests.set(sourceId, request);
@@ -46,9 +47,9 @@ export function createRecentInvestigations(client: ApiClient): RecentInvestigati
   };
 
   const start = (): RequestStore<InvestigationListResponse> => {
-    const started = createRequestStore(async (signal) => {
-      const result = await client.listInvestigations(RECENT_LIMIT, signal);
-      if (result.ok && !signal.aborted) readProfiles(result.value.items);
+    const started = createRequestStore(async (own) => {
+      const result = await boundedRead((signal) => client.listInvestigations(RECENT_LIMIT, signal), own);
+      if (result.ok && !own.aborted) readProfiles(result.value.items);
       return result;
     });
     started.subscribe(() => state.setState({ ...state.getState(), list: started.getState() }));

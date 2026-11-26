@@ -6,6 +6,7 @@ import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { currentSource, sourceNameOf } from '../shell/current-source.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
+import { boundedRead } from '../api/read-wait.js';
 
 export interface SourceChoice {
   readonly sources: readonly SourceSummary[];
@@ -27,7 +28,7 @@ export const useHomePatterns = (): HomePatterns => useContext(Context);
 
 function Reader({ sourceId, sourceName, choice, children }: { readonly sourceId: string; readonly sourceName: string; readonly choice: SourceChoice | undefined; readonly children: ReactNode }) {
   const client = useApiClient();
-  const load = useCallback((signal: AbortSignal) => client.listTemplates(sourceId, signal), [client, sourceId]);
+  const load = useCallback((own: AbortSignal) => boundedRead((signal) => client.listTemplates(sourceId, signal), own), [client, sourceId]);
   const { state, reload } = useRequest(load);
   const value = useMemo<HomePatterns>(() => ({ kind: 'list', sourceId, sourceName, list: state, reload, choice }), [sourceId, sourceName, state, reload, choice]);
   return <Context.Provider value={value}>{children}</Context.Provider>;

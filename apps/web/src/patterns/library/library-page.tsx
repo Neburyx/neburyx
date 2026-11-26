@@ -18,6 +18,7 @@ import { LIBRARY_COPY } from './library-copy.js';
 import { definitionRowOf, presetRowOf, savedRowOf } from './library-model.js';
 import { LibraryTable, type TableEntry } from './library-table.js';
 import { useLibrarySource } from './use-library-source.js';
+import { boundedRead } from '../../api/read-wait.js';
 
 type Preset = TemplateListResponse['presets'][number];
 type Tab = 'mine' | 'shared' | 'built-in';
@@ -80,9 +81,9 @@ function LibraryBody({ source }: { readonly source: SourceSummary }) {
   const state = useClientState();
   const openInPanel = useOpenInPanel(source.id);
   const saved = useSavedPatterns(client, source.id);
-  const loadTemplates = useCallback((signal: AbortSignal) => client.listTemplates(source.id, signal), [client, source.id]);
+  const loadTemplates = useCallback((own: AbortSignal) => boundedRead((signal) => client.listTemplates(source.id, signal), own), [client, source.id]);
   const templates = useRequest(loadTemplates);
-  const loadProfile = useCallback((signal: AbortSignal) => client.getProfile(source.id, signal), [client, source.id]);
+  const loadProfile = useCallback((own: AbortSignal) => boundedRead((signal) => client.getProfile(source.id, signal), own), [client, source.id]);
   const profile = useRequest(loadProfile);
   const [notice, setNotice] = useState<Notice | undefined>(undefined);
   const rows = useRowActions(client, saved.reload, setNotice);

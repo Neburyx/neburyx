@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ASSISTANT_CHAT_LOOKUP_IDS_MAX } from '@neburyx/contracts';
 import { useApiClient } from '../../api/client-context.js';
-import { READ_WAIT_MS } from '../read-wait.js';
+import { boundedRead } from '../../api/read-wait.js';
 
 /** What the picker knows of whether an investigation has a chat of the person: yes or no once the lookup has answered for it, and nothing while it has not or when it failed. */
 export type ChatKnowledge = 'yes' | 'no' | 'unknown';
@@ -32,20 +32,8 @@ export function useChatsOf(ids: readonly string[]): ChatsOf {
     // a call takes at most 100 ids, whatever failed before and is asked again with the new rows
     for (let at = 0; at < fresh.length; at += ASSISTANT_CHAT_LOOKUP_IDS_MAX) {
       const batch = fresh.slice(at, at + ASSISTANT_CHAT_LOOKUP_IDS_MAX);
-      const controller = new AbortController();
-      let settled = false;
-      const giveUp = (): void => {
-        if (settled || !mounted.current) return;
-        settled = true;
-        controller.abort();
-        for (const id of batch) asked.current.delete(id);
-        setFailedIds((held) => new Set([...held, ...batch]));
-      };
-      const timer = window.setTimeout(giveUp, READ_WAIT_MS);
-      void client.lookupAssistantChats(batch, controller.signal).then((result) => {
-        window.clearTimeout(timer);
-        if (settled || !mounted.current) return;
-        settled = true;
+      void boundedRead((signal) => client.lookupAssistantChats(batch, signal)).then((result) => {
+        if (!mounted.current) return;
         if (!result.ok) {
           // asked again when the rows change or from `retry`
           for (const id of batch) asked.current.delete(id);

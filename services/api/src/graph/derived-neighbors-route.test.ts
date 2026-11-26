@@ -1,7 +1,9 @@
 import { rmSync } from 'node:fs';
-import { derivedNeighborsResponseSchema } from '@neburyx/contracts';
+import { SOURCE_READS_IN_A_ROW, derivedNeighborsResponseSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
+import type { Gate, IndexReader } from '../gate/types.js';
+import { inRounds } from '../testing/read-rounds.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { DERIVED_RULE_RUN_ID } from '../gate/templates/derived-rule-run.js';
 import { createLogger } from '../logger.js';
@@ -32,6 +34,7 @@ interface Options {
   readonly busy?: boolean;
   readonly mapping?: ReturnType<typeof mappingOf>;
   readonly hideStableId?: string;
+  readonly between?: (parts: { readonly gate: Gate; readonly indexes: IndexReader }) => { readonly gate: Gate };
 }
 
 async function started(options: Options = {}) {
@@ -51,7 +54,7 @@ async function started(options: Options = {}) {
     audit: { record: (event) => (events.push(event), Promise.resolve()) },
   };
   const parts = testSourceGate(mapping, { executor, seams, ...(options.hideStableId === undefined ? {} : { redact: hidingRedact(options.hideStableId, redactItems) }) });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: (options.between?.(parts) ?? parts).gate, seams });
   return { app, executor, events };
 }
 
@@ -274,6 +277,18 @@ describe('the failure paths of POST /v1/graph/derived-neighbors', () => {
     expect(written).toHaveLength(1);
     expect(written[0]).toMatchObject({ sourceId: 'demo', result: 'success' });
     expect(JSON.stringify(written[0])).not.toMatch(/A-1|O-1|shared-tool/);
+    await app.close();
+  });
+});
+
+describe('how long the derived rows can take', () => {
+  it('reads the source as many times in a row as the clients are told to wait for, when no rule gives a row', async () => {
+    let counter: ReturnType<typeof inRounds> | undefined;
+    const { app } = await started({ rows: [], between: (parts) => (counter = inRounds(parts)) });
+    if (counter === undefined) throw new Error('the reads are not counted');
+    const { rounds, answer } = await counter.roundsOf(async () => await post(app, anAccount));
+    expect(answer.statusCode).toBe(200);
+    expect(rounds).toBe(SOURCE_READS_IN_A_ROW.derivedRows);
     await app.close();
   });
 });

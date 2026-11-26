@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_PATTERN_LIST_LIMIT, type ListedPattern } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../../api/client.js';
+import { boundedRead } from '../../api/read-wait.js';
 import { UNEXPECTED } from '../../api/use-request.js';
 
 type SavedListState =
@@ -46,7 +47,7 @@ export function useSavedPatterns(client: ApiClient, sourceId: string | null): Sa
       const send = async (): Promise<void> => {
         let result: Awaited<ReturnType<ApiClient['listPatterns']>>;
         try {
-          result = await client.listPatterns({ sourceId, limit: DEFAULT_PATTERN_LIST_LIMIT }, controller.signal);
+          result = await boundedRead((signal) => client.listPatterns({ sourceId, limit: DEFAULT_PATTERN_LIST_LIMIT }, signal), controller.signal);
         } catch {
           result = UNEXPECTED;
         }
@@ -80,7 +81,7 @@ export function useSavedPatterns(client: ApiClient, sourceId: string | null): Sa
     const send = async (): Promise<void> => {
       let result: Awaited<ReturnType<ApiClient['listPatterns']>>;
       try {
-        result = await client.listPatterns({ sourceId, limit: DEFAULT_PATTERN_LIST_LIMIT, cursor }, controller.signal);
+        result = await boundedRead((signal) => client.listPatterns({ sourceId, limit: DEFAULT_PATTERN_LIST_LIMIT, cursor }, signal), controller.signal);
       } catch {
         result = UNEXPECTED;
       }

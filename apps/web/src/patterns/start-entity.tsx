@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Count, GraphNode } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
+import { boundedRead, SEARCH_WAIT_MS } from '../api/read-wait.js';
 import { UNEXPECTED } from '../api/use-request.js';
 import { elementKey } from '../state/keys.js';
 import { PATTERNS_COPY } from './copy.js';
@@ -53,7 +54,7 @@ export function useEntitySearch(client: ApiClient, sourceId: string, mask: boole
       const send = async (): Promise<void> => {
         let result: Awaited<ReturnType<ApiClient['searchEntities']>>;
         try {
-          result = await client.searchEntities({ sourceId, text: trimmed, ...(entityType === undefined ? {} : { entityTypes: [entityType] }), ...(mask ? { mask: true } : {}) }, controller.signal);
+          result = await boundedRead((signal) => client.searchEntities({ sourceId, text: trimmed, ...(entityType === undefined ? {} : { entityTypes: [entityType] }), ...(mask ? { mask: true } : {}) }, signal), controller.signal, SEARCH_WAIT_MS);
         } catch {
           result = UNEXPECTED;
         }

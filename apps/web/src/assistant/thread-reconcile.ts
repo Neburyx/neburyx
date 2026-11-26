@@ -1,5 +1,6 @@
 import type { AssistantThreadResponse } from '@neburyx/contracts';
 import type { ApiFailure } from '../api/client.js';
+import { boundedRead } from '../api/read-wait.js';
 import { isAccessLost } from './failure-kinds.js';
 import type { AssistantSession, Turn } from './assistant-session.js';
 
@@ -67,7 +68,7 @@ export async function rereadThread(session: AssistantSession, read: ThreadRead):
   const controller = new AbortController();
   const epoch = session.store.getState().epoch;
   session.open.add(controller);
-  const result = await read(controller.signal);
+  const result = await boundedRead(read, controller.signal);
   session.open.delete(controller);
   if (controller.signal.aborted || session.store.getState().epoch !== epoch) return;
   if (!result.ok) {
@@ -91,7 +92,7 @@ export async function reloadThread(session: AssistantSession, read: ThreadRead):
   const controller = new AbortController();
   const epoch = session.store.getState().epoch;
   session.open.add(controller);
-  const result = await read(controller.signal);
+  const result = await boundedRead(read, controller.signal);
   session.open.delete(controller);
   if (controller.signal.aborted || session.store.getState().epoch !== epoch) return { failed: false, held: undefined };
   if (!result.ok) {

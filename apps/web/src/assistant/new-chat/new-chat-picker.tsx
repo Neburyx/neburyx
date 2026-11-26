@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router';
 import type { InvestigationListItem } from '@neburyx/contracts';
 import { useApiClient } from '../../api/client-context.js';
 import { offersRetry } from '../../failure-notice.js';
-import { READ_WAIT_MS } from '../read-wait.js';
 import { ListFailure } from '../list-failure.js';
 import { useInvestigationList } from '../../investigations-page/use-investigation-list.js';
 import { SEARCH_DEBOUNCE_MS } from '../../patterns/start-entity.js';
@@ -108,7 +107,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
   const [place, setPlace] = useState<Place | undefined>(undefined);
   const [text, setText] = useState('');
   const [query, setQuery] = useState<string | undefined>(undefined);
-  const list = useInvestigationList(client, { status: 'open', sourceId: undefined, text: query, limit: PAGE_SIZE }, { readWaitMs: READ_WAIT_MS });
+  const list = useInvestigationList(client, { status: 'open', sourceId: undefined, text: query, limit: PAGE_SIZE });
   const { state } = list;
   // while a search is read the rows of the earlier list are not drawn, so they cannot be highlighted or picked either
   const waiting = state.items === undefined || state.loading;

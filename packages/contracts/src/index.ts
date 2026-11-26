@@ -210,5 +210,6 @@ export { momentKey } from './moment-key.js';
 export { ASK_RESULT_LABEL_MAX, ASK_RESULT_LINES_MAX, ASK_RESULT_NAME_MAX, ASK_RESULT_TYPE_MAX, cutText, readAskResultSchema, ASK_RESULT_NOTICE_ENTRIES_MAX, ASK_RESULT_REFS_MAX, ASK_RESULT_ROWS_MAX, ASK_RESULT_TEXT_MAX, ASK_RESULT_WORDS, storedAskResultOf, storedAskResultSchema } from './ask-result-stored.js';
 export type { ReadAskResult, StoredAskResult } from './ask-result-stored.js';
 
+export { SOURCE_READS_IN_A_ROW, SOURCE_REQUEST_DEADLINE_MS } from './read-limits.js';
 export { ASSISTANT_CHAT_LOOKUP_IDS_MAX, assistantChatLookupRequestSchema, assistantChatLookupResponseSchema } from './assistant-chats.js';
 export type { AssistantChatLookupRequest, AssistantChatLookupResponse } from './assistant-chats.js';

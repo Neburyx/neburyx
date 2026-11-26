@@ -6,6 +6,7 @@ import { outsideFocusKeys } from '../state/loaded-graph.js';
 import type { ApiClient } from './client.js';
 import { mergeIntoLoaded } from './merge-into-loaded.js';
 import { createRequestStore, type RequestStore } from './request-store.js';
+import { boundedRead, DERIVED_ROWS_WAIT_MS } from './read-wait.js';
 
 interface ShownOutcome {
   /** The nodes and the edges that the view did not hold and now does. */
@@ -44,7 +45,7 @@ export function createDerivedStore(client: ApiClient, state: ClientState, person
       const key = keyOf(person(), investigation(), ref, mask);
       const held = requests.get(key);
       if (held !== undefined) return held;
-      const request = createRequestStore((signal) => client.derivedNeighbors({ sourceId: ref.sourceId, ref: { entityType: ref.entityType, stableId: ref.stableId }, ...(mask ? { mask } : {}) }, signal));
+      const request = createRequestStore((own) => boundedRead((signal) => client.derivedNeighbors({ sourceId: ref.sourceId, ref: { entityType: ref.entityType, stableId: ref.stableId }, ...(mask ? { mask } : {}) }, signal), own, DERIVED_ROWS_WAIT_MS));
       requests.set(key, request);
       return request;
     },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { InvestigationListItem } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, InvestigationPageQuery } from '../api/client.js';
+import { boundedRead } from '../api/read-wait.js';
 
 export interface ListFilters {
   readonly status: 'open' | 'closed' | 'archived';
@@ -89,13 +90,8 @@ export interface InvestigationList {
   readonly focusTaken: () => void;
 }
 
-/** How a list is read: `readWaitMs`, when given, is how long a read may wait for an answer before it is given up as a failure with Try again; absent, a read waits as long as the request does. */
-export interface ListReadOptions {
-  readonly readWaitMs?: number;
-}
-
 /** The pages of the caller's investigations for the filters given. A change of the filters reads the first page again and ignores what an earlier read answers late; the rows on screen stay until the new ones come. */
-export function useInvestigationList(client: ApiClient, filters: ListFilters, options: ListReadOptions = {}): InvestigationList {
+export function useInvestigationList(client: ApiClient, filters: ListFilters): InvestigationList {
   const [state, dispatch] = useReducer(reduceList, INITIAL);
   const generation = useRef(0);
   const controller = useRef<AbortController | undefined>(undefined);
@@ -103,17 +99,6 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters, op
   const latest = useRef(state);
   latest.current = state;
   const { status, sourceId, text, deleted, limit } = filters;
-  const { readWaitMs } = options;
-
-  const giveUpRead = useCallback((mine: number, where: 'first' | 'more') => {
-    if (generation.current !== mine) return;
-    generation.current += 1;
-    moreInFlight.current = false;
-    controller.current?.abort();
-    // a later read of another page needs a signal that is not aborted
-    controller.current = new AbortController();
-    dispatch({ type: 'failed', where, failure: { code: 'NETWORK_UNAVAILABLE' } });
-  }, []);
 
   const loadFirst = useCallback(() => {
     generation.current += 1;
@@ -123,15 +108,12 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters, op
     const abort = new AbortController();
     controller.current = abort;
     dispatch({ type: 'first-started' });
-    // a read that gets no answer in time is given up: its late answer is dropped and the failure is shown
-    const giveUp = readWaitMs === undefined ? undefined : window.setTimeout(() => giveUpRead(mine, 'first'), readWaitMs);
-    void client.listInvestigationPage(querySoFar({ status, sourceId, text, deleted, ...(limit === undefined ? {} : { limit }) }), abort.signal).then((result) => {
-      window.clearTimeout(giveUp);
+    void boundedRead((signal) => client.listInvestigationPage(querySoFar({ status, sourceId, text, deleted, ...(limit === undefined ? {} : { limit }) }), signal), abort.signal).then((result) => {
       if (generation.current !== mine) return;
       if (result.ok) dispatch({ type: 'first-answered', items: result.value.items, matching: result.value.matching.value, savedViews: result.value.counts.savedViews.count.value, nextCursor: result.value.nextCursor, retentionDays: result.value.retention.deletedInvestigationsDays });
       else dispatch({ type: 'failed', where: 'first', failure: result.failure });
     });
-  }, [client, status, sourceId, text, deleted, limit, readWaitMs, giveUpRead]);
+  }, [client, status, sourceId, text, deleted, limit]);
 
   useEffect(() => {
     loadFirst();
@@ -152,16 +134,14 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters, op
     const mine = generation.current;
     const cursor = held.nextCursor;
     dispatch({ type: 'more-started' });
-    const giveUp = readWaitMs === undefined ? undefined : window.setTimeout(() => giveUpRead(mine, 'more'), readWaitMs);
-    void client.listInvestigationPage({ ...querySoFar({ status, sourceId, text, deleted, ...(limit === undefined ? {} : { limit }) }), cursor }, controller.current?.signal).then((result) => {
-      window.clearTimeout(giveUp);
+    void boundedRead((signal) => client.listInvestigationPage({ ...querySoFar({ status, sourceId, text, deleted, ...(limit === undefined ? {} : { limit }) }), cursor }, signal), controller.current?.signal).then((result) => {
       if (generation.current !== mine) return;
       moreInFlight.current = false;
       if (result.ok) dispatch({ type: 'more-answered', items: result.value.items, matching: result.value.matching.value, nextCursor: result.value.nextCursor });
       else if (result.failure.code === 'CURSOR_INVALIDATED') loadFirst();
       else dispatch({ type: 'failed', where: 'more', failure: result.failure });
     });
-  }, [client, status, sourceId, text, deleted, limit, readWaitMs, giveUpRead, loadFirst]);
+  }, [client, status, sourceId, text, deleted, limit, loadFirst]);
 
   return {
     state,

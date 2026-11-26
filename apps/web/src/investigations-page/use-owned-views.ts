@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { OwnedView } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
+import { boundedRead } from '../api/read-wait.js';
 
 interface OwnedViewsState {
   readonly items: readonly OwnedView[] | undefined;
@@ -84,7 +85,7 @@ export function useOwnedViews(client: ApiClient): OwnedViews {
     const mine = generation.current;
     moreInFlight.current = false;
     dispatch({ type: 'first-started' });
-    void client.listOwnedViews({}).then((result) => {
+    void boundedRead((signal) => client.listOwnedViews({}, signal)).then((result) => {
       if (generation.current !== mine) return;
       if (result.ok) dispatch({ type: 'first-answered', items: result.value.items, count: result.value.count.value, nextCursor: result.value.nextCursor });
       else dispatch({ type: 'failed', where: 'first', failure: result.failure });
@@ -104,7 +105,8 @@ export function useOwnedViews(client: ApiClient): OwnedViews {
     moreInFlight.current = true;
     const mine = generation.current;
     dispatch({ type: 'more-started' });
-    void client.listOwnedViews({ cursor: held.nextCursor }).then((result) => {
+    const cursor = held.nextCursor;
+    void boundedRead((signal) => client.listOwnedViews({ cursor }, signal)).then((result) => {
       if (generation.current !== mine) return;
       moreInFlight.current = false;
       if (result.ok) dispatch({ type: 'more-answered', items: result.value.items, count: result.value.count.value, nextCursor: result.value.nextCursor });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AssistantThreadListResponse } from '@neburyx/contracts';
 import type { ApiFailure } from '../../api/client.js';
 import { useApiClient } from '../../api/client-context.js';
-import { READ_WAIT_MS } from '../read-wait.js';
+import { boundedRead } from '../../api/read-wait.js';
 import { SETTLE_RETRY_MS } from '../settle-retry.js';
 
 export type ChatRow = AssistantThreadListResponse['items'][number];
@@ -61,22 +61,13 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
     if (query !== previousQuery) wantMore.current = false;
     setState((current) => ({ ...current, first: 'loading', firstFailure: undefined, more: wantMore.current ? 'loading' : 'idle', moreFailure: undefined }));
     const search = query === undefined ? {} : { q: query };
-    // a read that gets no answer in time is given up: its late answer is dropped, and the person sees the failure with Try again
-    const giveUp = window.setTimeout(() => {
-      if (mine !== generation.current) return;
-      generation.current += 1;
-      controller.abort();
-      lastRead.current = Date.now();
-      wantMore.current = false;
-      refreshing.current = false;
-      setState((current) => ({ ...current, first: 'failed', firstFailure: { code: 'NETWORK_UNAVAILABLE' }, more: 'idle' }));
-    }, READ_WAIT_MS);
-    void (async () => {
-      let result = await client.listAssistantThreads(search, controller.signal);
+    // one wait covers the whole read, which for a reread is up to the pages it keeps
+    const readPages = async (signal: AbortSignal) => {
+      let result = await client.listAssistantThreads(search, signal);
       let pages = 1;
       let rows: readonly ChatRow[] = result.ok ? result.value.items : [];
       while (result.ok && result.value.nextCursor !== null && rows.length < keep && pages < MAX_REREAD_PAGES) {
-        const next = await client.listAssistantThreads({ cursor: result.value.nextCursor, ...search }, controller.signal);
+        const next = await client.listAssistantThreads({ cursor: result.value.nextCursor, ...search }, signal);
         pages += 1;
         if (!next.ok) {
           // the first page was read: what could not be read again is left to Show more
@@ -87,7 +78,9 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
         rows = [...rows, ...next.value.items.filter((row) => !seen.has(row.investigationId))];
         result = { ok: true, value: { items: [...rows], nextCursor: next.value.nextCursor } };
       }
-      window.clearTimeout(giveUp);
+      return result;
+    };
+    void boundedRead(readPages, controller.signal).then((result) => {
       if (mine !== generation.current) return;
       refreshing.current = false;
       lastRead.current = Date.now();
@@ -105,11 +98,10 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
         }
       }
       setState((current) => (result.ok ? { rows: result.value.items, nextCursor: result.value.nextCursor, first: 'ready', firstFailure: undefined, more: wantMore.current && result.value.nextCursor !== null ? 'loading' : 'idle', moreFailure: undefined } : { ...current, first: 'failed', firstFailure: result.failure, more: 'idle' }));
-    })();
+    });
     return () => {
       generation.current += 1;
       controller.abort();
-      window.clearTimeout(giveUp);
       window.clearTimeout(retry.current);
     };
   }, [client, query, trigger, reloads]);
@@ -139,7 +131,7 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
     const cursor = current.nextCursor;
     const mine = generation.current;
     setState((now) => ({ ...now, more: 'loading', moreFailure: undefined }));
-    void client.listAssistantThreads({ cursor, ...(query === undefined ? {} : { q: query }) }).then((result) => {
+    void boundedRead((signal) => client.listAssistantThreads({ cursor, ...(query === undefined ? {} : { q: query }) }, signal)).then((result) => {
       if (mine !== generation.current) return;
       if (result.ok) {
         setState((now) => {

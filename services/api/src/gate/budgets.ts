@@ -1,10 +1,11 @@
+import { SOURCE_REQUEST_DEADLINE_MS } from '@neburyx/contracts';
 import { BUDGET_DEFAULTS } from '../mapping/budgets.js';
 import type { Budgets } from './types.js';
 
 export const DEFAULT_BUDGETS: Budgets = {
   timeoutMs: 5000,
   maxPage: 50,
-  requestTimeoutMs: 10_000,
+  requestTimeoutMs: SOURCE_REQUEST_DEADLINE_MS,
   countCap: 500,
   maxHops: BUDGET_DEFAULTS.maxHops,
   pathResultsCap: BUDGET_DEFAULTS.pathResultsCap,

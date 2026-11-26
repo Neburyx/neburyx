@@ -6,6 +6,7 @@ import { draftSyncOf } from '../draft/draft-sync.js';
 import { usePrincipalIdWhenProvided } from '../shell/shell-data.js';
 import { useClientState, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
+import { boundedRead } from '../api/read-wait.js';
 
 export type NotesStage =
   | { readonly kind: 'closed' }
@@ -52,7 +53,8 @@ export function useNotes(copies: number, request: number): NotesModel {
       controller.current = own;
       const earlier = keep && kept.current?.context === context ? kept.current.entries : undefined;
       setHeld({ stage: { kind: 'loading', entries: earlier }, context });
-      void client.readAiNotes(investigationId, mask, own.signal).then((result) => {
+      // the server reads the cited elements under its own deadline of 10 s
+      void boundedRead((signal) => client.readAiNotes(investigationId, mask, signal), own.signal).then((result) => {
         if (own.signal.aborted) return;
         if (result.ok) {
           kept.current = { entries: result.value, context };

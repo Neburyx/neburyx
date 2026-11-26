@@ -5,6 +5,7 @@ import { createRequestStore, type RequestStore } from '../api/request-store.js';
 import type { RequestState } from '../api/use-request.js';
 import type { ClientState } from '../state/client-state.js';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
+import { AGGREGATE_EVIDENCE_WAIT_MS, boundedRead, READ_WAIT_MS } from '../api/read-wait.js';
 
 export interface EdgeReadStore {
   /** The read of a stored edge under a masking setting in the investigation that asked: made once and kept; ask again with its `reload`. */
@@ -30,7 +31,9 @@ export function createEdgeReadStore(client: ApiClient, person: () => string, inv
     const key = keyOf(person(), investigation(), ref, mask);
     const held = requests.get(key);
     if (held !== undefined) return held;
-    const request = createRequestStore((signal) => client.getEdge(ref, mask ? { mask } : {}, signal));
+    // a stored or derived relationship is one read of the source, 10 s at most; an aggregate is two
+    const wait = 'aggregate' in ref ? AGGREGATE_EVIDENCE_WAIT_MS : READ_WAIT_MS;
+    const request = createRequestStore((own) => boundedRead((signal) => client.getEdge(ref, mask ? { mask } : {}, signal), own, wait));
     requests.set(key, request);
     let counted: unknown;
     request.subscribe(() => {
