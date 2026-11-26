@@ -22,7 +22,7 @@ function shown() {
   const reads = held<SearchResult>();
   const chosen: string[] = [];
   const client = fakeClient({ searchEntities: (_request, signal) => reads.read(signal) });
-  render(<StartChoice client={client} sourceId="a" sourceName="alpha" mask={false} typeName="Account" entityType="kind-a" candidates={[typedNode('acc-1', 'kind-a')]} chosen={undefined} onChoose={(node) => chosen.push(node.ref.stableId)} showIds inputId="start" />);
+  render(<StartChoice client={client} sourceId="a" sourceName="alpha" mask={false} typeName="kind-a" entityType="kind-a" candidates={[typedNode('acc-1', 'kind-a')]} chosen={undefined} onChoose={(node) => chosen.push(node.ref.stableId)} showIds inputId="start" />);
   return { reads, chosen };
 }
 

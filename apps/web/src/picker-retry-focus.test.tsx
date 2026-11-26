@@ -49,7 +49,7 @@ describe.each(WAYS)('Try again of a picker reached by %s', (_way, take) => {
   it('searches the same text again from the start choice of a run', async () => {
     const reads = held<SearchResult>();
     const client = fakeClient({ searchEntities: (_request, signal) => reads.read(signal) });
-    render(<StartChoice client={client} sourceId="a" sourceName="alpha" mask={false} typeName="Account" entityType="kind-a" candidates={[]} chosen={undefined} onChoose={() => undefined} showIds inputId="start" />);
+    render(<StartChoice client={client} sourceId="a" sourceName="alpha" mask={false} typeName="kind-a" entityType="kind-a" candidates={[]} chosen={undefined} onChoose={() => undefined} showIds inputId="start" />);
     await searchesAgain(reads, () => within(document.body).getByRole('combobox') as HTMLInputElement);
   });
 });
