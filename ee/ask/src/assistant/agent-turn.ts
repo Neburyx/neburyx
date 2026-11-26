@@ -4,7 +4,7 @@ import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentRun, type
 import { AuditUnavailableError, removalNoteOf, type AuditedCallContext, type CheckRunner, type RejectedSentence } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { judgeCheck } from '../case-summary/judge.js';
-import { OFFERED_LABEL_WORDS, judgeTableRows, rowSentenceOf, withEndsCited } from './table.js';
+import { OFFERED_LABEL_WORDS, judgeTableRows, refusedLabelNote, rowSentenceOf, withEndsCited } from './table.js';
 import { combineOutcomes, type BlocksAnswer, type JudgedBlock } from './answer-blocks.js';
 import { parseBlocksInput } from './blocks.js';
 import { viewCoverageOf } from '../case-summary/coverage.js';
@@ -332,6 +332,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         let verdictFound = false;
         let droppedWithTable = 0;
         const citesAdded = new Map<string, number>();
+        const labelNotes: string[] = [];
         const rejected: RejectedSentence[] = [];
         for (const block of inputs) {
           if (block.kind === 'table') {
@@ -339,6 +340,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
             const wider = withEndsCited(block.draft.rows, basis.assembled);
             const draft = { ...block.draft, rows: wider.rows };
             for (const [row, count] of wider.added) citesAdded.set(JSON.stringify([row.cells, row.cites]), count);
+            const labelNote = refusedLabelNote(draft.columns, basis.checkedText.text);
+            if (labelNote !== undefined) labelNotes.push(labelNote);
             const judgedRows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks: options.checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
             if ('refused' in judgedRows) return 'The answer could not be checked. Reply "Done."';
             kept += judgedRows.kept.length;
@@ -383,7 +386,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown, so no call acknowledges it
         if (combined !== undefined && removed === 0 && combined.leftOut === 0 && combined.itemsCut === 0 && combined.labelsRemoved === 0 && !verdictFound) control.stop = true;
         const cutItems = combined?.itemsCut ?? 0;
-        return feedback({ kept: kept - cutItems, removed: removed + (combined?.leftOut ?? 0) + (combined?.itemsCut ?? 0) + (combined?.labelsRemoved ?? 0), verdictFound, rejected, form: formOf(inputs), keptOf: { sentences: keptSentences, items: keptItems - cutItems, rows: keptRows }, ...((combined?.labelsRemoved ?? 0) > 0 ? { labelRemoved: true } : {}) });
+        const told = feedback({ kept: kept - cutItems, removed: removed + (combined?.leftOut ?? 0) + (combined?.itemsCut ?? 0) + (combined?.labelsRemoved ?? 0), verdictFound, rejected, form: formOf(inputs), keptOf: { sentences: keptSentences, items: keptItems - cutItems, rows: keptRows }, ...((combined?.labelsRemoved ?? 0) > 0 ? { labelRemoved: true } : {}) });
+        return [told, ...new Set(labelNotes)].join('\n');
       },
     });
 

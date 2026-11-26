@@ -234,6 +234,40 @@ describe('the column labels a table may use', () => {
   });
 });
 
+describe('a column label that is refused', () => {
+  const nodes = [{ ...nodeOf('A-1'), display: { title: 'Zeta Holdings', type: V.anchor } }, nodeOf('A-2')];
+  const table = (label: string) => answer([{ kind: 'table', columns: ['Element', label], rows: [{ cells: ['Zeta Holdings', ''], cites: ['n1'] }] }]);
+  const turn = async (label: string) => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([table(label)])
+      .respondWithTools([table('Type')])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: TABLE, agent: { model, maxInputTokens: 200_000 }, viewNodes: nodes });
+    const given = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: VIEW_KEYS })));
+    const results = (model.calls.at(-1)?.messages ?? []).filter((message) => message.type === 'tool').map((message) => String(message.content));
+    return { given, told: results.find((content) => content.startsWith('Checked:')) ?? '' };
+  };
+
+  it('is named to the model with the words a label may use, and the corrected table is shown', async () => {
+    const { given, told } = await turn('Connected');
+    expect(told).toContain('A column label was refused: "Connected".');
+    expect(told).toContain(`or of these words: ${OFFERED_LABEL_WORDS.join(', ')}.`);
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { columns: ['Element', 'Type'] } }] });
+  });
+
+  it.each([
+    ['holds a verdict word', 'Suspect'],
+    ['holds a value of the source', 'Zeta'],
+    ['holds a value of the source beside another word', 'Holdings owed'],
+    ['holds a figure', 'Total 4711'],
+  ])('is not repeated back when it %s', async (_name, label) => {
+    const { told } = await turn(label);
+    expect(told).toContain('A column label was refused.');
+    expect(told.split('A column label was refused')[1]).not.toContain(label);
+  });
+});
+
 describe('a row that cites a relationship', () => {
   const [from, to] = [nodeOf('A-1'), nodeOf('A-2')];
   const edge = { ref: { sourceId: from.ref.sourceId, type: V.links[1], from: V.anchor, to: V.anchor, stableId: 'e-1' }, from: from.ref, to: to.ref, type: V.links[1], direction: 'from-to', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] };

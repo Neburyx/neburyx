@@ -88,13 +88,26 @@ export function labelWordsOf(text: string): ReadonlySet<string> {
   return words;
 }
 
+const isPlainLabel = (label: string): boolean => /^[\p{L}][\p{L} /-]*$/u.test(label) && !descriptionHoldsVerdict(label, []);
+const wordsOfLabel = (label: string): readonly string[] => label.toLowerCase().match(/\p{L}+/gu) ?? [];
+const isLabelWord = (word: string, known: ReadonlySet<string>): boolean => FIXED_LABEL_WORDS.has(word) || known.has(word) || known.has(word.replace(/s$/u, '')) || known.has(`${word}s`);
+
+/**
+ * What the model is told when a column label of its table is refused: the labels refused, and the words a label may use. A label is repeated back only when it is plain words with no verdict word and none of its refused
+ * words occurs anywhere in the text sent, so that no value of the source is repeated. Undefined when every label holds.
+ */
+export function refusedLabelNote(columns: readonly string[], text: string): string | undefined {
+  if (labelsHold(columns, text)) return undefined;
+  const known = labelWordsOf(text);
+  const sent = text.toLowerCase();
+  const named = columns.filter((label) => !labelsHold([label], text) && isPlainLabel(label) && wordsOfLabel(label).filter((word) => !isLabelWord(word, known)).every((word) => !sent.includes(word)));
+  return `A column label was refused${named.length === 0 ? '' : `: ${named.map((label) => JSON.stringify(label)).join(', ')}`}. A column label is words of the property names and types in the lines, or of these words: ${OFFERED_LABEL_WORDS.join(', ')}.`;
+}
+
 /** Whether every column label of a table is plain words that the text sent or the fixed list holds: letters, spaces and hyphens only, no verdict word, each word a word of a property key or a type of the text sent (or its plural) or one of the fixed words. */
 export function labelsHold(columns: readonly string[], text: string): boolean {
   const known = labelWordsOf(text);
-  return columns.every((label) => {
-    if (!/^[\p{L}][\p{L} /-]*$/u.test(label) || descriptionHoldsVerdict(label, [])) return false;
-    return (label.toLowerCase().match(/\p{L}+/gu) ?? []).every((word) => FIXED_LABEL_WORDS.has(word) || known.has(word) || known.has(word.replace(/s$/u, '')) || known.has(`${word}s`));
-  });
+  return columns.every((label) => isPlainLabel(label) && wordsOfLabel(label).every((word) => isLabelWord(word, known)));
 }
 
 /** What the checks made of the rows of a table reply: the rows kept, as sentences and by their position in the reply. */
