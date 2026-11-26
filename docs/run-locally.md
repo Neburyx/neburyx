@@ -40,6 +40,10 @@ NEBURYX_DEV_DATABASE_APP_ROLE=<role name>
 - The file is required. If it is missing, if a key is in neither the file nor the environment, if the file holds a key the tool does not know, or if its mode is wider than `0600`, `pnpm dev` stops before it builds or starts anything and says which. It never falls back to anything else, and it never prints a value from the file.
 - The env file in `NEBURYX_DEV_MAPPING_ENV` has the same mode rule. What it may hold, and what the tool refuses, is in [`tools/dev/README.md`](../tools/dev/README.md).
 
+### The cursor key
+
+The API signs page cursors with a key, so that a page you have open still works after you stop `pnpm dev` and start it again. The first run makes the key and keeps it beside your settings file, as `<settings file>.cursor-key` (by default `~/.config/neburyx/dev.env.cursor-key`), readable by you only. Delete that file to replace the key: the next run makes a new one, and pages opened before then need to be reloaded. The key is never printed. The file is never written inside the repository and must never be committed; a run stops if your settings file would put it there. If `NEBURYX_CURSOR_KEY` is set in your shell (base64 of at least 32 random bytes), that value is used and no file is written.
+
 ## Set up the Postgres once
 
 The database and the two logins must exist first. [`tools/dev/external-postgres.sql`](../tools/dev/external-postgres.sql) creates a database `neburyx_dev`, a migration login that owns it and an app login, with the passwords as `psql` variables:

@@ -133,7 +133,7 @@ export interface ApiSettings {
   readonly mappingPath: string;
   readonly port: number;
   readonly webRoot: string;
-  /** Base64 of 32 random bytes, made once per run so cursors survive the API's restarts. */
+  /** Base64 of at least 32 random bytes, kept from run to run (see `cursor-key.ts`), so cursors survive a restart. */
   readonly cursorKey: string;
   /** A directory of the developer's own for export files, so a run never needs the image's `/data/exports`. */
   readonly exportDirectory: string;

@@ -15,7 +15,8 @@ afterEach(() => {
 function rig(options: { settingsMode?: number; loginsMode?: number; settings?: (paths: { mapping: string; logins: string }) => string } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'dev-cli-home-'));
   const lockFolder = mkdtempSync(join(tmpdir(), 'dev-cli-lock-'));
-  folders.push(home, lockFolder);
+  const repository = mkdtempSync(join(tmpdir(), 'dev-cli-repo-'));
+  folders.push(home, lockFolder, repository);
   const mapping = join(home, 'm.yaml');
   const logins = join(home, 'real.env');
   writeFileSync(mapping, 'sources: []\n');
@@ -33,7 +34,7 @@ function rig(options: { settingsMode?: number; loginsMode?: number; settings?: (
     return { code: 0, stdout: '', stderr: '' };
   };
   const deps: CliDependencies = {
-    root: home,
+    root: repository,
     run,
     env: { PATH: '/bin', HOME: home },
     out: () => undefined,

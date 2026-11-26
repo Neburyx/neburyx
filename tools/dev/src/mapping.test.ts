@@ -7,7 +7,7 @@ const MAPPING = '/private/m.yaml';
 const LOGINS = '/private/logins.env';
 
 function files(state: Record<string, string>, modes: Record<string, number> = {}): Files {
-  return { exists: (path) => path in state, read: (path) => state[path] ?? '', mode: (path) => modes[path] ?? 0o600 };
+  return { exists: (path) => path in state, read: (path) => state[path] ?? '', mode: (path) => modes[path] ?? 0o600, realPath: (path) => path, createPrivate: () => false };
 }
 
 const present = files({ [MAPPING]: 'sources: []', [LOGINS]: 'OWN_USER=reader\nOWN_PASSWORD="quoted secret"\n' });

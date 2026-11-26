@@ -21,6 +21,8 @@ function rig(state: Record<string, string>, modes: Record<string, number> = {}) 
     exists: (path) => path in state,
     read: (path) => (reads.push(path), state[path] ?? ''),
     mode: (path) => modes[path] ?? 0o600,
+    realPath: (path) => path,
+    createPrivate: () => false,
   };
   return { files, reads };
 }

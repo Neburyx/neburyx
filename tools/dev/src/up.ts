@@ -1,6 +1,7 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadDevConfig } from './config.js';
+import { configPath, loadDevConfig } from './config.js';
+import { devCursorKey } from './cursor-key.js';
 import { aiDecisionEnvironment, apiEnvironment, askEnvironment, assistantEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, devEnvironment, limitsEnvironment, migrationEnvironment, PROFILE_VARIABLE, summaryEnvironment, webEnvironment } from './environments.js';
 import type { Run } from './exec.js';
 import { externalDatabase } from './external.js';
@@ -34,8 +35,6 @@ export const BUILDS: readonly { readonly name: string; readonly filter: string }
   { name: 'the web app', filter: '@neburyx/web' },
 ];
 
-const CURSOR_KEY_BYTES = 32;
-
 /** The script that registers the loader of the enterprise extension and then starts the file it is given, as the image's entry script does; the extension loads only when both parts of the switch are set. */
 const ENTRY_SCRIPT = 'tools/dev/entry/enterprise-entry.mjs';
 
@@ -47,6 +46,7 @@ export async function up(deps: Dependencies): Promise<number> {
   const config = loadDevConfig(deps.env, deps.files);
   const own = devMapping(config, deps.files);
   const database = externalDatabase(config);
+  const cursorKey = devCursorKey(deps.env, configPath(deps.env), deps.root, deps.files, deps.random);
 
   const lock = Lock.acquire({ repository: deps.root, ...deps.lock });
   const stopping = new AbortController();
@@ -83,7 +83,7 @@ export async function up(deps: Dependencies): Promise<number> {
         command: deps.nodePath,
         args: [entry, join(deps.root, 'services/api/dist/main.js')],
         cwd: deps.root,
-        env: apiEnvironment({ ...withLimits, ...cacheEnvironment(deps.env), ...devEnvironment(deps.env), ...askEnvironment(deps.env), ...summaryEnvironment(deps.env), ...assistantEnvironment(deps.env) }, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), profile: profile === '' ? undefined : profile, exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
+        env: apiEnvironment({ ...withLimits, ...cacheEnvironment(deps.env), ...devEnvironment(deps.env), ...askEnvironment(deps.env), ...summaryEnvironment(deps.env), ...assistantEnvironment(deps.env) }, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey, profile: profile === '' ? undefined : profile, exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
         healthUrl: `${apiUrl}/healthz`,
         readyTimeoutMs: apiReadyTimeoutMs(connectLimitMs(deps.env)),
         watch: [join(deps.root, 'services/api/dist'), join(deps.root, 'packages/contracts/dist')],

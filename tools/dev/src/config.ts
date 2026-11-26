@@ -17,7 +17,7 @@ export class ConfigUnusable extends Error {
   }
 }
 
-function configPath(env: Readonly<Record<string, string | undefined>>): string {
+export function configPath(env: Readonly<Record<string, string | undefined>>): string {
   const named = env[CONFIG_VARIABLE] ?? '';
   if (named !== '') {
     if (!isAbsolute(named)) throw new ConfigUnusable(`${CONFIG_VARIABLE} must be an absolute path`);

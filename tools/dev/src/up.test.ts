@@ -38,6 +38,8 @@ function rig(options: { files?: Record<string, string>; modes?: Record<string, n
     exists: (path) => state.has(path),
     read: (path) => (reads.push(path), state.get(path) ?? ''),
     mode: (path) => options.modes?.[path] ?? 0o600,
+    realPath: (path) => path,
+    createPrivate: (path, text) => !state.has(path) && (state.set(path, text), true),
   };
   const run: Run = async (command, args, runOptions = {}) => {
     const call = { command, args, options: runOptions };
@@ -315,5 +317,50 @@ describe('the lock', () => {
     release();
     await running;
     expect(await up({ ...second.deps, lock: { folder } })).toBe(0);
+  });
+});
+
+describe('the cursor key of pnpm dev', () => {
+  const KEY_FILE = `${SETTINGS}.cursor-key`;
+
+  it('is the same on the next run, which writes no file', async () => {
+    const first = rig();
+    await up(first.deps);
+    const key = first.supervision()?.api.env['NEBURYX_CURSOR_KEY'] ?? '';
+    expect(first.state.get(KEY_FILE)).toBe(`${key}\n`);
+    const second = rig({ files: Object.fromEntries(first.state) });
+    await up({ ...second.deps, random: (bytes) => Buffer.alloc(bytes, 200) });
+    expect(second.supervision()?.api.env['NEBURYX_CURSOR_KEY']).toBe(key);
+    expect(second.state.get(KEY_FILE)).toBe(`${key}\n`);
+  });
+
+  it('goes to the API and to no other process, and is never printed', async () => {
+    const output: string[] = [];
+    const shells: readonly Record<string, string>[] = [{}, { NEBURYX_CURSOR_KEY: Buffer.alloc(32, 5).toString('base64') }];
+    for (const env of shells) {
+      const { deps, calls, supervision } = rig({ env });
+      await up({ ...deps, out: (text) => void output.push(text) });
+      const key = supervision()?.api.env['NEBURYX_CURSOR_KEY'] ?? '';
+      expect(key).not.toBe('');
+      const others = [...calls.map((call) => call.options.env ?? {}), ...(supervision()?.children.map((child) => child.env) ?? [])];
+      for (const given of others) expect(Object.keys(given)).not.toContain('NEBURYX_CURSOR_KEY');
+      expect(JSON.stringify(others) + JSON.stringify(calls.map((call) => call.args))).not.toContain(key);
+      expect(output.join('\n')).not.toContain(key);
+    }
+  });
+
+  it('takes a key of the shell and writes no file', async () => {
+    const shell = Buffer.alloc(32, 5).toString('base64');
+    const { deps, supervision, state } = rig({ env: { NEBURYX_CURSOR_KEY: shell } });
+    await up(deps);
+    expect(supervision()?.api.env['NEBURYX_CURSOR_KEY']).toBe(shell);
+    expect(state.has(KEY_FILE)).toBe(false);
+  });
+
+  it('stops before it builds or starts anything when the key file cannot be used', async () => {
+    const { deps, calls, supervision } = rig({ files: { [SETTINGS]: SETTINGS_TEXT, [MAPPING]: 'sources: []\n', [LOGINS]: LOGIN_TEXT, [KEY_FILE]: 'short' } });
+    await expect(up(deps)).rejects.toThrow(ConfigUnusable);
+    expect(calls).toEqual([]);
+    expect(supervision()).toBeUndefined();
   });
 });
