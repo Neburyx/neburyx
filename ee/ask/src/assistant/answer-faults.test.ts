@@ -9,6 +9,8 @@ import { createMemoryAssistantRunStore } from './run-store.js';
 import { OFFERED_LABEL_WORDS, labelsHold, withEndsCited } from './table.js';
 import { READ_VIEW_FIRST, answerDescription } from './agent-turn.js';
 import { assembleResults } from './tool-answer.js';
+import { assembleText } from '../case-summary/assemble.js';
+import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 
 afterAll(removeAskFolders);
 
@@ -148,6 +150,56 @@ describe('a question that needs a second read from the result of the first', () 
     const given = await answerOf(r.route.handler(r.request(body)));
     expect(model.calls.at(-1)?.messages.map((message) => String(message.content))).toContain(READ_VIEW_FIRST);
     expect(given).toMatchObject({ status: 'answered', steps: 1 });
+  });
+});
+
+describe('a ranking over one read, once a second read starts from the ranked element', () => {
+  const ref = (entityType: string, stableId: string) => ({ sourceId: 'demo', entityType, stableId });
+  const node = (entityType: string, stableId: string, amount?: number) => ({ ref: ref(entityType, stableId), display: { title: `${entityType} ${stableId}`, type: entityType }, properties: amount === undefined ? [] : [{ key: 'amountValue', value: amount, dataClass: 'number', masked: false }], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+  const link = (from: ReturnType<typeof node>, to: ReturnType<typeof node>) => ({ ref: { sourceId: 'demo', type: V.links[0], from: from.ref.stableId, to: to.ref.stableId, stableId: `${from.ref.stableId}-${to.ref.stableId}` }, from: from.ref, to: to.ref, type: V.links[0], direction: 'from-to', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] });
+  const hub = node(V.other, 'H-1');
+  const [low, high] = [node(V.anchor, 'A-1', 10), node(V.anchor, 'A-2', 20)];
+  const owner = node(V.other, 'P-1');
+  const expand = (from: ReturnType<typeof node>, nodes: ReturnType<typeof node>[]) => ({ templateId: 'expand', result: { ref: from.ref, nodes: [from, ...nodes], edges: nodes.map((to) => link(from, to)), pages: [] } }) as unknown as AskRunResult;
+  // the view holds an element of the ranked type with a larger amount, which no read listed
+  const view = assembleText({ nodes: [node(V.anchor, 'A-9', 30)], edges: [], unresolved: 0, omitted: false } as never);
+  // the reads of the recorded turn: the view, then an intent of the folder that lists the elements of the type under a lower-bound count, then the expansion of the largest, which lists that element again
+  const intent = askRunResultSchema.parse({ templateId: 'file-query', result: { status: 'ok', intent: 'byId', count: { quality: 'lowerBound', value: 150, scope: 'rows' }, nodes: [hub, low, high], edges: [link(low, hub), link(high, hub)], notices: [], warnings: [] } });
+  const { assembled, readKeys } = assembleResults([{ tool: 'byId', result: intent }, { tool: 'expand', result: expand(high, [owner]) }], view);
+  const keyOf = (title: string): string => [...assembled.keys].find(([, held]) => held.title === title)?.[0] ?? '';
+  const [lowKey, highKey, hubKey] = [keyOf(`${V.anchor} A-1`), keyOf(`${V.anchor} A-2`), keyOf(`${V.other} H-1`)];
+  // a key of the view holds no title: it is found by the element's ID
+  const viewKey = [...assembled.keys].find(([, held]) => (held.ref as { stableId?: string }).stableId === 'A-9')?.[0] ?? '';
+  const linkKeys = [...assembled.keys].filter(([, held]) => held.kind === 'relationship').map(([key]) => key);
+  const checkable = checkedTextOf(assembled);
+  const text = { ...checkable, keys: new Map([...checkable.keys, ...readKeys.map((key) => [key, true] as const)]), readKeys: new Set(readKeys) };
+  const ranked = (id: string, amount: number) => `Among the ${plural} in the read, ${V.anchor} ${id} has the largest amountValue, ${amount}.`;
+  const judged = (sentence: string, cites: string[]) => judgeCheck.inline({ sentences: [{ text: sentence, cites }], text });
+
+  it('is set up as the turn it comes from: both reads list the ranked element', () => {
+    expect([lowKey, highKey, hubKey, viewKey]).not.toContain('');
+    expect(assembled.readElements?.get('s1')).toEqual(expect.arrayContaining([lowKey, highKey]));
+    expect(assembled.readElements?.get('s2')).toContain(highKey);
+  });
+
+  it.each([
+    ['the elements of the type and the read’s line', () => [lowKey, highKey, 's1']],
+    ['every element and relationship the read listed, and its line', () => [hubKey, lowKey, highKey, ...linkKeys.slice(0, 2), 's1']],
+    // as with one read alone: what is on screen may be cited beside what the read listed
+    ['the elements on screen beside what the read listed, and its line', () => [viewKey, lowKey, highKey, 's1']],
+  ])('is judged over the read whose line it cites, citing %s', (_name, cites) => {
+    expect(judged(ranked('A-2', 20), cites())).toMatchObject({ removed: 0 });
+  });
+
+  it.each([
+    ['names the smaller element of the cited read', () => ranked('A-1', 10), () => [lowKey, highKey, 's1']],
+    ['cites the second read’s line and ranks over the first read’s elements', () => ranked('A-1', 10), () => [lowKey, highKey, 's2']],
+    ['cites the second read’s line and names an element the second read does not hold', () => ranked('A-1', 10), () => [lowKey, 's2']],
+    ['cites the second read’s line, the first read’s elements and those on screen', () => ranked('A-2', 20), () => [viewKey, lowKey, highKey, 's2']],
+    ['cites both reads’ lines', () => ranked('A-2', 20), () => [lowKey, highKey, 's1', 's2']],
+    ['cites neither read’s line', () => ranked('A-2', 20), () => [lowKey, highKey]],
+  ])('is still removed when it %s', (_name, sentence, cites) => {
+    expect(judged(sentence(), cites())).toMatchObject({ removed: 1 });
   });
 });
 

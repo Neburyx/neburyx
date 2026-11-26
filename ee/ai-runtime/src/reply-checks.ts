@@ -607,7 +607,8 @@ function readLimited(spoken: string): boolean {
 
 /**
  * A sentence that limits itself to a read (`in the read`, `the read shows`) and cites every element of the type that the read listed is about what that read listed: a ranking or a comparison of it is judged over those elements,
- * not over the elements of the type that other reads and the view hold. Only when one read does so: with two, the read the sentence means is not known.
+ * not over the elements of the type that other reads and the view hold. Only when one read does so. With more, the read the sentence means is the one whose line it cites, if it cites exactly one of their lines and no element of the
+ * type that another of them listed and that one did not (an expansion lists the element it started from again, so a read that ranked an element is joined by the one that read on from it); otherwise it is not known.
  */
 function readScope(sentence: SummarySentence, assembled: CheckedText, type: string): Scope | undefined {
   const types = assembled.elementTypes;
@@ -619,10 +620,15 @@ function readScope(sentence: SummarySentence, assembled: CheckedText, type: stri
   const limited = readLimited(spoken);
   const matching = [...(assembled.readElements ?? [])].flatMap(([read, listed]) => {
     const members = listed.filter((key) => types.get(key) === type);
-    return /^s\d+$/u.test(read) && members.length > 0 && members.every((key) => cited.has(key)) && limited ? [members] : [];
+    return /^s\d+$/u.test(read) && members.length > 0 && members.every((key) => cited.has(key)) && limited ? [{ read, members }] : [];
   });
   const [only] = matching;
-  return matching.length === 1 && only !== undefined ? { type, keys: only } : undefined;
+  if (matching.length < 2) return only === undefined ? undefined : { type, keys: only.members };
+  const named = matching.filter(({ read }) => cited.has(read));
+  const [meant] = named;
+  if (meant === undefined || named.length > 1) return undefined;
+  const ofAnother = matching.some(({ members }) => members.some((key) => cited.has(key) && !meant.members.includes(key)));
+  return ofAnother ? undefined : { type, keys: meant.members };
 }
 
 /** The set a sentence limits a ranking or a comparison of the elements of a type to, when it does so in a way that can be checked. */
