@@ -34,7 +34,7 @@ for (const [name, path] of PAGES) {
     test('has the sidebar, brand and navigation of the frames', async ({ page }) => {
       const height = page.viewportSize()?.height ?? 0;
       await expectBox('sidebar', page.locator('aside.sidebar'), { x: 0, y: 0, width: 208, height });
-      expect(await styleOf(page.locator('aside.sidebar'), ['padding-top', 'padding-right', 'padding-bottom', 'padding-left']), 'sidebar padding').toEqual({ 'padding-top': '32px', 'padding-right': '16px', 'padding-bottom': '24px', 'padding-left': '16px' });
+      expect(await styleOf(page.locator('aside.sidebar'), ['padding-top', 'padding-right', 'padding-bottom', 'padding-left']), 'sidebar padding').toEqual({ 'padding-top': '32px', 'padding-right': '16px', 'padding-bottom': '17px', 'padding-left': '16px' });
       await expectBox('brand', page.locator('.brand'), { x: 16, y: 32, width: 176, height: 29 });
       const items = page.locator('aside.sidebar nav a');
       // Frame 5a lists Home, Investigations, Assistant, Patterns and Sources, in that order, 40 px high and 48 px apart from y 101.
@@ -50,11 +50,11 @@ for (const [name, path] of PAGES) {
 
     test('keeps the identity block anchored to the bottom, with one line and no edition line', async ({ page }) => {
       const divider = page.locator('.sidebar-bottom section').last();
-      expect(Math.abs((await fromBottom(page, divider)) - 62), 'the divider above the identity').toBeLessThanOrEqual(APPROXIMATE);
+      expect(Math.abs((await fromBottom(page, divider)) - 48), 'the divider above the identity').toBeLessThanOrEqual(APPROXIMATE);
       const lines = divider.locator('p');
       await expect(lines).toHaveCount(1);
       await expect(lines).toHaveText('Local workspace');
-      expect(Math.abs((await fromBottom(page, lines.nth(0))) - 41), 'the identity line').toBeLessThanOrEqual(APPROXIMATE);
+      expect(Math.abs((await fromBottom(page, lines.nth(0))) - 34), 'the identity line').toBeLessThanOrEqual(APPROXIMATE);
       await expect(page.getByText(/edition/i)).toHaveCount(0);
     });
 
@@ -83,4 +83,27 @@ test('a long source name wraps in the sidebar line and moves nothing else', asyn
   await expectBox('the first navigation item', page.locator('aside.sidebar nav a').first(), { x: 16, y: 101, width: 176, height: 40 });
   await expectBox('heading', page.locator('h1'), { x: 248, y: 40 });
   await expectNoScroll('the sidebar', page.locator('aside.sidebar'));
+});
+
+// frames F1 and F2a: the box of a failed read of the sources ends 12 px above the divider, and the one of a failed read of the account 12 px above the bottom of the window
+test('places the failure boxes of the sidebar as the frames draw them', async ({ page }) => {
+  const bottomOf = async (selector: string): Promise<number> => {
+    const box = await boxOf(page.locator(selector));
+    return (page.viewportSize()?.height ?? 0) - box.y - box.height;
+  };
+  await page.route((url) => url.pathname === '/v1/sources', (route) => route.abort());
+  await page.goto('/investigations');
+  await expect(page.locator('.sidebar-bottom .failure-box')).toBeVisible();
+  const divider = await boxOf(page.locator(".sidebar section[aria-label='Identity']"));
+  const source = await boxOf(page.locator('.sidebar-bottom .failure-box'));
+  expect(Math.abs((page.viewportSize()?.height ?? 0) - divider.y - 48), 'the divider').toBeLessThanOrEqual(1);
+  expect(Math.abs(divider.y - source.y - source.height - 12), 'the box of the sources above the divider').toBeLessThanOrEqual(1);
+  await page.unroute((url) => url.pathname === '/v1/sources');
+  await page.route((url) => url.pathname === '/v1/me', (route) => route.abort());
+  await page.goto('/investigations');
+  const account = ".sidebar section[aria-label='Identity'] > .failure-box";
+  await expect(page.locator(account)).toBeVisible();
+  expect(Math.abs((await bottomOf(account)) - 12), 'the box of the account above the bottom').toBeLessThanOrEqual(1);
+  const top = await boxOf(page.locator(".sidebar section[aria-label='Identity']"));
+  expect(Math.abs((await boxOf(page.locator(account))).y - top.y - 14), 'the box under the divider').toBeLessThanOrEqual(1);
 });

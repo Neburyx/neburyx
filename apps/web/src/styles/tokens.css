@@ -114,6 +114,10 @@
   --space-40: 40px;
 
   --sidebar-width: 208px;
+  --sidebar-padding-bottom: 17px;
+  --sidebar-identity-padding: 13px;
+  --sidebar-help-trim: 5px;
+  --sidebar-failure-drop: 5px;
   --rail-width: 56px;
   --rail-item-size: 40px;
   --header-height: 48px;

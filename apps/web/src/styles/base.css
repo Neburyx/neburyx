@@ -50,7 +50,7 @@ nav ul {
   gap: var(--space-24);
   min-width: 0;
   height: var(--full-height);
-  padding: var(--space-32) var(--space-16) var(--space-24);
+  padding: var(--space-32) var(--space-16) var(--sidebar-padding-bottom);
   overflow-x: hidden;
   overflow-y: auto;
   overflow-wrap: anywhere;
@@ -71,7 +71,11 @@ nav ul {
 .sidebar-bottom {
   display: flex;
   flex-direction: column;
-  gap: var(--space-20);
+  gap: var(--space-12);
+}
+
+.sidebar-bottom > .help-menu {
+  margin-bottom: calc(-1 * var(--sidebar-help-trim));
 }
 
 .sidebar-bottom section {
@@ -80,8 +84,13 @@ nav ul {
 }
 
 .sidebar section[aria-label='Identity'] {
-  padding-top: var(--space-20);
+  padding-top: var(--sidebar-identity-padding);
   border-top: var(--border-width) solid var(--color-border);
+}
+
+/* the box of a failed account read stands lower than the caption it replaces, as the design draws it */
+.sidebar section[aria-label='Identity'] > .failure-box {
+  margin-bottom: calc(-1 * var(--sidebar-failure-drop));
 }
 
 .sidebar section[aria-label='Identity'] > p:first-child {
