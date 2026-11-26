@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { z } from 'zod';
-import { DEFAULT_TOOL_NAMES, runAgent, type AgentControl, type AgentTool } from './agent-run.js';
+import { DEFAULT_TOOL_NAMES, SUPERSEDED_TEXT, runAgent, type AgentControl, type AgentTool } from './agent-run.js';
 
 const reader = (log: string[]): AgentTool => ({ name: 'read_view', description: 'Reads the view.', schema: z.object({}), run: () => { log.push('read'); return Promise.resolve('1 element'); } });
 const answerTool = (log: string[]): AgentTool => ({ name: 'answer', description: 'Gives the answer.', schema: z.object({ text: z.string() }), run: (args) => { log.push(`answer:${String(args['text'])}`); return Promise.resolve('Checked.'); } });
@@ -114,6 +114,77 @@ describe('a request that does not fit', () => {
     expect(run.refused).toBe(true);
     expect(run.trimmed).toBe(false);
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe('a request that would not fit and holds earlier results the newest one repeats in full', () => {
+  const calling = (name: string, id: string) => new AIMessage({ content: '', tool_calls: [{ name, args: name === 'answer' ? { text: 'x' } : {}, id }] });
+  /** A run of reads that give these results in order, then an answer; what each model request held of the results, and the tools it offered. */
+  const runWith = async (results: string[], fits: (results: readonly string[], tools: string) => boolean) => {
+    const model = fakeModel();
+    results.forEach((_result, index) => model.respond(calling('read_view', `r${index}`)));
+    model.respond(calling('answer', 'a1')).respond(new AIMessage('Done.'));
+    const sent: { results: string[]; tools: string[] }[] = [];
+    const original = model.bindTools.bind(model);
+    model.bindTools = ((tools: Parameters<typeof original>[0]) => {
+      const bound = original(tools);
+      const names = tools.map((entry) => ('name' in entry ? String(entry.name) : '')).sort();
+      const invoke = bound.invoke.bind(bound);
+      bound.invoke = ((messages: Parameters<typeof invoke>[0], options?: Parameters<typeof invoke>[1]) => {
+        sent.push({ tools: names, results: (messages as { type: string; content: unknown }[]).filter((message) => message.type === 'tool').map((message) => String(message.content)) });
+        return invoke(messages, options);
+      }) as typeof bound.invoke;
+      return bound;
+    }) as typeof model.bindTools; // the double only records what it is bound and invoked with and delegates to the original
+    const control = controlOf();
+    const waiting = [...results];
+    const read: AgentTool = { name: 'read_view', description: 'Reads.', schema: z.object({}), run: () => Promise.resolve(waiting.shift() ?? '') };
+    const final = answerTool([]);
+    const takenBack: number[] = [];
+    const run = await runAgent({ ...base(control), maxCalls: 8, model, tools: [read, { ...final, run: (args) => ((control.stop = true), final.run(args)) }], beforeCall: (request) => fits(request.messages.slice(1).filter((text) => text !== ''), request.tools), onTrim: (kept) => takenBack.push(kept) });
+    return { run, sent, takenBack };
+  };
+  const size = (messages: readonly string[]): number => messages.join('').length;
+  const line = (letter: string) => letter.repeat(100);
+  const first = [line('a'), line('b')].join('\n');
+  const second = [line('a'), line('b'), line('c')].join('\n');
+
+  it('replaces the earlier result by a note that says its lines are repeated below, keeps every tool, takes no read back and counts the result', async () => {
+    const { run, sent, takenBack } = await runWith([first, second], (messages) => size(messages) < 450);
+    expect(sent.at(-1)).toEqual({ tools: ['answer', 'read_view'], results: [SUPERSEDED_TEXT, second] });
+    expect(run).toMatchObject({ trimmed: false, refused: false, stubbed: 1 });
+    expect(takenBack).toEqual([]);
+  });
+
+  it('changes nothing when everything fits, although the newest result repeats the earlier one', async () => {
+    const { run, sent } = await runWith([first, second], () => true);
+    expect(sent.at(-1)?.results).toEqual([first, second]);
+    expect(run.stubbed).toBe(0);
+  });
+
+  it.each([
+    ['one line differs', [line('a'), line('B'), line('c')].join('\n')],
+    ['one line is only a part of a line of the newest', [line('a'), line('b') + 'more', line('c')].join('\n')],
+    ['as many lines are held, but not the same ones', [line('c'), line('d'), line('e')].join('\n')],
+  ])('keeps an earlier result whole when %s, and leaves out the newest read as before', async (_name, newest) => {
+    const { run, sent, takenBack } = await runWith([first, newest], (messages) => size(messages) < 450);
+    expect(sent.at(-1)?.results).toEqual([first]);
+    expect(run).toMatchObject({ trimmed: true, stubbed: 0 });
+    expect(takenBack).toEqual([1]);
+  });
+
+  it('offers the final tool only when that is still needed after the note, and takes no read back', async () => {
+    const { run, sent } = await runWith([first, second], (messages, tools) => size(messages) < 450 && (size(messages) < 300 || tools.split('\n').length <= 1));
+    expect(sent.at(-1)).toEqual({ tools: ['answer'], results: [SUPERSEDED_TEXT, second] });
+    expect(run).toMatchObject({ trimmed: false, stubbed: 1 });
+  });
+
+  it('never points at lines that were left out: with the newest read dropped, the note stands only against the newest one that stays', async () => {
+    const third = [second, line('d'), line('e'), line('f'), line('g')].join('\n');
+    const { run, sent, takenBack } = await runWith([first, second, third], (messages) => size(messages) < 450);
+    expect(sent.at(-1)?.results).toEqual([SUPERSEDED_TEXT, second]);
+    expect(run).toMatchObject({ trimmed: true, stubbed: 1 });
+    expect(takenBack).toEqual([2]);
   });
 });
 

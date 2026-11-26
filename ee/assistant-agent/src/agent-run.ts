@@ -73,7 +73,12 @@ export interface AgentRun {
   readonly trimmed: boolean;
   /** That the model asked for a read of the run's own tools after the last call was kept for the final tool: the call limit cut its reading short. */
   readonly reserveRefused: boolean;
+  /** The number of read results that a request sent replaced by `SUPERSEDED_TEXT`, each counted once. */
+  readonly stubbed: number;
 }
+
+/** What stands in a request for an earlier read result that the newest one repeats line for line, in a request that would not fit with both. */
+export const SUPERSEDED_TEXT = 'The lines of this result are repeated in full in a later result below.';
 
 const END_TEXT = 'Done.';
 /** The graph steps one model call can take with deepagents' own middleware, and a few spare; the call limit, not the framework's recursion limit, ends a turn. */
@@ -99,6 +104,26 @@ function withoutNewestRead(messages: readonly BaseMessage[], finalTool: string):
   const last = groups.at(-1);
   if (groups.length < 2 || last === undefined) return undefined;
   return calls(messages[last] as BaseMessage).some((call) => call.name === finalTool) ? undefined : messages.slice(0, last);
+}
+
+/**
+ * The messages with every earlier read result replaced by a note, when each of its lines stands, whole and unchanged, in the newest read result; the results replaced, by the ID of their call. Nothing the model could cite
+ * leaves the request. The same array when there is nothing to replace.
+ */
+function withoutSupersededResults(messages: readonly BaseMessage[], finalTool: string): { readonly messages: readonly BaseMessage[]; readonly replaced: readonly string[] } {
+  const isRead = (message: BaseMessage): message is ToolMessage => message.type === 'tool' && message.name !== finalTool && typeof message.content === 'string';
+  const newest = messages.findLast(isRead);
+  if (newest === undefined) return { messages, replaced: [] };
+  const held = new Set((newest.content as string).split('\n'));
+  const replaced: string[] = [];
+  const out = messages.map((message) => {
+    if (message === newest || !isRead(message)) return message;
+    const text = message.content as string;
+    if (text.length <= SUPERSEDED_TEXT.length || !text.split('\n').every((line) => line === '' || held.has(line))) return message;
+    replaced.push(message.tool_call_id);
+    return new ToolMessage({ content: SUPERSEDED_TEXT, tool_call_id: message.tool_call_id, ...(message.name === undefined ? {} : { name: message.name }) });
+  });
+  return replaced.length === 0 ? { messages, replaced } : { messages: out, replaced };
 }
 
 const nameOf = (entry: unknown): string => (typeof entry === 'object' && entry !== null && 'name' in entry && typeof entry.name === 'string' ? entry.name : '');
@@ -145,6 +170,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
   let modelCalls = 0;
   let refused = false;
   let trimmed = false;
+  const stubbed = new Set<string>();
   let previousTools: string | undefined;
   // the number of reads run (the final tool is not one) when each model call started
   let readsRun = 0;
@@ -165,34 +191,36 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
       let sentMessages = request.messages;
       let sentTools = tools;
       if (!fitsWith(request.messages, tools)) {
-        // with the final tool only, then without the newest reads one at a time, until it fits; with no read left to drop, or the newest group an answer, the run ends
-        const finalOnly = request.tools.filter((entry) => nameOf(entry) === options.finalTool);
-        let shorter: BaseMessage[] | undefined = [...request.messages];
-        let groupsLeftOut = 0;
-        let keep = readsRun;
-        if (!fitsWith(shorter, finalOnly)) {
-          for (;;) {
-            const cut = withoutNewestRead(shorter ?? [], options.finalTool);
-            shorter = cut;
-            if (cut === undefined) break;
+        // first without the text of results the newest one repeats, with every tool; then with the final tool only, then without the newest reads one at a time, until it fits; with no read left to drop, or the newest group an answer, the run ends
+        let candidate = withoutSupersededResults(request.messages, options.finalTool);
+        if (candidate.replaced.length === 0 || !fitsWith(candidate.messages, tools)) {
+          const finalOnly = request.tools.filter((entry) => nameOf(entry) === options.finalTool);
+          let kept: BaseMessage[] = [...request.messages];
+          let groupsLeftOut = 0;
+          let keep = readsRun;
+          while (!fitsWith(candidate.messages, finalOnly)) {
+            const cut = withoutNewestRead(kept, options.finalTool);
+            if (cut === undefined) {
+              refused = true;
+              options.control.stop = true;
+              return new AIMessage(END_TEXT);
+            }
+            kept = cut;
             // the reads that stay are those that ran before the model call that made the oldest reply left out
             keep = startRan[startRan.length - 1 - groupsLeftOut] ?? keep;
             groupsLeftOut += 1;
-            if (fitsWith(cut, finalOnly)) break;
+            candidate = withoutSupersededResults(kept, options.finalTool);
           }
+          if (keep < readsRun) {
+            trimmed = true;
+            options.onTrim?.(keep);
+          }
+          options.control.answerOnly = true;
+          sentTools = finalOnly;
         }
-        if (shorter === undefined) {
-          refused = true;
-          options.control.stop = true;
-          return new AIMessage(END_TEXT);
-        }
-        if (keep < readsRun) {
-          trimmed = true;
-          options.onTrim?.(keep);
-        }
-        options.control.answerOnly = true;
-        sentMessages = shorter;
-        sentTools = finalOnly;
+        // an unchanged request stays the same array: only a changed history loses its thinking blocks
+        sentMessages = candidate.messages === request.messages ? request.messages : [...candidate.messages];
+        for (const id of candidate.replaced) stubbed.add(id);
       }
       modelCalls += 1;
       startRan.push(readsRun);
@@ -224,5 +252,5 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
     throw failure?.error ?? error;
   }
   if (failure !== undefined) throw failure.error;
-  return { offered, assembled, called, modelCalls, refused, trimmed, reserveRefused };
+  return { offered, assembled, called, modelCalls, refused, trimmed, reserveRefused, stubbed: stubbed.size };
 }

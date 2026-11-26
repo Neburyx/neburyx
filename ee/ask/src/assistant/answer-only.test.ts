@@ -40,8 +40,11 @@ describe('the checked answer tool is the only output', () => {
 
   it('cannot carry a text out of the run at all: the run result has no field for it (a field added for it fails here)', async () => {
     let keys: string[] = [];
-    const r = await rig({ reply: VIEW, agent: { model: fakeModel().respond(new AIMessage(TEXT)), onRun: (run) => (keys = Object.keys(run).sort()) } });
+    let stubbed: unknown;
+    const r = await rig({ reply: VIEW, agent: { model: fakeModel().respond(new AIMessage(TEXT)), onRun: (run) => ((keys = Object.keys(run).sort()), (stubbed = run.stubbed)) } });
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(keys).toEqual(['assembled', 'called', 'modelCalls', 'offered', 'refused', 'reserveRefused', 'trimmed']);
+    expect(keys).toEqual(['assembled', 'called', 'modelCalls', 'offered', 'refused', 'reserveRefused', 'stubbed', 'trimmed']);
+    // a count: it can hold no text
+    expect(stubbed).toBe(0);
   });
 });

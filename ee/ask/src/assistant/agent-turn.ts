@@ -466,6 +466,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     try {
       const ran = await runAgent({ model, system, user, tools, control, maxCalls: allowedCalls, finalTool: ANSWER_TOOL, signal, beforeCall, onTrim: takeBack });
       options.onRun?.(ran);
+      if (ran.stubbed > 0) noteTurn({ resultsStubbed: ran.stubbed });
       if (ran.refused || ran.trimmed) limited ??= 'input';
       // an answer is marked with the call limit only when the limit cut the reading short; one given on the last call with no read wanted is not
       else if (ran.reserveRefused) limited ??= 'calls';

@@ -160,6 +160,8 @@ export const assistantTurnAuditDetailSchema = z.strictObject({
   tableRowsNotShown: wholeCount.optional(),
   /** How many cites the server added to the rows shown: the ends of the relationships they cite (absent when none); never a key or a title. */
   tableCitesAdded: wholeCount.optional(),
+  /** How many read results a request of the turn replaced by a note, because it would not have fitted and the newest result repeats them line for line (absent when none): a count only. */
+  resultsStubbed: wholeCount.optional(),
   /** An answer with lists: how many items they show and how many the checks removed or the total of 12 cut (the last absent when none); never an item or a label. */
   listItemsShown: wholeCount.optional(),
   listItemsDropped: wholeCount.optional(),

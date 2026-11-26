@@ -65,6 +65,7 @@ interface TurnNotes {
   tableRowsLeftOut?: number;
   listItemsDropped?: number;
   tableCitesAdded?: number;
+  resultsStubbed?: number;
   /** That the reads being made are made again after a decision; and the record of the waiting turn this turn goes on from. */
   replaying?: boolean;
   resumes?: string;
@@ -95,6 +96,8 @@ export interface TurnNote {
   readonly listItemsDropped?: number;
   /** How many cites the server added to the rows of the tables shown, the ends of the relationships they cite: a count and nothing of them. */
   readonly tableCitesAdded?: number;
+  /** How many read results a request of the turn replaced by a note that their lines are repeated below: a count and nothing of them. */
+  readonly resultsStubbed?: number;
 }
 
 /** Notes what the route of a turn knows; outside a turn it does nothing. */
@@ -113,6 +116,7 @@ export function noteTurn(change: TurnNote): void {
     if (change.tableRowsLeftOut !== undefined) notes.tableRowsLeftOut = change.tableRowsLeftOut;
     if (change.listItemsDropped !== undefined) notes.listItemsDropped = change.listItemsDropped;
     if (change.tableCitesAdded !== undefined) notes.tableCitesAdded = change.tableCitesAdded;
+    if (change.resultsStubbed !== undefined) notes.resultsStubbed = change.resultsStubbed;
   });
 }
 
@@ -328,6 +332,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(ending.list === undefined ? {} : { listItemsShown: ending.list.shown, ...(ending.list.dropped === undefined ? {} : { listItemsDropped: ending.list.dropped }) }),
     ...(ending.table === undefined ? {} : { form: 'table' as const, tableRowsShown: ending.table.shown, ...(ending.table.dropped === undefined ? {} : { tableRowsDropped: ending.table.dropped }), ...(ending.table.notShown === undefined ? {} : { tableRowsNotShown: ending.table.notShown }), ...((notes.tableCitesAdded ?? 0) === 0 ? {} : { tableCitesAdded: notes.tableCitesAdded }) }),
     ...(notes.selectedElements === undefined || notes.selectedElements === 0 ? {} : { selectedElements: notes.selectedElements }),
+    ...(notes.resultsStubbed === undefined ? {} : { resultsStubbed: notes.resultsStubbed }),
     ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),
     modelCalls: notes.calls + (notes.summaryCalls ?? 0),
     ...(notes.calls + (notes.summaryCalls ?? 0) > 0 ? { propertyValuesSent: notes.propertyValuesSent === true } : {}),

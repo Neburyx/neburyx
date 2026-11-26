@@ -9,6 +9,7 @@ import { createMemoryAssistantRunStore } from './run-store.js';
 import { OFFERED_LABEL_WORDS, labelsHold, withEndsCited } from './table.js';
 import { READ_VIEW_FIRST, answerDescription } from './agent-turn.js';
 import { assembleResults } from './tool-answer.js';
+import { SUPERSEDED_TEXT } from '@neburyx/ee-assistant-agent';
 import { assembleText } from '../case-summary/assemble.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 
@@ -200,6 +201,48 @@ describe('a ranking over one read, once a second read starts from the ranked ele
     ['cites neither read’s line', () => ranked('A-2', 20), () => [lowKey, highKey]],
   ])('is still removed when it %s', (_name, sentence, cites) => {
     expect(judged(sentence(), cites())).toMatchObject({ removed: 1 });
+  });
+});
+
+describe('a turn whose next read would not fit with the earlier results whole', () => {
+  const body = { ...VIEW_BODY, message: `Which ${V.anchor} is linked to the first of them?` };
+  const cited = { text: `${V.title} A-1 is listed.`, cites: ['n1'] };
+  const many = Array.from({ length: 40 }, (_, index) => nodeOf(`A-${index + 1}`));
+  const keys = many.map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId]));
+  /** The view, then an intent, then an answer that cites a line of the newest result, under one input limit. */
+  const turn = async (maxInputTokens: number) => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'byId', args: { id: 'A-1' } }]).respondWithTools([sentences(cited)]).respond(new AIMessage('Done.'));
+    const runStore = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model, maxInputTokens }, runStore, viewNodes: many });
+    const given = await answerOf(r.route.handler(r.request({ ...body, viewElementKeys: keys })));
+    for (let step = 0; step < 20; step += 1) await Promise.resolve();
+    const detail = (r.events.find((event) => event.action === 'assistant.turn.closed')?.detail as { turn: Record<string, unknown> }).turn;
+    const answering = model.calls.at(-1)?.messages.filter((message) => message.type === 'tool').map((message) => String(message.content)) ?? [];
+    return { given, detail, answering, sent: model.calls.map((call) => call.messages.map((message) => String(message.content))) };
+  };
+  const whole = (result: Awaited<ReturnType<typeof turn>>) => result.given.status === 'answered' && (result.given as { stoppedAt?: string }).stoppedAt === undefined;
+
+  it('answers from the newest result with the earlier one replaced by the note, a sentence citing a key of the newest is kept, and the closing event counts one', async () => {
+    // the smallest limit under which the turn is answered with nothing cut, whatever the instructions weigh
+    let [low, high] = [1_000, 100_000];
+    while (high - low > 1) {
+      const middle = Math.floor((low + high) / 2);
+      if (whole(await turn(middle))) high = middle;
+      else low = middle;
+    }
+    const tight = await turn(high);
+    expect(tight.given).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: cited.text, cites: ['n1'] }] }] });
+    expect(tight.answering[0]).toBe(SUPERSEDED_TEXT);
+    expect(tight.answering[1]).toContain(`${V.title} A-40`);
+    expect(tight.detail['resultsStubbed']).toBe(1);
+    expect(JSON.stringify(tight.detail)).not.toContain('A-40');
+  });
+
+  it('sends a turn that fits as it was, and counts nothing', async () => {
+    const fitting = await turn(100_000);
+    expect(fitting.answering.join('')).not.toContain(SUPERSEDED_TEXT);
+    expect(fitting.answering[1]).toContain(fitting.answering[0]?.split('\n').find((line) => line.startsWith('n40 ')) ?? 'no line');
+    expect(fitting.detail['resultsStubbed']).toBeUndefined();
   });
 });
 
