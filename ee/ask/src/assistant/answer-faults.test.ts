@@ -126,6 +126,31 @@ describe('what the loop is given about the elements on screen', () => {
   });
 });
 
+describe('a question that needs a second read from the result of the first', () => {
+  const body = { ...VIEW_BODY, message: `Which ${V.anchor} is linked to the first of them?` };
+  const first = { name: 'byId', args: { id: 'A-1' } };
+  const unread = { text: `${V.title} A-1 is listed.`, cites: ['r1'] };
+
+  // how the loop stands today: nothing asks for the second read, so an answer that stops after the first is judged and shown
+  it('accepts an answer made after the first read, although no second read was made and a step was left', async () => {
+    const model = fakeModel().respondWithTools([first]).respondWithTools([sentences(unread)]).respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model } });
+    const given = await answerOf(r.route.handler(r.request(body)));
+    expect(given).toMatchObject({ status: 'answered', steps: 1, blocks: [{ kind: 'sentences', sentences: [{ text: unread.text }] }] });
+    const told = model.calls.flatMap((call) => call.messages).filter((message) => message.type === 'tool').map((message) => String(message.content));
+    expect(told).not.toContain(READ_VIEW_FIRST);
+    expect((given as { reads: unknown[] }).reads).toEqual([expect.objectContaining({ tool: 'byId', read: true })]);
+  });
+
+  it('refuses the same turn only when its answer comes before any read, which is the one read it asks for', async () => {
+    const model = fakeModel().respondWithTools([sentences(unread)]).respondWithTools([first]).respondWithTools([sentences(unread)]).respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model } });
+    const given = await answerOf(r.route.handler(r.request(body)));
+    expect(model.calls.at(-1)?.messages.map((message) => String(message.content))).toContain(READ_VIEW_FIRST);
+    expect(given).toMatchObject({ status: 'answered', steps: 1 });
+  });
+});
+
 describe('the line of a folded relationship', () => {
   const lineOf = (memberCount: { quality: 'exact' | 'lowerBound'; value: number }) => {
     const base = expandResult();
