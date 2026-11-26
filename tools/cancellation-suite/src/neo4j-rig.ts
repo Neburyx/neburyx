@@ -13,9 +13,17 @@ export interface Neo4jRig extends Rig {
   readonly forwarder: Forwarder;
   /** Makes every later expansion read run the slow read of the Neo4j tests in place of the expansion's statement (the adapter, the session and the server's timeout are the real ones; the statement is not the expand template). */
   slow(on: boolean): void;
+  /**
+   * Runs `work` with every read it sends under PLANNING_BUDGET_MS in place of the source's budget; the adapter, login, database and statement are those of any other read,
+   * so the server then holds the plan of each statement for the reads after it (it keeps plans for each database).
+   */
+  planning<T>(work: () => Promise<T>): Promise<T>;
 }
 
-/** The most failures a mapping may name. A rig with a budget of its own spends timeouts before its case (a first read of each statement, forced reads), and they must not decide whether a later read of the case is admitted; no case of these rigs tests the breaker. */
+/** The server-side budget of a read that plans a statement, far above the 1.3 to 2.2 s planning has taken on the dev server. */
+const PLANNING_BUDGET_MS = 10_000;
+
+/** The most failures a mapping may name. A rig with a budget of its own spends timeouts on forced reads, in its set-up and its case, and they must not decide whether a later read of the case is admitted; no case of these rigs tests the breaker. */
 const BREAKER_OUT_OF_REACH = 100;
 
 const none = (): never => {
@@ -34,18 +42,28 @@ export async function startNeo4jRig(options: { readonly size: number; readonly t
     const source = sourceFor(server, { uri: forwarder.url, entities: ENTITIES, relationships: RELATIONSHIPS, ...(options.timeoutMs === undefined ? {} : { budgets: { timeout_ms: options.timeoutMs, breaker_failures: BREAKER_OUT_OF_REACH } }) });
     const inner = createNeo4jExecutor({ sources: [source], env: envFor(server), logger: { warn: () => undefined } });
     let slowOn = false;
+    let planningOn = false;
     const calls: ExecuteCall[] = [];
     const executor = {
       calls,
       execute: (call: ExecuteCall): Promise<ExecuteOutcome> => {
         calls.push(call);
-        return inner.execute(slowOn && (call.templateId === EXPAND_NEIGHBORS_ID || call.templateId === 'pattern' || call.templateId === 'pattern-count') ? { ...call, cypher: SLOW_READ, parameters: {}, integerParameters: [] } : call);
+        const sent = planningOn ? { ...call, timeoutMs: PLANNING_BUDGET_MS } : call;
+        return inner.execute(slowOn && (call.templateId === EXPAND_NEIGHBORS_ID || call.templateId === 'pattern' || call.templateId === 'pattern-count') ? { ...sent, cypher: SLOW_READ, parameters: {}, integerParameters: [] } : sent);
       },
     };
     const stopAll = (): Promise<void> => runAll([() => inner.close(), () => forwarder?.stop(), () => server.stop()]);
     rig = await startOn({ mapping: { sources: [source] }, executor, hub: ref(source.id, 'hub', hubOf(options.size)), nextRead: none, drain: none, time: { get now() { return Date.now(); }, set now(_value: number) { /* real time */ } }, stop: stopAll }, {});
     const started = rig;
-    return Object.assign(Object.create(Object.getPrototypeOf(started) as object) as Rig, started, { server, forwarder, slow: (on: boolean) => void (slowOn = on) }) as Neo4jRig;
+    const planning = async <T>(work: () => Promise<T>): Promise<T> => {
+      planningOn = true;
+      try {
+        return await work();
+      } finally {
+        planningOn = false;
+      }
+    };
+    return Object.assign(Object.create(Object.getPrototypeOf(started) as object) as Rig, started, { server, forwarder, slow: (on: boolean) => void (slowOn = on), planning }) as Neo4jRig;
   } catch (error) {
     await runAll([() => rig?.close(), () => forwarder?.stop(), () => server.stop()]);
     throw error;

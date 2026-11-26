@@ -18,8 +18,8 @@ let rig: Neo4jRig;
 
 beforeAll(async () => {
   rig = await startNeo4jRig({ size: 10, timeoutMs: BUDGET_MS });
-  // the statement of the ordinary reads is planned before one is timed or held to the budget
-  await warmUp('the expansion', expandOnce);
+  // the statement of the ordinary reads is planned, outside the budget, before one is timed or held to it
+  await rig.planning(() => warmUp('the expansion', expandOnce));
   const read = await timeOneRead(expandOnce);
   const lag = await serverLag(rig.server.admin, async () => {
     rig.slow(true);

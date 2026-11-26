@@ -23,9 +23,11 @@ function ownRig(timeoutMs: number | undefined, size: number): void {
     rig = await startNeo4jRig({ size, timeoutMs });
     // an ordinary read and the lag of the server set the ceiling of a forced timeout; the outage case forces none and counts its own requests
     if (timeoutMs !== undefined) {
-      // every statement a case later reads as an ordinary one is planned before the timed part
-      await warmUp('the expansion', expandOnce);
-      await warmUp("the expansion in the store's window", expandAsTheStore);
+      // every statement a case later reads as an ordinary one is planned, outside the budget, before the timed part
+      await rig.planning(async () => {
+        await warmUp('the expansion', expandOnce);
+        await warmUp("the expansion in the store's window", expandAsTheStore);
+      });
       warmed = statements();
       const read = await timeOneRead(expandOnce);
       const lag = await serverLag(rig.server.admin, async () => {

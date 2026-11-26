@@ -81,33 +81,20 @@ describe('the timings', () => {
 });
 
 describe('the warm-up of a statement', () => {
-  const timedOut = { ok: false, failure: { code: 'QUERY_TIMEOUT' } };
-  const answering = (...answers: readonly unknown[]) => {
+  const answering = (answer: unknown) => {
     const calls = { count: 0 };
-    return { calls, read: () => Promise.resolve(answers[calls.count++]) };
+    return { calls, read: () => ((calls.count += 1), Promise.resolve(answer)) };
   };
 
-  it('stops at the first read that succeeds', async () => {
+  it('is one read when it succeeds', async () => {
     const { calls, read } = answering({ ok: true });
     await warmUp('the expansion', read);
     expect(calls.count).toBe(1);
   });
 
-  it.each([[1, [timedOut, { ok: true }]], [4, [timedOut, timedOut, timedOut, timedOut, { ok: true }]]])('reads again after %d timeout(s), until one succeeds', async (_timeouts, answers) => {
-    const { calls, read } = answering(...answers);
-    await warmUp('the expansion', read);
-    expect(calls.count).toBe(answers.length);
-  });
-
-  it('fails after five reads that all timed out, naming the read', async () => {
-    const { calls, read } = answering(timedOut, timedOut, timedOut, timedOut, timedOut, { ok: true });
-    await expect(warmUp('the expansion', read)).rejects.toThrow('the warm-up of the expansion did not succeed in 5 reads (each "QUERY_TIMEOUT")');
-    expect(calls.count).toBe(5);
-  });
-
-  it('fails at once on a failure that is no timeout, naming its code', async () => {
-    const { calls, read } = answering({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE' } }, { ok: true });
-    await expect(warmUp('the expansion', read)).rejects.toThrow('the warm-up of the expansion failed on read 1 ("SOURCE_UNAVAILABLE")');
+  it.each(['QUERY_TIMEOUT', 'SOURCE_UNAVAILABLE'])('fails on a read that answered %s, naming the read and the code, without another read', async (code) => {
+    const { calls, read } = answering({ ok: false, failure: { code } });
+    await expect(warmUp('the expansion', read)).rejects.toThrow(`the warm-up of the expansion failed ("${code}")`);
     expect(calls.count).toBe(1);
   });
 

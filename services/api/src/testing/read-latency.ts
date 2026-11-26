@@ -14,21 +14,13 @@ function failureOf(answer: unknown): string | undefined {
   return 'failure' in answer && typeof answer.failure === 'object' && answer.failure !== null && 'code' in answer.failure ? JSON.stringify(answer.failure.code) : 'unknown';
 }
 
-const WARM_UP_ATTEMPTS = 5;
-const TIMED_OUT = JSON.stringify('QUERY_TIMEOUT');
-
 /**
- * Runs `read` until it succeeds, at most five times (runs on the dev server have needed three), so that the server has planned its statement before a case holds a read of it to a budget:
- * on the dev server the first read of a statement on a new database spent 1.3 to 1.8 s in planning, over a 1,000 ms budget.
- * Only a timeout is read again; another failure, an error the read throws, or five timeouts are an error.
+ * One read of a statement before any read of it is held to a case's budget, so that the server has planned it: on the dev server planning took 1.3 to 2.2 s, over a 1,000 ms budget.
+ * The caller runs it under a budget that planning fits in. A read that does not succeed is an error.
  */
 export async function warmUp(what: string, read: () => Promise<unknown>): Promise<void> {
-  for (let attempt = 1; attempt <= WARM_UP_ATTEMPTS; attempt += 1) {
-    const failure = failureOf(await read());
-    if (failure === undefined) return;
-    if (failure !== TIMED_OUT) throw new Error(`the warm-up of ${what} failed on read ${attempt} (${failure})`);
-  }
-  throw new Error(`the warm-up of ${what} did not succeed in ${WARM_UP_ATTEMPTS} reads (each ${TIMED_OUT})`);
+  const failure = failureOf(await read());
+  if (failure !== undefined) throw new Error(`the warm-up of ${what} failed (${failure})`);
 }
 
 /** Times one ordinary read in ms, at least 1; a read that answers `{ ok: false }` is an error, since its time says nothing of a read. */
