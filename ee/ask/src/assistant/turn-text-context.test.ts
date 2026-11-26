@@ -260,7 +260,7 @@ const sequence = (...replies: ReturnType<typeof ok>[]) => {
   return () => replies[Math.min(next++, replies.length - 1)] ?? DONE;
 };
 /** The input limit under which the loop's own input is over the limit only with the text of the seeded turn. */
-const LIMIT = 5692;
+const LIMIT = 5854;
 const heavyFor = (heavy: string) => (continuing: boolean, asked: unknown) => (JSON.stringify(asked).includes(heavy) && !continuing ? { status: 'ok' as const, result: heavyResult() } : { status: 'ok' as const, result: okResult() });
 
 describe('the stored text and the loop that is really run', () => {

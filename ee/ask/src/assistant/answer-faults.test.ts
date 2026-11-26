@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
 import { askRunResultSchema, type AiNotesCapability, type AskRunResult } from '@neburyx/contracts';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, VIEW_KEYS, V, answerOf, expandResult, nodeOf, ok, rig, routeAsk } from '../testing/assistant-rig.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
-import { READ_VIEW_FIRST } from './agent-turn.js';
+import { READ_VIEW_FIRST, answerDescription } from './agent-turn.js';
 import { assembleResults } from './tool-answer.js';
 
 afterAll(removeAskFolders);
@@ -131,16 +133,42 @@ describe('the line of a folded relationship', () => {
   });
 });
 
-describe('a table that lists some of the elements read', () => {
-  it('is accepted, with only the coverage line to say how many were left out', async () => {
-    const nodes = ['A-1', 'A-2', 'A-3', 'A-4', 'A-5'].map((id) => nodeOf(id));
-    const model = fakeModel()
-      .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([answer([{ kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} A-2`], cites: ['n2'] }] }])])
-      .respond(new AIMessage('Done.'));
-    const r = await rig({ reply: TABLE, agent: { model }, viewNodes: nodes });
-    const given = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: nodes.map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId])) })));
-    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { rows: [{ cells: [`${V.title} A-2`] }] } }], coverage: { summary: expect.stringMatching(/^1 of 5 .+ read shown · exact$/u) as string } });
+describe('a list of connected elements', () => {
+  const many = (count: number) => Array.from({ length: count }, (_, index) => nodeOf(`A-${String(index + 1).padStart(3, '0')}`));
+  const keysOf = (nodes: readonly ReturnType<typeof nodeOf>[]) => nodes.map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId]));
+  const turn = async (count: number, block: unknown, reply = TABLE) => {
+    const nodes = many(count);
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([answer([block])]).respond(new AIMessage('Done.'));
+    const r = await rig({ reply, agent: { model, maxInputTokens: 200_000 }, viewNodes: nodes });
+    return { given: await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: keysOf(nodes) }))) };
+  };
+  const row = (index: number) => ({ cells: [`${V.title} A-${String(index + 1).padStart(3, '0')}`], cites: [`n${index + 1}`] });
+
+  it('accepts a table of some of the elements and says how many of them it shows', async () => {
+    const { given } = await turn(5, { kind: 'table', columns: ['Element'], rows: [row(1)] });
+    expect(given).toMatchObject({ status: 'answered', coverage: { summary: expect.stringMatching(/^1 of 5 .+ read shown · exact$/u) as string } });
+  });
+
+  it('cuts a table of more rows than it shows and says how many are not shown', async () => {
+    const { given } = await turn(30, { kind: 'table', columns: ['Element'], rows: Array.from({ length: 30 }, (_, index) => row(index)) });
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { moreNotShown: 5 } }], coverage: { summary: expect.stringMatching(/^25 of 30 .+ read shown · exact$/u) as string } });
+  });
+
+  it('says that the count is not known when the rows are of no set it can count', async () => {
+    const { given } = await turn(3, { kind: 'table', columns: ['Element'], rows: [row(0), row(0)] });
+    expect(given).toMatchObject({ status: 'answered', coverage: { summary: expect.stringContaining('the count is not known') as string } });
+  });
+
+  it('shows no more than the items a list may hold and says how many of the elements the answer cites', async () => {
+    const items = Array.from({ length: 14 }, (_, index) => ({ text: `${V.title} A-${String(index + 1).padStart(3, '0')} is in view.`, cites: [`n${index + 1}`] }));
+    const { given } = await turn(14, { kind: 'list', items: items.slice(0, 12) }, VIEW);
+    expect(given).toMatchObject({ status: 'answered', coverage: { summary: 'The answer cites 12 of the 14 elements the reads returned.' } });
+  });
+
+  it('tells the model, in the table rule and in the answer tool, that every connected element gets a row, in the order of the lines, and never a sample of its own', () => {
+    const rule = readFileSync(fileURLToPath(new URL('../../prompts/assistant-view.md', import.meta.url)), 'utf8');
+    expect(rule).toContain('a row for every connected element the lines hold, in the order of the lines, never a sample of your own choosing');
+    for (const table of [true, false]) expect(answerDescription(table)).toContain('an item or a row for every connected element the lines you were given hold, in the order of the lines and never a sample you choose');
   });
 });
 
