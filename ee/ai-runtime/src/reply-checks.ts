@@ -828,19 +828,22 @@ const TOP = new RegExp(`${WB}(?:top-ranked|top-rated|tops?)${RWE}`, 'giu');
 /** The places of a screen that `top` may speak of: words of the product and of the language. */
 const SCREEN_PLACE = '(?:view|screen|page|list|panel|table|row|bar|corner|edge|graph|timeline|card)s?';
 /** `top` that names a position on the screen, a level or a topping up, and ranks nothing. */
-const ORDINARY_TOP = new RegExp(`^top(?:[\\s-](?:level|left|right|up)${WE}|\\s+(?:(?:left|right)[\\s-])?${SCREEN_PLACE}${WE})|^tops[\\s-]up${WE}`, 'iu');
+const ORDINARY_TOP = new RegExp(`^top(?:[\\s-](?:level|left|right|up|down)${WE}|\\s+(?:(?:left|right)[\\s-])?${SCREEN_PLACE}${WE})|^tops[\\s-]up${WE}`, 'iu');
 const ON_OR_FROM = new RegExp(`(?:${WB}on\\s+|${WB}from\\s+top\\s+to\\s+)$`, 'iu');
 const AT_THE_TOP = new RegExp(`${WB}(?:at|from)\\s+the\\s+$`, 'iu');
 const OF_A_PLACE = new RegExp(`^top[\\s-](?:(?:left|right)\\s+)?(?:of\\s+(?:the\\s+|this\\s+)?${SCREEN_PLACE}${WE}|(?:left|right)${WE})`, 'iu');
 
 /** Whether the `top` at a position is one of the ordinary uses of the word. At the top of a place is one only where nothing in its clause says by what. */
 function ordinaryTop(text: string, at: number): boolean {
-  const before = text.slice(0, at);
-  const from = text.slice(at);
+  // the words just before and after are all that decide: a long text is not read again for each use
+  const before = text.slice(Math.max(0, at - 40), at);
+  const from = text.slice(at, at + 200);
   if (ON_OR_FROM.test(before) || /^top\s+to\s+bottom/iu.test(from) || /(?:^|\s)from\s+top\s+to\s*$/iu.test(before) || /^to\s+bottom/iu.test(from)) return true;
-  if (AT_THE_TOP.test(before) && OF_A_PLACE.test(from)) {
-    const rest = (/^[^.;!?]*/u.exec(from.slice(OF_A_PLACE.exec(from)?.[0].length ?? 0))?.[0] ?? '');
-    return !/(?<![\p{L}\p{N}_-])(?:by|for|in)(?![\p{L}\p{N}_-])|\d/iu.test(rest);
+  const place = AT_THE_TOP.test(before) ? OF_A_PLACE.exec(from) : null;
+  if (place !== null) {
+    // by what is said in the words that follow the place, in its clause: `by`, `for` or `in` something, or a figure right after it
+    const rest = /^(?:[^.,;:!?]|[.,](?=\d))*?(?=$|[.,;:!?](?!\d)|(?<![\p{L}\p{N}_-])(?:and|but|while|where)(?![\p{L}\p{N}_-]))/u.exec(from.slice(place[0].length))?.[0] ?? '';
+    return !/(?<![\p{L}\p{N}_-])(?:by|for|in)(?![\p{L}\p{N}_-])|^\s*(?:(?:with|at)\s+)?[-+]?\d/iu.test(rest);
   }
   return ORDINARY_TOP.test(from);
 }
@@ -873,7 +876,7 @@ function gapClaimsHold(sentence: SummarySentence, assembled: CheckedText): boole
   let text = sentence.text.normalize('NFC');
   // a name is blanked only where it is written as it is: an id of one letter is not the article
   for (const name of namesOfElements(assembled)) text = text.replace(new RegExp(`${WB}${ESCAPED(name)}${WE}`, 'gu'), (found) => ' '.repeat(found.length));
-  return !GAP_WORDS.test(withoutQuoted(text));
+  return !GAP_WORDS.test(withoutQuoted(text).replace(/\u201c[^\u201d]*\u201d/gu, ' '));
 }
 
 /** The words that follow a position, each with where it ends: letters and digits, joined only by white space, hyphens and underscores, so that a mark of punctuation ends them. */
@@ -962,6 +965,8 @@ function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolea
   for (const name of names) text = text.replace(new RegExp(`${WB}${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${WE}`, 'giu'), (found) => ' '.repeat(found.length));
   const all = rankingWordsIn(text);
   if (all.length === 0) return true;
+  // one ranking is verified at most: a sentence with dozens of ranking words is not read word by word against its rest
+  if (all.length > 40) return false;
   const cited = citedElements(sentence, assembled);
   const carries = (key: string): readonly RankedProperty[] => assembled.rankedValues?.get(key) ?? [];
   const shownKeys = [...new Set(cited.flatMap((key) => carries(key).filter((entry) => entry.value !== undefined).map((entry) => entry.key)))];

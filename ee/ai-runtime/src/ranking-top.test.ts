@@ -51,6 +51,7 @@ describe.each([
     `${a} and ${c} have the top three ${words}s.`,
     `${a} is at the top of the list by ${key}, 75.`,
     `${b} is at the top of the table for ${key}.`,
+    `${b} is at the top of the list with 10.`,
   ])('removes the false or unproven ranking: %s', (text) => {
     expect(verdict(text)).toBe('comparison');
   });
@@ -77,6 +78,11 @@ describe.each([
     `A top-level view lists ${a}.`,
     `${a} lists a top-up.`,
     `The elements are listed from top to bottom.`,
+    `At the top of the view, ${a} shows ${key} 900.`,
+    `At the top of the table, ${c} is listed with ${key} 75.`,
+    `${c} is at the top of the table, and ${c} has ${key} 75.`,
+    `The top-down layout shows ${a} with ${key} 900.`,
+    `The note \u201cby far the best\u201d is on ${a}.`,
     `${a} is listed with the note "top ${key}".`,
   ])('judges the ordinary use as before: %s', (text) => {
     expect(judgeSentences([{ text, cites: all }], { ...held, text: `${held.text} "top ${key}" ${a}` }).rejected.map((each) => each.reason)).not.toContain('comparison');
@@ -85,6 +91,12 @@ describe.each([
   it('is not misled by an element whose id is a short ordinary word', () => {
     const short = { ...held, elementNames: new Map([...(held.elementNames ?? []), ['n2', ['a']]]) };
     expect(verdict(`${a} has the largest ${key}, 900, by a wide margin.`, short)).toBe('comparison');
+  });
+
+  it('reads a long run of the word in a time that grows with its length', () => {
+    const started = performance.now();
+    verdict(`${a} ${'at the top '.repeat(2000)}`);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it('reads no ranking in the name of an element', () => {
