@@ -1185,6 +1185,9 @@ function rangeHolds(sentence: SummarySentence, assembled: CheckedText): boolean 
 /** How many claim words of one sentence are read, and how many clauses back a claim looks for what it is about: a sentence beyond either is not written to be read, and the check would take time that grows far faster than its length. */
 const MOST_CLAIMS = 20;
 const MOST_CLAUSES_BACK = 20;
+/** The longest list after `differ in` that is read, in characters. */
+const LONGEST_LIST = 600;
+const MOST_LISTED = 20;
 
 /** The words that say elements differ, are the same or share something: words of the language, never of a domain. A word joined to another before it (`co-shared`) is no claim. */
 const CLAIM_WORD = /(?<![\p{L}\p{N}_-])(differ(?:s|ed|ing|ently|ences?|ent)?|distinct|var(?:y|ies|ied|ying)|same|identical|alike|shar(?:e|es|ed|ing)|in common|common to)(?![\p{L}\p{N}_])/giu;
@@ -1829,40 +1832,35 @@ function entitiesAreSubject(evidence: Evidence, span: Span, claim: Span, entityT
   });
 }
 
-/** The items of a list that follows `differ in`: split at commas and `and` outside parentheses, up to the end of the sentence, each with the examples written in parentheses after it. */
+/** The items of a list that follows `differ in`: split at commas, `and` and `or` outside parentheses, up to the end of the sentence, each with the examples written in parentheses after it. */
 function listedItems(text: string, from: number): { readonly words: string; readonly examples: readonly string[] }[] {
   const items: { words: string; examples: string[] }[] = [];
   const segment = /^(?:[^.;!?(]|\([^)]*\)|\.(?=\d))*/u.exec(text.slice(from))?.[0] ?? '';
   const turn = /(?<![\p{L}\p{N}_-])(?:but|while|whereas|so|yet|although)(?![\p{L}\p{N}_-])(?![^(]*\))/iu.exec(segment);
-  for (const piece of segment.slice(0, turn?.index ?? segment.length).split(/(?:,|(?<![\p{L}\p{N}_-])and(?![\p{L}\p{N}_-]))(?![^(]*\))/iu)) {
+  for (const piece of segment.slice(0, turn?.index ?? segment.length).split(/(?:,|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-]))(?![^()]*\))/iu)) {
     const examples = [...piece.matchAll(/\(([^)]*)\)/gu)].flatMap((found) => (found[1] ?? '').replace(/^\s*(?:for example|for instance|e\.g\.|such as|including)[\s,:]*/iu, '').split(/(?<!\d),|,(?!\d{3}(?!\d))|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-])/iu)).map((example) => example.trim().replace(/^["\u201c]|["\u201d]$/gu, '')).filter((example) => example !== '' && !/^etc/iu.test(example));
-    const words = piece.replace(/\([^)]*\)/gu, ' ').trim().replace(/^(?:(?:in|their|its|the)\s+)+/iu, '');
+    const words = piece.replace(/\([^)]*\)/gu, ' ').trim().replace(/^(?:(?:in|their|its|the|also|each|one|all)\s+)+/iu, '');
     if (words !== '') items.push({ words, examples });
   }
   return items;
 }
 
-/** The words that open another assertion after a list: a subject, a verb of having or being, or a word of comparison, which is judged by itself. */
-const OPENS_ANOTHER: ReadonlySet<string> = new Set(['both', 'they', 'it', 'these', 'those', 'all', 'each', 'none', 'no', 'one', 'also', 'then', 'is', 'are', 'was', 'were', 'has', 'have', 'had', 'use', 'uses', 'used', 'share', 'shares', 'shared', 'differ', 'differs', 'vary', 'varies', 'come', 'comes', 'came', 'show', 'shows', 'include', 'includes']);
-
-/** Whether an item of a list goes on to say something else, and so ends the list: it opens another assertion, or names no property and is longer than the name of a thing. */
-function endsTheList(words: string, namesNone: boolean): boolean {
-  const all = words.toLowerCase().split(/\s+/u);
-  const first = all[0] ?? '';
-  return OPENS_ANOTHER.has(first) || SENTENCE_OPENERS.has(first) || (namesNone && all.length > 3);
-}
+/** The words that open another assertion after a list: a subject, or a verb of having or being or of comparison, which is judged by itself. */
+const OPENS_ANOTHER: ReadonlySet<string> = new Set(['both', 'they', 'it', 'these', 'those', 'none', 'then', 'is', 'are', 'was', 'were', 'has', 'have', 'had', 'use', 'uses', 'used', 'share', 'shares', 'shared', 'differ', 'differs', 'vary', 'varies', 'come', 'comes', 'came', 'show', 'shows', 'include', 'includes']);
 
 /**
  * `differ in A, B and C`: each property named is a claim of its own, that the subjects do not all hold the same value of it (no two the same with `each`). An example in parentheses that a subject holds stands; one that only an
  * element not cited holds is passed over; one no element holds is false. Undefined when what follows `in` names no property, which is judged as any other claim.
  */
-function differsInHolds(evidence: Evidence, claimEnd: number, apart: boolean): boolean | undefined {
+function differsInHolds(evidence: Evidence, claimEnd: number, reading: Reading): boolean | undefined {
   const lead = /^\s+in(?![\p{L}\p{N}_-])/iu.exec(evidence.spoken.slice(claimEnd));
   if (lead === null) return undefined;
-  const items = listedItems(evidence.text, claimEnd + lead[0].length);
+  const from = claimEnd + lead[0].length;
+  const items = listedItems(evidence.text.slice(0, from + LONGEST_LIST + 1), from);
   const named = items.map((item) => propertiesNamed(evidence, item.words));
   if ((named[0]?.length ?? 0) === 0) return undefined;
-  const ends = items.findIndex((item, index) => index > 0 && endsTheList(item.words, named[index]?.length === 0));
+  if (items.length > MOST_LISTED || (evidence.text.length - from > LONGEST_LIST && items.length > 1)) return false;
+  const ends = items.findIndex((item, index) => index > 0 && OPENS_ANOTHER.has(item.words.split(/\s+/u)[0]?.toLowerCase() ?? ''));
   return items.slice(0, ends < 0 ? items.length : ends).every((item, index) => {
     const [property, other] = named[index] ?? [];
     if (property === undefined || other !== undefined) return false;
@@ -1870,7 +1868,7 @@ function differsInHolds(evidence: Evidence, claimEnd: number, apart: boolean): b
     if (subjects === undefined || !countHolds(statedCount(evidence, []), subjects.length)) return false;
     const values = subjects.map((key) => comparedValue(evidence, key, property));
     const present = values.flatMap((value) => (value === undefined ? [] : [value]));
-    if (present.length !== subjects.length || new Set(present.map((value) => value.dataClass)).size !== 1 || !valuesRead(apart ? 'allDifferent' : 'notAllSame', present.map((value) => value.value))) return false;
+    if (present.length !== subjects.length || new Set(present.map((value) => value.dataClass)).size !== 1 || !valuesRead(reading, present.map((value) => value.value))) return false;
     const sent = [...(evidence.assembled.elementTypes?.keys() ?? [])].flatMap((key) => comparedValue(evidence, key, property) ?? []);
     return item.examples.every((example) => sent.some((value) => writes(example, value)));
   });
@@ -1898,9 +1896,11 @@ function comparisonClaimsHold(sentence: SummarySentence, assembled: CheckedText)
     const ownName = ownNameHolds(evidence, claim);
     if (ownName !== undefined) return ownName;
     const kind = kindOfClaim(word);
-    if (kind === 'differ' && /^(?:differ|var)/u.test(word) && !NEGATION.test(clause)) {
+    if (kind === 'differ' && /^(?:differ|var)/u.test(word)) {
       const each = /(?<![\p{L}\p{N}_-])(?:each|one another)(?![\p{L}\p{N}_-])/iu.test(evidence.spoken);
-      const listed = differsInHolds(evidence, claim.end, each);
+      // `differ in` says that not all hold one value of each property (no two with `each`); denied, that all hold one; any other negation is not read
+      const meant: Reading | undefined = NEGATION.test(clause) ? readingOf(kind, word, clause, evidence.spoken) : each ? 'allDifferent' : 'notAllSame';
+      const listed = meant === undefined ? undefined : differsInHolds(evidence, claim.end, meant);
       if (listed !== undefined) return listed;
     }
     const before = wordsAt(evidence.spoken, { start: span.start, end: claim.start });

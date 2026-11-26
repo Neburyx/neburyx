@@ -94,7 +94,7 @@ describe.each([
   }, 120_000);
 
   it('judges long repeats of those words within its bound', async () => {
-    const units = ['same ', 'But same, ', 'and yet share, ', `differ in ${statusWords}, `, 'no two ', 'not all ', 'at the top ', 'by far ', 'cannot be named ', 'cannot name the largest ', '"', '( ', ', ', ' . ', 'nothing is ', 'only shared ', `these two ${item}s share a ${holder} `, 'Item A ', 'x '];
+    const units = ['same ', 'But same, ', 'and yet share, ', `differ in ${statusWords}, `, `differ in amountDue (1, `, `differ in amountDue and (`, 'no two ', 'not all ', 'at the top ', 'by far ', 'cannot be named ', 'cannot name the largest ', '"', '( ', ', ', ' . ', 'nothing is ', 'only shared ', `these two ${item}s share a ${holder} `, 'Item A ', 'x '];
     const long = units.flatMap((unit) => ['', ` the same ${statusWords}`, ' share a holder'].map((tail) => `${unit.repeat(Math.ceil(24_000 / unit.length))}${tail}`));
     const judged = await judgeEach(held, long, cites, 2000);
     expect(judged).toHaveLength(long.length);
