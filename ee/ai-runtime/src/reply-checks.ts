@@ -1833,20 +1833,24 @@ function entitiesAreSubject(evidence: Evidence, span: Span, claim: Span, entityT
 }
 
 /** The items of a list that follows `differ in`: split at commas, `and` and `or` outside parentheses, up to the end of the sentence, each with the examples written in parentheses after it. */
-function listedItems(text: string, from: number): { readonly words: string; readonly examples: readonly string[] }[] {
-  const items: { words: string; examples: string[] }[] = [];
+function listedItems(text: string, from: number): { readonly raw: string; readonly words: string; readonly examples: readonly string[] }[] {
+  const items: { raw: string; words: string; examples: string[] }[] = [];
   const segment = /^(?:[^.;!?(]|\([^)]*\)|\.(?=\d))*/u.exec(text.slice(from))?.[0] ?? '';
   const turn = /(?<![\p{L}\p{N}_-])(?:but|while|whereas|so|yet|although)(?![\p{L}\p{N}_-])(?![^(]*\))/iu.exec(segment);
   for (const piece of segment.slice(0, turn?.index ?? segment.length).split(/(?:,|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-]))(?![^()]*\))/iu)) {
     const examples = [...piece.matchAll(/\(([^)]*)\)/gu)].flatMap((found) => (found[1] ?? '').replace(/^\s*(?:for example|for instance|e\.g\.|such as|including)[\s,:]*/iu, '').split(/(?<!\d),|,(?!\d{3}(?!\d))|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-])/iu)).map((example) => example.trim().replace(/^["\u201c]|["\u201d]$/gu, '')).filter((example) => example !== '' && !/^etc/iu.test(example));
     const words = piece.replace(/\([^)]*\)/gu, ' ').trim().replace(/^(?:(?:in|their|its|the|also|each|one|all)\s+)+/iu, '');
-    if (words !== '') items.push({ words, examples });
+    if (words !== '') items.push({ raw: piece.trim(), words, examples });
   }
   return items;
 }
 
 /** The words that open another assertion after a list: a subject, or a verb of having or being or of comparison, which is judged by itself. */
 const OPENS_ANOTHER: ReadonlySet<string> = new Set(['both', 'they', 'it', 'these', 'those', 'none', 'then', 'is', 'are', 'was', 'were', 'has', 'have', 'had', 'use', 'uses', 'used', 'share', 'shares', 'shared', 'differ', 'differs', 'vary', 'varies', 'come', 'comes', 'came', 'show', 'shows', 'include', 'includes']);
+
+/** An item that goes on about the claim after a list, and names no further property: a phrase that limits it to what was read, or one that opens with a relative or prepositional word other than `in`, or with a figure. */
+const GOES_ON = /^(?:(?:as|at|which|that|where|when|with|by|from|to|for|according|per)(?![\p{L}\p{N}_-])|\d)/iu;
+const afterTheList = (raw: string): boolean => GOES_ON.test(raw) || new RegExp(`^(?:${LIMITED_TO_READ.source})`, 'iu').test(raw) || /^among\s+those\s+read/iu.test(raw);
 
 /**
  * `differ in A, B and C`: each property named is a claim of its own, that the subjects do not all hold the same value of it (no two the same with `each`). An example in parentheses that a subject holds stands; one that only an
@@ -1860,7 +1864,7 @@ function differsInHolds(evidence: Evidence, claimEnd: number, reading: Reading):
   const named = items.map((item) => propertiesNamed(evidence, item.words));
   if ((named[0]?.length ?? 0) === 0) return undefined;
   if (items.length > MOST_LISTED || (evidence.text.length - from > LONGEST_LIST && items.length > 1)) return false;
-  const ends = items.findIndex((item, index) => index > 0 && OPENS_ANOTHER.has(item.words.split(/\s+/u)[0]?.toLowerCase() ?? ''));
+  const ends = items.findIndex((item, index) => index > 0 && (afterTheList(item.raw) || OPENS_ANOTHER.has(item.words.split(/\s+/u)[0]?.toLowerCase() ?? '')));
   return items.slice(0, ends < 0 ? items.length : ends).every((item, index) => {
     const [property, other] = named[index] ?? [];
     if (property === undefined || other !== undefined) return false;

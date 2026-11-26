@@ -475,6 +475,9 @@ describe.each(PACKS)('the sentences a live run wrote, in the words of the $name 
     expect(verdict(one, `These three do not differ in ${statusWords}.`, alike)).toBe('kept');
     for (const text of [`Item A and Item C do not differ in ${statusWords} or amountDue.`, `Item A and Item C do not differ in ${statusWords} and amountDue.`, 'Item A and Item C do not differ in amountDue.']) expect(verdict(one, text, ['n1', 'n3']), text).toBe('comparison');
     expect(verdict(one, `Item A and Item C do not differ in ${statusWords} or channel.`, ['n1', 'n3'])).toBe('kept');
+    // a comma phrase that limits the claim, or goes on about it, is no further property
+    for (const text of ['Item A and Item B differ in amountDue, in view.', 'Item A and Item B differ in amountDue, among those read.', 'Item A and Item B differ in amountDue, as the lines show.', 'Item A and Item B differ in amountDue, at 10 and 20.', 'Item A and Item B differ in amountDue, which is 10 and 20.', 'Item A and Item B differ in amountDue and channel, in this sample.']) expect(verdict(one, text, ['n1', 'n2']), text).toBe('kept');
+    expect(verdict(one, 'Item A and Item C differ in amountDue and in the colour of the receipt.', ['n1', 'n3'])).toBe('comparison');
     // a list longer than any written to be read is not verified
     expect(verdict(one, `Item A and Item C differ in ${'amountDue, '.repeat(30)}amountDue.`, ['n1', 'n3'])).toBe('comparison');
     // all different is still what "different" says
