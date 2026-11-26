@@ -115,6 +115,25 @@ describe('listing and reading an investigation stored before its type was keyed'
     await app.close();
   });
 
+  it('names a stored relationship of a type the mapping lacks, in the unmapped items of the read, by its own ID as it was sent', async () => {
+    const plain = mappingOf(false);
+    const [source] = plain.sources;
+    const store = memoryAppStore();
+    store.investigations.push({ ...row, sourceIdentityHash: identityHashOf(source ?? demo) });
+    const references = createStoredReferences(plain, TEST_REFERENCE_KEYS);
+    const initial = initialDraftDocuments({ entityType: 'phone', stableId: VALUE });
+    const edge = { t: 'GONE', from: { t: 'person', id: 'P-1' }, to: { t: 'phone', id: VALUE }, id: 'r\u0000id' };
+    const layout = references.storedLayout('demo', { ...initial.layout, edges: [{ ...edge, hidden: false }] });
+    const queryContext = references.storedQueryContext('demo', { ...initial.queryContext, loaded: { ...initial.queryContext.loaded, edges: [edge] } });
+    expect(layout.edges[0]?.id).toBe(encodeStored('r\u0000id'));
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, investigationId: id, layout, queryContext, mappingHash: (source ?? demo).configHash });
+    const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: plain, gate: testSourceGate(plain).gate, referenceKeys: TEST_REFERENCE_KEYS });
+    const read = await app.inject({ method: 'GET', url: `/v1/investigations/${id}` });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().unmapped.edges).toEqual([edge]);
+    await app.close();
+  });
+
   it('returns a stored raw ID of a type that is not keyed as it is', async () => {
     const plain = mappingOf(false);
     const [source] = plain.sources;

@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -58,6 +58,17 @@ describe('the cursor key of a development run', () => {
     const other = Buffer.alloc(32, 3).toString('base64');
     const files: Files = { ...nodeFiles, createPrivate: (path, text) => (writeFileSync(path, `${other}\n`, { mode: 0o600 }), nodeFiles.createPrivate(path, text)) };
     expect(run(at, 7, {}, files)).toBe(other);
+  });
+
+  it('makes the file appear whole and only once, and leaves no other file behind', () => {
+    const at = place();
+    expect(nodeFiles.createPrivate(at.key, `${KEY}\n`)).toBe(true);
+    expect(statSync(at.key).mode & 0o777).toBe(0o600);
+    // one link only: the file it was written as is gone
+    expect(statSync(at.key).nlink).toBe(1);
+    expect(nodeFiles.createPrivate(at.key, 'another\n')).toBe(false);
+    expect(readFileSync(at.key, 'utf8')).toBe(`${KEY}\n`);
+    expect(readdirSync(at.home)).toEqual(['dev.env.cursor-key']);
   });
 
   it('uses a key of the shell as it is, and writes no file', () => {

@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, linkSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 
 /** What the tool needs from the file system: it reads, and writes one kind of file, a new one of its own that only the owner can read. */
 export interface Files {
@@ -8,7 +9,7 @@ export interface Files {
   mode(path: string): number;
   /** The path with every link followed; the path as given when nothing is there. */
   realPath(path: string): string;
-  /** Creates the file with mode 0600 from the start; false, with nothing written, when something is there already. Throws when it cannot be written. */
+  /** Creates the file with mode 0600 from the start and whole, so no reader sees it part written; false, with nothing written, when something is there already. Throws when it cannot be written. */
   createPrivate(path: string, text: string): boolean;
 }
 
@@ -18,12 +19,17 @@ export const nodeFiles: Files = {
   mode: (path) => statSync(path).mode & 0o777,
   realPath: (path) => (existsSync(path) ? realpathSync(path) : path),
   createPrivate(path, text) {
+    // a file made in place is empty for a moment; a link to a file already written appears whole, and fails where something is there
+    const written = `${path}.${randomUUID()}.tmp`;
+    writeFileSync(written, text, { flag: 'wx', mode: 0o600 });
     try {
-      writeFileSync(path, text, { flag: 'wx', mode: 0o600 });
+      linkSync(written, path);
       return true;
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'EEXIST') return false;
       throw error;
+    } finally {
+      rmSync(written, { force: true });
     }
   },
 };
