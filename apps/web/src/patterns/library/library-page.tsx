@@ -21,6 +21,7 @@ import { useLibrarySource } from './use-library-source.js';
 import { boundedRead } from '../../api/read-wait.js';
 import { READING_AGAIN } from '../../waiting-copy.js';
 import { WaitingLine } from '../../waiting.js';
+import { RereadFailure } from '../saved/reread-failure.js';
 
 type Preset = TemplateListResponse['presets'][number];
 type Tab = 'mine' | 'shared' | 'built-in';
@@ -234,6 +235,7 @@ function LibraryBody({ source }: { readonly source: SourceSummary }) {
           </p>
         ) : null}
         {savedTab && list.phase === 'ready' && list.rereading === true ? <WaitingLine word={READING_AGAIN} /> : null}
+        {savedTab && list.phase === 'ready' && list.rereadFailure !== undefined ? <RereadFailure failure={list.rereadFailure} place="page" retry={saved.reload} /> : null}
         {body}
         {savedTab && list.phase === 'ready' && list.moreFailure !== undefined ? (
           <p className="patterns-error" role="alert">

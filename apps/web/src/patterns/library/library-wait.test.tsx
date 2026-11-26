@@ -61,6 +61,17 @@ describe('the patterns library: a read that gets no answer', () => {
     expect(screen.queryByRole('row', { name: /Beta/ })).toBeNull();
   });
 
+  it('offers Try again over the kept rows when a reread fails, and it reads the list again', async () => {
+    let reads = 0;
+    const kit = await libraryPage({ patterns: { listPatterns: () => (++reads === 2 ? hang() : Promise.resolve(page(reads === 1 ? [ALPHA, BETA] : [BETA]))), deletePattern: async () => deleted } });
+    await remove('Alpha');
+    await wait(READ_WAIT_MS);
+    await press(button('Try again to read the saved patterns'));
+    expect(kit.queries).toHaveLength(3);
+    expect(screen.queryByText(UNREACHABLE)).toBeNull();
+    expect(tableRows()).toHaveLength(1);
+  });
+
   it('ends a Load more at the bound, frees the button, and a later press reads the page', async () => {
     let more = 0;
     const kit = await libraryPage({ patterns: { listPatterns: (query) => (query.cursor === undefined ? Promise.resolve(page([ALPHA], 'c1')) : ++more === 1 ? hang() : Promise.resolve(page([BETA]))) } });
@@ -73,6 +84,7 @@ describe('the patterns library: a read that gets no answer', () => {
     expect(screen.getByRole('alert').textContent).toBe(UNREACHABLE);
     expect(button('Load more').disabled).toBe(false);
     expect(button('Load more').getAttribute('aria-busy')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again to read the saved patterns' })).toBeNull();
     await press(button('Load more'));
     expect(kit.queries.map((query) => query.cursor)).toEqual([undefined, 'c1', 'c1']);
     expect(tableRows()).toHaveLength(2);

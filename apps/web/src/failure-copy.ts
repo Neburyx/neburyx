@@ -6,4 +6,5 @@ export const RETRY_NAMES = {
   entityTypes: 'Try again to read the entity types',
   mappingExample: 'Try again to read the mapping example',
   sourceSearch: 'Try again to search the source',
+  savedPatterns: 'Try again to read the saved patterns',
 } as const;

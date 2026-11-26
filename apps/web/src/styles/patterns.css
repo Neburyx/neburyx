@@ -61,6 +61,22 @@
   min-width: 0;
 }
 
+.reread-failure {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+}
+
+.reread-failure[data-place='panel'] {
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.reread-failure[data-place='panel'] > .failure-notice {
+  flex: 1;
+  min-width: 0;
+}
+
 .search-failed {
   display: flex;
   justify-content: space-between;
