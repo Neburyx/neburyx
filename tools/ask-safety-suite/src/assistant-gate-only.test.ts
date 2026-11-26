@@ -105,6 +105,20 @@ describe('every route of a turn reads only through the gate, through the real ap
     await heavy.close();
   });
 
+  it('is so for a second read that reads on from the first: one gate event or more for each read that reached the source', async () => {
+    const rig = await start();
+    const first = JSON.stringify({ tool: 'widgetById', values: { id: 'W-1' } });
+    const second = JSON.stringify({ tool: 'expand', values: { entityType: 'widget', stableId: 'W-1', neighborType: 'gadget' } });
+    const given = await rig.turn('Show W-1 and what it is made from', [ROUTE, first, second, DONE, WIDGET_READ]);
+    expect(given.body).toMatchObject({ status: 'answered', reads: expect.arrayContaining([expect.objectContaining({ tool: 'expand', read: true })]) });
+    expectOnlyRegisteredReads(rig.reads(), [...REGISTERED, 'expand-neighbors']);
+    expectEveryReadHasGateEvent(rig.reads(), rig.events());
+    // the expansion is bounded and records the gate's own event, once
+    expect(rig.reads().filter((read) => read.templateId === 'expand-neighbors')).toHaveLength(1);
+    expect(rig.events().filter((event) => event.action === 'graph.expand')).toHaveLength(1);
+    await rig.close();
+  });
+
   it('canary: a read sent straight to the executor under the turn’s own trace has no gate event of its own, and the check fails on it', async () => {
     const rig = await start();
     await rig.turn('Show W-1', [ROUTE, DONE]);

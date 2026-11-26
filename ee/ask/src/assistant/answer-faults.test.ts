@@ -134,7 +134,7 @@ describe('a question that needs a second read from the result of the first', () 
   const first = { name: 'byId', args: { id: 'A-1' } };
   const unread = { text: `${V.title} A-1 is listed.`, cites: ['r1'] };
 
-  // how the loop stands today: nothing asks for the second read, so an answer that stops after the first is judged and shown
+  // the second read is asked for by the instructions and not enforced: an answer after the first read is judged and shown
   it('accepts an answer made after the first read, although no second read was made and a step was left', async () => {
     const model = fakeModel().respondWithTools([first]).respondWithTools([sentences(unread)]).respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model } });
