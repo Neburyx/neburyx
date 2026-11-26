@@ -181,7 +181,7 @@ test.describe('Pop out of the Assistant panel', () => {
     const line = panel(page).getByRole('status').filter({ hasText: 'cannot switch to' });
     await expect(line).toBeVisible();
     const emptied = await lookup;
-    if (emptied !== null && !emptied.isClosed()) await emptied.waitForEvent('close', { timeout: 5000 });
+    if (emptied !== null) await expect.poll(() => emptied.isClosed(), { timeout: 5000 }).toBe(true);
     expect(context.pages().filter((entry) => !entry.isClosed())).toHaveLength(2);
     const measure = async () => {
       const after = await head.boundingBox();
@@ -288,8 +288,7 @@ test.describe('Pop out of the Assistant panel', () => {
     expect(button).toEqual({ width: 21, height: 21, background: 'rgb(234, 237, 247)' });
     const shots = process.env['NBX_UX_SHOTS'];
     if (shots !== undefined) await page.screenshot({ path: `${shots}/pop-out-tooltip-${info.project.name}.png` });
-    await page.keyboard.press('Enter');
-    const popup = await page.waitForEvent('popup');
+    const [popup] = await Promise.all([page.waitForEvent('popup'), page.keyboard.press('Enter')]);
     await expect(panel(page).getByText(NOTE)).toBeVisible();
     const collapsed = await panel(page).evaluate((element) => {
       const icon = element.querySelector('.assistant-popped-icon')?.getBoundingClientRect();
