@@ -204,6 +204,62 @@ describe('a ranking over one read, once a second read starts from the ranked ele
   });
 });
 
+describe('a question about the other end of the largest one, over two reads', () => {
+  const ref = (entityType: string, stableId: string) => ({ sourceId: nodeOf('A-1').ref.sourceId, entityType, stableId });
+  const item = (stableId: string, amount: number) => ({ ...nodeOf(stableId), properties: [{ key: 'amountValue', value: amount, dataClass: 'number', masked: false }] });
+  const [low, high, shown] = [item('A-1', 10), item('A-2', 20), item('A-9', 30)];
+  const owner = { ...nodeOf('P-1'), ref: ref(V.other, 'P-1'), display: { title: `${V.other} P-1`, type: V.other } };
+  const listed = askRunResultSchema.parse({ templateId: 'file-query', result: { status: 'ok', intent: 'byId', count: { quality: 'lowerBound', value: 150, scope: 'rows' }, nodes: [low, high], edges: [], notices: [], warnings: [] } });
+  const around = askRunResultSchema.parse({ templateId: 'expand', result: { ref: high.ref, pageSize: 25, nodes: [high, owner], edges: [{ ref: { sourceId: high.ref.sourceId, type: V.links[0], from: 'P-1', to: 'A-2', stableId: 'e-9' }, from: owner.ref, to: high.ref, type: V.links[0], direction: 'in', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] }], pages: [{ neighborType: V.other, returned: 1, hasMore: false, matchingTotal: { quality: 'exact', value: 1, scope: 'test' } }], warnings: [] } });
+  const ranked = { text: `Among the ${plural} in the read, ${high.display.title} has the largest amountValue, 20.`, cites: ['r1', 'r2', 's1'] };
+  const end = { text: `${owner.display.title} is linked to ${high.display.title}.`, cites: ['r3', 'r4'] };
+  // what was not read is said with the line of the view's coverage, as the loop is told
+  const unread = { text: `The connections of ${high.display.title} were not read.`, cites: ['r2', 'c1'] };
+  const steps = [{ name: 'view', args: {} }, { name: 'byId', args: { id: 'A-1' } }, { name: 'expand', args: { entityType: V.anchor, stableId: 'A-2', neighborType: V.other } }];
+  const turn = async (last: { text: string; cites: string[] }[], over: { maxCalls?: number; maxInputTokens?: number } = {}, loopSteps?: number, asked = steps) => {
+    const model = fakeModel();
+    for (const step of asked) model.respondWithTools([step]);
+    model.respondWithTools([sentences(...last)]).respond(new AIMessage('Done.'));
+    let reads = 0;
+    const r = await rig({ reply: VIEW, agent: { model, maxInputTokens: 200_000, ...over }, ...(loopSteps === undefined ? {} : { loopSteps }), viewNodes: [shown] as never, run: () => ({ status: 'ok', result: reads++ === 0 ? listed : around }) });
+    const given = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: [JSON.stringify(['node', shown.ref.sourceId, V.anchor, 'A-9'])] })));
+    return { given, reads: () => reads };
+  };
+
+  it('shows the ranked sentence over the first read and the sentence that names the other end, each with its cites, after one read for each step', async () => {
+    const { given, reads } = await turn([ranked, end]);
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: ranked.text, cites: ranked.cites }, { text: end.text, cites: end.cites }] }], reads: [{ tool: 'view' }, { tool: 'byId', read: true, quality: 'lowerBound' }, { tool: 'expand', read: true, rows: 1 }] });
+    expect(reads()).toBe(2);
+    expect(given).not.toHaveProperty('stoppedAt');
+  });
+
+  const stated = { status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: ranked.text }, { text: unread.text }] }] };
+
+  it('says which element it found and that the rest was not read, with the limit shown, when the steps stop the second read', async () => {
+    const { given, reads } = await turn([ranked, unread], {}, 2);
+    expect(given).toMatchObject({ ...stated, stoppedAt: 'steps' });
+    expect(reads()).toBe(1);
+  });
+
+  it('says both, marked as written on the last call, when the calls leave no call for a second read', async () => {
+    // the router's call, the two reads and the answer: the last call offers the answer only
+    const { given, reads } = await turn([ranked, unread], { maxCalls: 4 }, undefined, steps.slice(0, 2));
+    expect(given).toMatchObject(stated);
+    expect(given).toHaveProperty('lastCallNote');
+    expect(reads()).toBe(1);
+  });
+
+  it('says both, with the limit shown, when the second read’s result does not fit the input', async () => {
+    // the sizes depend on the texts of the turn, so the limit that holds the first read and not the second is found from the top down
+    let found: Awaited<ReturnType<typeof turn>> | undefined;
+    for (let maxInputTokens = 30_000; found === undefined && maxInputTokens >= 3_000; maxInputTokens -= 50) {
+      const tried = await turn([ranked, unread], { maxInputTokens });
+      if ((tried.given as { stoppedAt?: string }).stoppedAt === 'input') found = tried;
+    }
+    expect(found?.given).toMatchObject({ ...stated, stoppedAt: 'input', reads: [{ tool: 'view' }, { tool: 'byId' }] });
+  }, 30_000);
+});
+
 describe('what the loop is told once the second step is read', () => {
   it('is told to say both which element it found, as a ranking in the taught form, and what the second read shows it is connected to', async () => {
     const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([sentences({ text: `${V.title} A-1 is in view.`, cites: ['n1'] })]).respond(new AIMessage('Done.'));
