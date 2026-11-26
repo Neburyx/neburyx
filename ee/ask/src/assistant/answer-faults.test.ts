@@ -213,8 +213,8 @@ describe('a question about the other end of the largest one, over two reads', ()
   const around = askRunResultSchema.parse({ templateId: 'expand', result: { ref: high.ref, pageSize: 25, nodes: [high, owner], edges: [{ ref: { sourceId: high.ref.sourceId, type: V.links[0], from: 'P-1', to: 'A-2', stableId: 'e-9' }, from: owner.ref, to: high.ref, type: V.links[0], direction: 'in', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] }], pages: [{ neighborType: V.other, returned: 1, hasMore: false, matchingTotal: { quality: 'exact', value: 1, scope: 'test' } }], warnings: [] } });
   const ranked = { text: `Among the ${plural} in the read, ${high.display.title} has the largest amountValue, 20.`, cites: ['r1', 'r2', 's1'] };
   const end = { text: `${owner.display.title} is linked to ${high.display.title}.`, cites: ['r3', 'r4'] };
-  // what was not read is said with the line of the view's coverage, as the loop is told
-  const unread = { text: `The connections of ${high.display.title} were not read.`, cites: ['r2', 'c1'] };
+  // the form the loop is told to write when a limit stops the second read, with the lines it is told to cite
+  const unread = { text: `The connections of ${high.display.title} were not read.`, cites: ['r2', 's1'] };
   const steps = [{ name: 'view', args: {} }, { name: 'byId', args: { id: 'A-1' } }, { name: 'expand', args: { entityType: V.anchor, stableId: 'A-2', neighborType: V.other } }];
   const turn = async (last: { text: string; cites: string[] }[], over: { maxCalls?: number; maxInputTokens?: number } = {}, loopSteps?: number, asked = steps) => {
     const model = fakeModel();
@@ -231,6 +231,22 @@ describe('a question about the other end of the largest one, over two reads', ()
     expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: ranked.text, cites: ranked.cites }, { text: end.text, cites: end.cites }] }], reads: [{ tool: 'view' }, { tool: 'byId', read: true, quality: 'lowerBound' }, { tool: 'expand', read: true, rows: 1 }] });
     expect(reads()).toBe(2);
     expect(given).not.toHaveProperty('stoppedAt');
+  });
+
+  it.each(['with the view read', 'with no view read'])('keeps the sentence of what was not read in the very words the loop is told to write, %s', async (name) => {
+    const model = fakeModel();
+    const asked = name === 'with the view read' ? steps.slice(0, 2) : steps.slice(1, 2);
+    for (const step of asked) model.respondWithTools([step]);
+    const runStore = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model, maxInputTokens: 200_000, maxCalls: asked.length + 2 }, viewNodes: [shown] as never, runStore, run: () => ({ status: 'ok', result: listed }) });
+    // the keys of the first read are the same with and without the view
+    model.respondWithTools([sentences(ranked, unread)]).respond(new AIMessage('Done.'));
+    const given = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: [JSON.stringify(['node', shown.ref.sourceId, V.anchor, 'A-9'])] })));
+    for (let step = 0; step < 10; step += 1) await Promise.resolve();
+    const told = runStore.runs[0]?.callStarts[1]?.instructionsText ?? '';
+    const form = /write \\?"(The connections of <element> were not read\.)\\?"/u.exec(told)?.[1] ?? 'no form is told';
+    expect(unread.text).toBe(form.replace('<element>', high.display.title));
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: ranked.text }, { text: unread.text, cites: unread.cites }] }] });
   });
 
   const stated = { status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: ranked.text }, { text: unread.text }] }] };
@@ -270,6 +286,11 @@ describe('what the loop is told once the second step is read', () => {
     const told = runStore.runs[0]?.callStarts[1]?.instructionsText ?? '';
     // straight after the sentence that asks for the second step, of which it speaks and of no type
     expect(told).toContain('within the steps allowed. Once that second step is read, say both in your answer: which element it is, as a ranking sentence (in the form given below when one read listed the elements ranked), and what the second read shows it is connected to. Never answer that the element cannot be named when the reads have given it and what it is connected to.');
+    expect(told).toContain('When a limit stops that second read, still give the ranking sentence over the read that listed the elements, then write');
+    expect(told).toContain('The connections of <element> were not read.');
+    expect(told).toContain('citing that element and the line of that read.');
+    // a limit alone is no ground to say they cannot be ranked
+    expect(told).toContain('Say that they cannot be ranked only when no read lists them and no step is left to read them.');
   });
 });
 
@@ -600,7 +621,7 @@ describe('a question for the largest', () => {
     const told = runStore.runs[0]?.callStarts[1]?.instructionsText ?? '';
     expect(told).toContain('among elements that no line holds yet is answered by reading them first');
     expect(told).toContain('when a read is paged, filtered or a lower bound, never say or imply that it holds for all of them');
-    expect(told).toContain('Say that they cannot be ranked only when no read lists them or no step is left');
+    expect(told).toContain('Say that they cannot be ranked only when no read lists them and no step is left to read them');
   });
 
   it.each([
