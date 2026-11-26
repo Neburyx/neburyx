@@ -15,6 +15,9 @@ export interface Neo4jRig extends Rig {
   slow(on: boolean): void;
 }
 
+/** The most failures a mapping may name. A rig with a budget of its own spends timeouts before its case (a first read of each statement, forced reads), and they must not decide whether a later read of the case is admitted; no case of these rigs tests the breaker. */
+const BREAKER_OUT_OF_REACH = 100;
+
 const none = (): never => {
   throw new Error('a Neo4j rig has no scripted reads');
 };
@@ -28,7 +31,7 @@ export async function startNeo4jRig(options: { readonly size: number; readonly t
     await buildSupernodes(server, [options.size]);
     await seedItems(server);
     forwarder = await forwardTo(server.boltUri);
-    const source = sourceFor(server, { uri: forwarder.url, entities: ENTITIES, relationships: RELATIONSHIPS, ...(options.timeoutMs === undefined ? {} : { budgets: { timeout_ms: options.timeoutMs } }) });
+    const source = sourceFor(server, { uri: forwarder.url, entities: ENTITIES, relationships: RELATIONSHIPS, ...(options.timeoutMs === undefined ? {} : { budgets: { timeout_ms: options.timeoutMs, breaker_failures: BREAKER_OUT_OF_REACH } }) });
     const inner = createNeo4jExecutor({ sources: [source], env: envFor(server), logger: { warn: () => undefined } });
     let slowOn = false;
     const calls: ExecuteCall[] = [];
