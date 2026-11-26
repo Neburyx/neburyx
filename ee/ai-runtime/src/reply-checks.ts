@@ -1399,6 +1399,12 @@ function statedList(text: string, from: number, known: readonly string[]): strin
     if (value === '') continue;
     const held = known.some((each) => each.toLowerCase() === value.toLowerCase());
     const word = value.toLowerCase();
+    // `<value> for <name>`, `<value> respectively`: an item that opens with a value an element holds, as whole words, states that value
+    const opening = known.filter((each) => word.startsWith(`${each.toLowerCase()} `)).sort((a, b) => b.length - a.length)[0];
+    if (!held && opening !== undefined) {
+      out.push(opening);
+      continue;
+    }
     const first = word.split(/\s+/u)[0] ?? '';
     if (!held && (STRUCTURAL_VOCABULARY.has(first) || SENTENCE_OPENERS.has(first) || PHRASE_STOP.has(first) || FILLER.has(first))) break;
     out.push(value);

@@ -145,6 +145,8 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
       const apart = held('Wire', 'cash machine');
       expect(verdict(apart, `These two have different ${statusWords}s, wire and cash machine.`, two)).toBe('kept');
       expect(verdict(apart, `These two have different ${statusWords}s, wire and point of sale.`, two)).toBe('comparison');
+      for (const text of [`Item A and Item B use different ${statusWords}s: wire for Item A and cash machine for Item B.`, `Item A and Item B have different ${statusWords}s: wire for Item A, cash machine for Item B.`, `Item A and Item B use different ${statusWords}s: wire and cash machine respectively.`]) expect(verdict(apart, text, two), text).toBe('kept');
+      expect(verdict(apart, `Item A and Item B use different ${statusWords}s: wired for Item A and cash machine for Item B.`, two)).toBe('comparison');
     });
 
     it('removes what it cannot test: a missing or masked value, one subject, a wrong number, an unnamed aspect', () => {
