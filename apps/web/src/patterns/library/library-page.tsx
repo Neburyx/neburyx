@@ -176,7 +176,7 @@ function LibraryBody({ source }: { readonly source: SourceSummary }) {
   } else if (!savedTab && builtInCount === undefined) {
     body =
       templates.state.phase === 'failed' ? (
-        <div role="alert" className="sources-failure">
+        <div className="sources-failure">
           <FailureNotice failure={templates.state.failure} />
           {offersRetry(templates.state.failure) ? (
             <button type="button" className="secondary" onClick={templates.reload}>
@@ -267,7 +267,7 @@ export function LibraryPage() {
       {source.kind === 'loading' ? (
         <p role="status">{LIBRARY_COPY.loadingSources}</p>
       ) : source.kind === 'failed' ? (
-        <div role="alert" className="sources-failure">
+        <div className="sources-failure">
           <p>{LIBRARY_COPY.sourcesFailed}</p>
           <FailureNotice failure={source.failure} />
           {offersRetry(source.failure) ? (
