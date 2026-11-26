@@ -35,6 +35,8 @@ describe.each([
     `By ${key}, ${a} tops them.`,
     `By ${key}, ${a} ranks top.`,
     `${a} has the top-ranked ${key}.`,
+    `${a} comes out on top with ${key} 900.`,
+    `${a} is on top by ${key}, 900.`,
   ])('keeps the true ranking: %s', (text) => {
     expect(verdict(text)).toBe('kept');
   });
@@ -52,6 +54,9 @@ describe.each([
     `${a} is at the top of the list by ${key}, 75.`,
     `${b} is at the top of the table for ${key}.`,
     `${b} is at the top of the list with 10.`,
+    `${b} comes out on top with ${key} 10.`,
+    `${b} is on top by ${key}, 10.`,
+    `${b} ends up on top.`,
   ])('removes the false or unproven ranking: %s', (text) => {
     expect(verdict(text)).toBe('comparison');
   });
@@ -69,7 +74,7 @@ describe.each([
 
   it.each([
     `On top of that, ${a} is listed.`,
-    `${a} is on top.`,
+    `${a} is shown on top of the panel.`,
     `${a} is shown at the top of the list.`,
     `The top row of the table lists ${a}.`,
     `${a} is in the top panel.`,

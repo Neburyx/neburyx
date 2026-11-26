@@ -638,6 +638,9 @@ const CARDINAL = '(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleve
 const SUBJECT_BEFORE = new RegExp(`^\\s*(?:(?:in view|on screen|in the view|on the screen|here)\\s*,?\\s*)?(?:the\\s+)?(?:(?!(?:\\d|${CARDINAL}|a|an|several|some|many|few|both|these|those|no|other|another|most|half)(?![\\p{L}\\p{N}_-]))\\S+\\s+)?$`, 'iu');
 const PLACE_AFTER = /^\s+(?:\S+\s+){0,1}?(?:on screen|in view|on the screen|in the view)(?![\p{L}\p{N}_-])/iu;
 
+/** A negation directly before `all`, `every` or `each`, or before a verb of holding or covering that leads to it, with only the words of the set after: the sentence denies that something is so of the whole set. */
+const DENIED_ALL = /(?:(?<![\p{L}\p{N}_-])(?:not|never)|n['\u2019]t)\s+(?:(?:necessarily|yet)\s+)?(?:(?:hold|holds|apply|applies|cover|covers|speak|speaks|extend|extends|stand|stands|list|lists|show|shows|include|includes|describe|describes)\s+(?:(?:for|to|over|about|across|of)\s+)?)?(?:all|every|each)(?:\s+(?!(?:and|or|but|so)(?![\p{L}]))[\p{L}\p{N}_'\u2019-]+){0,4}?\s*$/iu;
+
 /**
  * A sentence that says all, each or every of a type, or the elements of a type on screen, cites every element of that type that it speaks of, like a count: it speaks of a set, and a part of the set does not back it. Every quantified group
  * of the sentence is checked, nested ones and groups joined by a conjunction too. The set is the elements the cited reads listed, for a sentence that describes a read, the elements of the view for one that says on screen, and every element
@@ -661,6 +664,8 @@ function universalHolds(sentence: SummarySentence, assembled: CheckedText): bool
       const subject = SUBJECT_BEFORE.test(before);
       const onScreen = DEFINITE_BEFORE.test(before) && PLACE_AFTER.test(after);
       const inRead = !onScreen && READ_DESCRIPTION.test(clauseAt(text, found.index));
+      // a denial that something holds for all is a limit it states, and claims nothing of the whole set
+      if (DENIED_ALL.test(before)) continue;
       // `the only shared widget` is a claim of what is in common, which the check of comparison claims judges
       if (/(?<![\p{L}\p{N}_-])only\s+(?:shared|common)\s+$/iu.test(before)) continue;
       if (!QUANTIFIER_BEFORE.test(before) && !(ONLY_BEFORE.test(before) && ONLY_PLACE_AFTER.test(after)) && !onScreen && !(subject && FLOATING_AFTER.test(after))) continue;
@@ -829,7 +834,7 @@ const TOP = new RegExp(`${WB}(?:top-ranked|top-rated|tops?)${RWE}`, 'giu');
 const SCREEN_PLACE = '(?:view|screen|page|list|panel|table|row|bar|corner|edge|graph|timeline|card)s?';
 /** `top` that names a position on the screen, a level or a topping up, and ranks nothing. */
 const ORDINARY_TOP = new RegExp(`^top(?:[\\s-](?:level|left|right|up|down)${WE}|\\s+(?:(?:left|right)[\\s-])?${SCREEN_PLACE}${WE})|^tops[\\s-]up${WE}`, 'iu');
-const ON_OR_FROM = new RegExp(`(?:${WB}on\\s+|${WB}from\\s+top\\s+to\\s+)$`, 'iu');
+const ON = new RegExp(`${WB}on\\s+$`, 'iu');
 const AT_THE_TOP = new RegExp(`${WB}(?:at|from)\\s+the\\s+$`, 'iu');
 const OF_A_PLACE = new RegExp(`^top[\\s-](?:(?:left|right)\\s+)?(?:of\\s+(?:the\\s+|this\\s+)?${SCREEN_PLACE}${WE}|(?:left|right)${WE})`, 'iu');
 
@@ -838,7 +843,9 @@ function ordinaryTop(text: string, at: number): boolean {
   // the words just before and after are all that decide: a long text is not read again for each use
   const before = text.slice(Math.max(0, at - 40), at);
   const from = text.slice(at, at + 200);
-  if (ON_OR_FROM.test(before) || /^top\s+to\s+bottom/iu.test(from) || /(?:^|\s)from\s+top\s+to\s*$/iu.test(before) || /^to\s+bottom/iu.test(from)) return true;
+  // `on top of` is a position or an addition; `on top` with nothing after it of that kind ranks
+  if (ON.test(before) && /^top\s+of(?![\p{L}\p{N}_])/iu.test(from)) return true;
+  if (/^top\s+to\s+bottom/iu.test(from)) return true;
   const place = AT_THE_TOP.test(before) ? OF_A_PLACE.exec(from) : null;
   if (place !== null) {
     // by what is said in the words that follow the place, in its clause: `by`, `for` or `in` something, or a figure right after it
@@ -952,6 +959,21 @@ function claimedValueOf(text: string, from: number, dataClass: string): { readon
   return value === undefined ? { invalid: true } : { value };
 }
 
+const NOT_ABLE = '(?:cannot|can\\s+not|can[\'\u2019]t|could\\s+not|couldn[\'\u2019]t)';
+const LINKING_WORD = '(?:and|but|so|which|while|or|yet|because)(?![\\p{L}])';
+/** `<ranking word> … cannot be named`: words alone between them, none that opens another assertion, and no `to be …` after, which would say something of what is ranked. */
+const REFUSED_AFTER = new RegExp(`^(?:\\s+(?!${LINKING_WORD}|${NOT_ABLE})[\\p{L}\'\u2019_-]+){0,5}?\\s+${NOT_ABLE}\\s+be\\s+(?:named|identified|determined|told|ranked|said|established|stated|chosen|picked(?:\\s+out)?)${WE}(?!\\s+to${WE})`, 'iu');
+/** `cannot identify the <ranking word>`. */
+const REFUSED_BEFORE = new RegExp(`${WB}${NOT_ABLE}\\s+(?:name|identify|determine|tell|rank|establish|state|choose|pick\\s+out)\\s+(?:(?:which\\s+is\\s+)?(?:the|a)\\s+)?$`, 'iu');
+
+/** Whether a sentence says that the ranking a word stands for cannot be made, naming no element and no figure as its holder: it ranks nothing. */
+function refusesToRank(text: string, written: string, claim: { readonly index: number; readonly end: number }): boolean {
+  if (REFUSED_BEFORE.test(text.slice(Math.max(0, claim.index - 60), claim.index))) return true;
+  const found = REFUSED_AFTER.exec(text.slice(claim.end, claim.end + 200));
+  // a name between them (blanked in the text read) is a holder the sentence speaks of
+  return found !== null && written.slice(claim.end, claim.end + found[0].length) === text.slice(claim.end, claim.end + found[0].length);
+}
+
 /**
  * A sentence that ranks (says the largest, smallest, latest, earliest, fewest, most or least) is verified against the values it rests on, or removed. It must name one property of the cited elements whose words follow the ranking word, in a data class
  * that can be ordered (a number, a date or an instant, compared exactly), and every element of the ranked type that was sent must be cited with a shown value of it: the element it names, or the figure it claims, must be the one extreme value, held by
@@ -983,7 +1005,8 @@ function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolea
     });
     return asKey || /(?:^|\s)an?\s+$/iu.test(text.slice(0, claim.index));
   };
-  const claims = all.filter((claim) => !namesProperty(claim) && !exempt(claim));
+  const written = sentence.text.normalize('NFC');
+  const claims = all.filter((claim) => !namesProperty(claim) && !exempt(claim) && !refusesToRank(text, written, claim));
   if (claims.length === 0) return true;
   // one ranking claim in a sentence: a compound ranking is written as separate sentences
   const [claim] = claims;
@@ -994,7 +1017,9 @@ function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolea
   if (MORE_THAN_READ.test(text)) return false;
   const carriers = cited.filter((key) => carries(key).length > 0);
   const keys = [...new Set(carriers.flatMap((key) => carries(key).map((property) => property.key)))];
-  const property = propertyAfter(text, claim.end, keys) ?? propertyBefore(text, claim.index, keys);
+  // `on top with <property>`, `ranks top by <property>`: for `top` the property may follow the word that says by what
+  const link = claim.word === 'top' ? (/^\s+(?:with|by|for)(?:\s+(?:an?|the))?(?=\s)/iu.exec(text.slice(claim.end))?.[0].length ?? 0) : 0;
+  const property = propertyAfter(text, claim.end + link, keys) ?? propertyBefore(text, claim.index, keys);
   if (property === undefined) return false;
   const typeOf = (key: string): string | undefined => assembled.elementTypes?.get(key);
   const holders = carriers.filter((key) => carries(key).some((entry) => entry.key === property.key));
