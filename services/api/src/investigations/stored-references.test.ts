@@ -343,3 +343,57 @@ describe('opening with text PostgreSQL cannot hold in another field', () => {
     await app.close();
   });
 });
+
+describe('the own ID of a stored relationship', () => {
+  const plain = createStoredReferences(
+    parseMapping(fileOf(baseSource({ id: 'demo', entities: [{ type: 'person', label: 'Person', stable_id: 'personId' }, { type: 'CALLED', label: 'Called', stable_id: 'calledId', pii: [{ property: 'calledId', class: 'text' }] }], relationships: [{ type: 'CALLED', from: 'person', to: 'person' }] })), 'neburyx.yaml'),
+    TEST_REFERENCE_KEYS,
+  );
+  const ends = { from: { t: 'person', id: 'P-1' }, to: { t: 'person', id: 'P-2' } };
+  const layoutOf = (edges: readonly Record<string, unknown>[]) => ({ schemaVersion: 1 as const, layout: 'force', nodes: [], edges: edges.map((edge) => ({ t: 'CALLED', ...ends, hidden: false, ...edge })), groups: [] });
+  const contextOf = (edges: readonly Record<string, unknown>[]) => ({ schemaVersion: 1 as const, loaded: { nodes: [], edges: edges.map((edge) => ({ t: 'CALLED', ...ends, ...edge })) }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } });
+  const ODD = [['a NUL', 'r\u0000id'], ['an unpaired high surrogate', 'r\ud800id'], ['an unpaired low surrogate', 'r\udc00id'], ['text that starts like the stored form', '~e1:looks-encoded']] as const;
+
+  it.each(ODD)('is stored encoded in both documents when it holds %s, and read back exactly', (_name, id) => {
+    const layout = plain.storedLayout('demo', layoutOf([{ id }]));
+    const context = plain.storedQueryContext('demo', contextOf([{ id }]));
+    for (const stored of [layout.edges[0]?.id, context.loaded.edges[0]?.id]) {
+      expect(stored).toBe(encodeStored(id));
+      expect(stored).not.toBe(id);
+      expect(JSON.stringify(stored)).not.toMatch(/\\u0000|\\ud[89ab]|\\ud[c-f]/i);
+    }
+    expect(plain.layout('demo', layout).edges[0]?.id).toBe(id);
+    expect(plain.queryContext('demo', context).loaded.edges[0]?.id).toBe(id);
+  });
+
+  it('leaves the documents as they were for an ID that needs no encoding', () => {
+    const layout = layoutOf([{ id: 'r-1' }, { ruleId: 'rule-1' }, {}]);
+    const context = contextOf([{ id: 'r-1' }, { ruleId: 'rule-1' }, {}]);
+    expect(JSON.stringify(plain.storedLayout('demo', layout))).toBe(JSON.stringify(layout));
+    expect(JSON.stringify(plain.storedQueryContext('demo', context))).toBe(JSON.stringify(context));
+    expect(JSON.stringify(plain.layout('demo', layout))).toBe(JSON.stringify(layout));
+  });
+
+  it('opens a document stored before with its raw ID, one that only starts like the stored form among them', () => {
+    for (const id of ['r-1', 'a b/c', '~e1:not*base64', '~e1:']) {
+      expect(plain.layout('demo', layoutOf([{ id }])).edges[0]?.id).toBe(id);
+      expect(plain.queryContext('demo', contextOf([{ id }])).loaded.edges[0]?.id).toBe(id);
+    }
+  });
+
+  it('reads a raw ID stored before that is itself the exact stored form of another text as that text (a known limit)', () => {
+    const raw = encodeStored('r\u0000id');
+    expect(plain.layout('demo', layoutOf([{ id: raw }])).edges[0]?.id).toBe('r\u0000id');
+  });
+
+  it('is never a keyed reference, although a keyed entity type has the name of the relationship type: no token is made or asked for', () => {
+    const layout = plain.storedLayout('demo', layoutOf([{ id: 'r-1' }]));
+    expect(layout.edges[0]?.id).toBe('r-1');
+    expect(plain.layout('demo', layout).edges[0]?.id).toBe('r-1');
+  });
+
+  it('adds no ID to a derived or an aggregate relationship', () => {
+    const layout = plain.layout('demo', plain.storedLayout('demo', layoutOf([{ ruleId: 'rule-1' }, {}])));
+    expect(layout.edges.map((edge) => Object.keys(edge).includes('id'))).toEqual([false, false]);
+  });
+});

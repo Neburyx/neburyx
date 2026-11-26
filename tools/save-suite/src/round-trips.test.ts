@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MAX_DRAFT_DOCUMENT_BYTES, MAX_REFERENCE_VALUE_CHARACTERS } from '@neburyx/contracts';
 import { decodeStored } from '../../../services/api/src/reference/stored-text.js';
 import { AUTOSAVE_DELAY_MS, ref, SOURCE, startSuite, World, type Suite, type Tab } from './rig.js';
+import { restoreNamedView } from '../../../apps/web/src/views/restore-view.js';
+import { saveNamedView } from '../../../apps/web/src/views/save-view.js';
 import { LINKED, ODD_IDS } from './scenarios.js';
 
 let suite: Suite | undefined;
@@ -27,16 +29,48 @@ async function saveAndReopen(running: Suite, leaves: readonly string[], edges: r
 describe('identifiers a database or a path cannot hold as they are', () => {
   it('come back with their own ids, with a stored relationship to each, and no response is a server error', async () => {
     const world = new World().entity('hub', 'H-1');
-    ODD_IDS.forEach((leaf, at) => world.entity('leaf', leaf).relationship('LINKED', ['hub', 'H-1'], ['leaf', leaf], `r-${at}`));
+    // each relationship has an ID of the same odd shapes as the entity at its end
+    ODD_IDS.forEach((leaf) => world.entity('leaf', leaf).relationship('LINKED', ['hub', 'H-1'], ['leaf', leaf], leaf));
     suite = await startSuite({ world });
-    const { before, after } = await saveAndReopen(suite, ODD_IDS, ODD_IDS.map((_leaf, at) => `r-${at}`));
+    const { before, after } = await saveAndReopen(suite, ODD_IDS, ODD_IDS);
     expect(after.state.loadedGraph().nodes.map((node) => node.ref.stableId).sort()).toEqual(['H-1', ...ODD_IDS].sort());
-    expect(after.state.loadedGraph().edges.map((edge) => 'stableId' in edge.ref ? edge.ref.stableId : '').sort()).toEqual(ODD_IDS.map((_leaf, at) => `r-${at}`).sort());
+    expect(after.state.loadedGraph().edges.map((edge) => 'stableId' in edge.ref ? edge.ref.stableId : '').sort()).toEqual([...ODD_IDS].sort());
     expect(after.canonical()).toBe(before.canonical());
+    const held = suite.draft();
+    for (const edges of [held?.layout.edges ?? [], held?.queryContext.loaded.edges ?? []]) {
+      expect(edges.map((edge) => decodeStored(edge.id ?? '')).sort()).toEqual([...ODD_IDS].sort());
+      expect(edges.some((edge) => edge.id?.includes('\u0000') === true || edge.id === '~e1:looks-encoded')).toBe(false);
+    }
     const stored = suite.draft()?.layout.nodes.map((node) => node.id) ?? [];
     expect(stored.some((id) => id.includes('\u0000'))).toBe(false);
     expect(stored.map(decodeStored).sort()).toEqual(['H-1', ...ODD_IDS].sort());
     for (const tab of [before, after]) expect(tab.bodies.filter((body) => body.includes('"INTERNAL_ERROR"'))).toEqual([]);
+  });
+
+  it('keep their own relationship ids through a named view that is saved, restored and reopened, and no relationship is listed twice', async () => {
+    const world = new World().entity('hub', 'H-1');
+    ODD_IDS.forEach((leaf) => world.entity('leaf', leaf).relationship('LINKED', ['hub', 'H-1'], ['leaf', leaf], leaf));
+    suite = await startSuite({ world });
+    const { before: tab, id } = await saveAndReopen(suite, ODD_IDS, ODD_IDS);
+    const saved = tab.canonical();
+    expect(await saveNamedView(tab.client, tab.state, { name: 'All of them', notes: null })).toEqual({ kind: 'saved' });
+    tab.state.presentation.setPositions(new Map([[tab.nodeKey('leaf', '..'), { x: -9, y: -9 }]]));
+    await suite.advance(AUTOSAVE_DELAY_MS);
+    await tab.written();
+    const listed = await tab.client.listViews(id, {});
+    const view = listed.ok ? listed.value.items[0] : undefined;
+    expect(await restoreNamedView(tab.client, tab.state, view?.id ?? '')).toMatchObject({ kind: 'restored' });
+    expect(tab.canonical()).toBe(saved);
+    const reopened = suite.tab();
+    expect(await reopened.openById(id)).toMatchObject({ kind: 'shown' });
+    const ids = reopened.state.loadedGraph().edges.map((edge) => ('stableId' in edge.ref ? edge.ref.stableId : ''));
+    expect([...ids].sort()).toEqual([...ODD_IDS].sort());
+    reopened.state.presentation.setPositions(new Map([[reopened.nodeKey('leaf', '..'), { x: 5, y: 5 }]]));
+    await suite.advance(AUTOSAVE_DELAY_MS);
+    await reopened.written();
+    expect(suite.draft()?.layout.edges.map((edge) => decodeStored(edge.id ?? '')).sort()).toEqual([...ODD_IDS].sort());
+    expect(suite.draft()?.queryContext.loaded.edges).toHaveLength(ODD_IDS.length);
+    for (const each of [tab, reopened]) expect(each.bodies.filter((body) => body.includes('"INTERNAL_ERROR"'))).toEqual([]);
   });
 
   it('are refused, and nothing is stored, when one entry is larger than the request size limit', async () => {

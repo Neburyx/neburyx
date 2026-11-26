@@ -32,12 +32,12 @@ afterAll(async () => {
 describe('identifiers a database cannot hold as they are, on real Postgres', () => {
   it('are stored, read back and reopened as the person had them, with no database error', async () => {
     const world = new World().entity('hub', 'H-1');
-    ODD_IDS.forEach((leaf, at) => world.entity('leaf', leaf).relationship('LINKED', ['hub', 'H-1'], ['leaf', leaf], `r-${at}`));
+    ODD_IDS.forEach((leaf) => world.entity('leaf', leaf).relationship('LINKED', ['hub', 'H-1'], ['leaf', leaf], leaf));
     suite = await startPgSuite(postgres, { world });
     const before = suite.tab();
     await before.open(ref('hub', 'H-1'));
     const id = before.state.investigation.getState().id ?? '';
-    await before.load(ODD_IDS.map((leaf) => ref('leaf', leaf)), ODD_IDS.map((_leaf, at) => LINKED(`r-${at}`)));
+    await before.load(ODD_IDS.map((leaf) => ref('leaf', leaf)), ODD_IDS.map((leaf) => LINKED(leaf)));
     before.state.presentation.setPositions(new Map(ODD_IDS.map((leaf, at) => [before.nodeKey('leaf', leaf), { x: at, y: at }] as const)));
     await suite.advance(AUTOSAVE_DELAY_MS);
     await before.written();
@@ -47,6 +47,9 @@ describe('identifiers a database cannot hold as they are, on real Postgres', () 
     const stored = (await suite.draft())?.layout.nodes.map((node) => node.id) ?? [];
     expect(stored.some((each) => each.includes('\u0000'))).toBe(false);
     expect(stored.map(decodeStored).sort()).toEqual(['H-1', ...ODD_IDS].sort());
+    expect(after.state.loadedGraph().edges.map((edge) => ('stableId' in edge.ref ? edge.ref.stableId : '')).sort()).toEqual([...ODD_IDS].sort());
+    const held = (await suite.draft())?.queryContext.loaded.edges.map((edge) => edge.id ?? '') ?? [];
+    expect(held.map(decodeStored).sort()).toEqual([...ODD_IDS].sort());
     expect(after.bodies.filter((text) => text.includes('INTERNAL_ERROR'))).toEqual([]);
   });
 

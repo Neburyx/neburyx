@@ -6,7 +6,7 @@ import { decodeStored, encodeStored } from '../reference/stored-text.js';
 import { isStorableText } from '../reference/well-formed.js';
 
 type Ref = { readonly t: string; readonly id: string };
-type EdgeEnds = { readonly t: string; readonly from: Ref; readonly to: Ref };
+type EdgeEnds = { readonly t: string; readonly from: Ref; readonly to: Ref; readonly id?: string | undefined };
 
 export interface StoredReferences {
   /** The reference a stored entity ID is shown as: the ID as it was sent, decoded from its stored form; a token when the type is keyed now; and the value of a token that a type no longer keyed was stored under. */
@@ -73,10 +73,12 @@ export function createStoredReferences(mapping: MappingModel, keys: ReferenceKey
     return reference;
   };
   const storedRefs = (sourceId: string, list: readonly Ref[]): Ref[] => list.map((ref) => ({ ...ref, id: storedId(sourceId, ref.t, ref.id) }));
-  const storedEdges = <E extends EdgeEnds>(sourceId: string, list: readonly E[]): E[] => list.map((edge) => ({ ...edge, from: { ...edge.from, id: storedId(sourceId, edge.from.t, edge.from.id) }, to: { ...edge.to, id: storedId(sourceId, edge.to.t, edge.to.id) } }));
+  // a relationship's own ID is never a keyed reference: only the stored form of its text, whatever the type is called
+  const ownId = (edge: EdgeEnds, convert: (id: string) => string): { readonly id?: string } => (edge.id === undefined ? {} : { id: convert(edge.id) });
+  const storedEdges = <E extends EdgeEnds>(sourceId: string, list: readonly E[]): E[] => list.map((edge) => ({ ...edge, ...ownId(edge, encodeStored), from: { ...edge.from, id: storedId(sourceId, edge.from.t, edge.from.id) }, to: { ...edge.to, id: storedId(sourceId, edge.to.t, edge.to.id) } }));
 
   const refs = (sourceId: string, list: readonly Ref[]): Ref[] => list.map((ref) => ({ ...ref, id: entityId(sourceId, ref.t, ref.id) }));
-  const edges = <E extends EdgeEnds>(sourceId: string, list: readonly E[]): E[] => list.map((edge) => ({ ...edge, from: { ...edge.from, id: entityId(sourceId, edge.from.t, edge.from.id) }, to: { ...edge.to, id: entityId(sourceId, edge.to.t, edge.to.id) } }));
+  const edges = <E extends EdgeEnds>(sourceId: string, list: readonly E[]): E[] => list.map((edge) => ({ ...edge, ...ownId(edge, decodeStored), from: { ...edge.from, id: entityId(sourceId, edge.from.t, edge.from.id) }, to: { ...edge.to, id: entityId(sourceId, edge.to.t, edge.to.id) } }));
 
   /**
    * The property filters a document may keep: not one on a personal-data property, since its values are personal data and must never be stored. A filter that names its type is judged by its type: it goes when the key is personal data for
