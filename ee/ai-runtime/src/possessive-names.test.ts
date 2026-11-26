@@ -53,6 +53,8 @@ describe.each([
     `These are the ${holders} held by Gamma Partners.`,
     `Gamma Partners’s ${holder} is listed.`,
     `Gamma Partners' other ${holders} are listed.`,
+    `Gamma Partners' 2 ${holders} are Holder B and Holder C.`,
+    `Gamma Partners' other 2 ${holders} are listed.`,
   ])('asks for a link of the one named: %s', (text) => {
     expect(verdict(text, ['h2', 'h3'])).toBe('citation');
     expect(verdict(text, ['h2', 'h3', 'w1', 'w2'])).toBe('kept');
@@ -94,7 +96,7 @@ describe.each([
     }
     expect(reasons("Gamma Partners' relationships number 12 and Delta Traders' number 8.", ['o1', 'o2'], ['o1', 'o2', 's1', 's2'])).not.toContain('citation');
     // a count says nothing of where the relationships go
-    for (const text of ["Gamma Partners' links include one to Holder B.", "Gamma Partners' relationships include 12 to Delta Traders.", "Gamma Partners' relationships include one to a customer."]) expect(reasons(text, ['o1'], ['o1', 'h2', 'o2', 's1']), text).toContain('citation');
+    for (const text of ["Gamma Partners' links include one to Holder B.", "Gamma Partners' relationships include 12 to Delta Traders.", "Gamma Partners' relationships include one to a customer.", "Gamma Partners' 12 links include one to Holder B."]) expect(reasons(text, ['o1'], ['o1', 'h2', 'o2', 's1']), text).toContain('citation');
     expect(reasons(`Gamma Partners' ${holders} number 12.`, ['o1'])).toContain('citation');
   });
 

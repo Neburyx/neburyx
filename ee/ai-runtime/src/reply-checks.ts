@@ -792,7 +792,7 @@ function possessivesAreLinked(sentence: SummarySentence, assembled: CheckedText)
     const properties = holders.flatMap((key) => (assembled.rankedValues?.get(key) ?? []).map((entry) => flatten(entry.key)));
     for (const mention of untied ? mentions : []) {
       const after = flatten(left.slice(mention.index + name.length, mention.index + name.length + 80));
-      const owns = new RegExp(`^['\u2019]s?(?![\\p{L}])\\s+(?:[\\p{L}-]+\\s+){0,2}?(${thing})(?![\\p{L}\\p{N}_])`, 'iu').exec(after);
+      const owns = new RegExp(`^['\u2019]s?(?![\\p{L}])\\s+(?:[\\p{L}\\p{N},.-]+\\s+){0,2}?(${thing})(?![\\p{L}\\p{N}_])`, 'iu').exec(after);
       const ownProperty = properties.some((property) => after.replace(/^['\u2019]s?\s+/u, '').startsWith(property));
       const belongs = new RegExp(`${WB}(${thing})\\s+${BELONGING}\\s+(?:the\\s+)?$`, 'iu').exec(flatten(left.slice(Math.max(0, mention.index - 80), mention.index)));
       const claimed = [ownProperty ? undefined : owns?.[1], belongs?.[1] === undefined || properties.includes(flatten(belongs[1])) ? undefined : belongs[1]].filter((word) => word !== undefined);
