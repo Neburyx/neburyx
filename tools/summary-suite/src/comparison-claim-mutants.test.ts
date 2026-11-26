@@ -18,6 +18,8 @@ interface World {
   readonly extra: readonly (readonly [item: number, holder: string])[];
   readonly values: readonly string[];
   readonly masked?: number;
+  /** A second property of each item. */
+  readonly grades?: readonly string[];
   readonly read?: string;
 }
 
@@ -39,7 +41,7 @@ describe.each(PACKS)('false comparison claims made from true ones are removed ($
 
   function judged(world: World, sentence: string, which: 'sends' | 'receives' | 'all' | 'items'): boolean {
     const holders = [...new Set([...world.from, ...world.to, ...world.extra.map(([, name]) => name)])];
-    const nodes = [...ITEMS.map((id, index) => node(item, id, `Item ${id}`, [prop(pack.property, world.masked === index ? 'a***' : world.values[index], world.masked === index)])), ...holders.map((name) => node(holder, name, name))];
+    const nodes = [...ITEMS.map((id, index) => node(item, id, `Item ${id}`, [prop(pack.property, world.masked === index ? 'a***' : world.values[index], world.masked === index), ...(world.grades === undefined ? [] : [prop('grade', world.grades[index])])])), ...holders.map((name) => node(holder, name, name))];
     const link = (type: string, id: string, from: GraphNode['ref'], to: GraphNode['ref']): GraphEdge => edge(type, id, from, to);
     const sends = world.from.map((name, index) => link(pack.send, `s${index}`, ref(holder, name), ref(item, ITEMS[index] ?? '')));
     const receives = [...world.to.map((name, index) => link(pack.receive, `t${index}`, ref(item, ITEMS[index] ?? ''), ref(holder, name))), ...world.extra.map(([index, name], at) => link(pack.receive, `x${at}`, ref(item, ITEMS[index] ?? ''), ref(holder, name)))];
@@ -62,6 +64,18 @@ describe.each(PACKS)('false comparison claims made from true ones are removed ($
       cites: 'items',
       world: BASE,
       mutants: { 'one value swapped': { ...BASE, values: ['alpha', 'beta', 'alpha'] }, 'one value masked': { ...BASE, masked: 1 } },
+    },
+    {
+      sentence: `The ${pack.receiver} ${holder}s do not differ across these three.`,
+      cites: 'receives',
+      world: { ...BASE, to: ['Delta', 'Delta', 'Delta'] },
+      mutants: { 'one holder swapped': { ...BASE, to: ['Delta', 'Epsilon', 'Delta'] }, 'a second holder added': { ...BASE, to: ['Delta', 'Delta', 'Delta'], extra: [[0, 'Epsilon']] as const } },
+    },
+    {
+      sentence: `These three differ in ${pack.words} and grade.`,
+      cites: 'items',
+      world: { ...SPREAD, grades: ['low', 'high', 'low'] },
+      mutants: { 'one listed property the same': { ...SPREAD, grades: ['low', 'low', 'low'] }, 'the other listed property the same': { ...BASE, grades: ['low', 'high', 'low'] }, 'one value masked': { ...SPREAD, grades: ['low', 'high', 'low'], masked: 1 } },
     },
     {
       sentence: `These three have different ${pack.words}s.`,
@@ -123,6 +137,6 @@ describe.each(PACKS)('false comparison claims made from true ones are removed ($
 
   it(`catches all ${mutants.length} false sentences made from ${CASES.length} true ones`, () => {
     expect(mutants.filter(([sentence, , cites, world]) => !judged(world, sentence, cites))).toHaveLength(mutants.length);
-    expect(mutants.length).toBe(20);
+    expect(mutants.length).toBe(25);
   });
 });

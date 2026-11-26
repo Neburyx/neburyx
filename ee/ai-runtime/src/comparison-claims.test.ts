@@ -401,6 +401,63 @@ describe('a sentence that opens with a word that turns it', () => {
   });
 });
 
+describe.each(PACKS)('the sentences a live run wrote, in the words of the $name mapping', (pack) => {
+  const { item, holder, status, statusWords, flag } = pack;
+  const items = `${item}s`;
+  const holders = `${holder}s`;
+  const entity = (key: string, type: string, title: string, properties: readonly Property[] = []): Element => ({ key, type, title, properties });
+  const link = (key: string, type: string, from: string, to: string): Element => ({ key, type, ends: [from, to], title: `${type}: ${key}` });
+  const receiver = pack.receiver;
+  const partial = { c1: { line: 'view coverage: 6 entities shown · \u2265 40 not yet retrieved (lower bound)', lists: [] } };
+  const elements = (to: readonly [string, string, string], second: string): readonly Element[] => [
+    entity('n1', item, 'Item A', [[status, 'Wire'], ['channel', 'night deposit'], ['amountDue', 10]]),
+    entity('n2', item, 'Item B', [[status, 'Wire'], ['channel', second], ['amountDue', 20]]),
+    entity('n3', item, 'Item C', [[status, 'Wire'], ['channel', 'night deposit'], ['amountDue', 30]]),
+    entity('n4', item, 'Item D', [['channel', 'branch'], ['amountDue', 40]]),
+    entity('h1', holder, 'Delta'), entity('h2', holder, 'Epsilon'),
+    link('e1', pack.receive, 'n1', to[0]), link('e2', pack.receive, 'n2', to[1]), link('e3', pack.receive, 'n3', to[2]),
+  ];
+  const one = textOf(elements(['h1', 'h1', 'h1'], 'cash machine'), partial);
+  const two = textOf(elements(['h1', 'h2', 'h1'], 'cash machine'), partial);
+  const links = ['e1', 'e2', 'e3'];
+
+  it('takes a denied difference for a claim of sameness, kept when the cites show one connected entity', () => {
+    for (const text of [`The ${receiver} ${holders} do not differ across these three.`, `The ${receiver} ${holder} does not differ among these three.`, `These three do not have different ${receiver} ${holders}.`]) {
+      expect(verdict(one, text, links), text).toBe('kept');
+      expect(verdict(two, text, links), text).toBe('comparison');
+    }
+    const both = `Each of the three is received by the same ${holder}, Delta, so among those in view the ${receiver} ${holder} does not differ.`;
+    expect(verdict(one, both, [...links, 'h1', 'n1', 'n2', 'n3'])).toBe('kept');
+    expect(verdict(two, both, [...links, 'h1', 'n1', 'n2', 'n3'])).toBe('comparison');
+  });
+
+  it('takes a denied difference of a property for sameness, and leaves "not all different" unread', () => {
+    const same = ['n1', 'n2', 'n3'];
+    expect(verdict(one, `The ${statusWords}s do not differ across these three.`, same)).toBe('kept');
+    expect(verdict(one, `No two of these three differ in ${statusWords}.`, same)).toBe('kept');
+    expect(verdict(one, 'These three do not differ in channel.', same)).toBe('comparison');
+    expect(verdict(one, `These three do not all differ in ${statusWords}.`, same)).toBe('comparison');
+  });
+
+  it('tests each property of "differ in A, B and C" by itself, and the examples as values', () => {
+    const all = ['n1', 'n2', 'n3', 'n4'];
+    const said = (examples: string): string => `They differ in channel (${examples}) and amountDue.`;
+    expect(verdict(one, said('night deposit, cash machine, branch'), all)).toBe('kept');
+    expect(verdict(one, 'They differ in amountDue (for example 10, 20) and channel.', all)).toBe('kept');
+    // one property that does not differ makes the sentence false
+    expect(verdict(one, `They differ in channel and ${statusWords}.`, ['n1', 'n2', 'n3'])).toBe('comparison');
+    expect(verdict(one, `They differ in ${statusWords}, channel and amountDue.`, ['n1', 'n2', 'n3'])).toBe('comparison');
+    // an example that no element holds is false; one held only by an element not cited is passed over
+    expect(verdict(one, said('night deposit, lockbox'), all)).toBe('comparison');
+    expect(verdict(one, said('night deposit, branch'), ['n1', 'n2', 'n3'])).toBe('kept');
+    // a property that is not shown by a cited element, or a name that is no property
+    expect(verdict(one, `They differ in channel and ${flag}.`, all)).toBe('comparison');
+    expect(verdict(one, 'They differ in channel and colour.', all)).toBe('comparison');
+    // all different is still what "different" says
+    expect(verdict(one, 'These four have different channels.', all)).toBe('comparison');
+  });
+});
+
 describe('what the model is told of a removed comparison', () => {
   it('names a claim of difference, sameness or sharing and how to back it, with no value', () => {
     const note = removalNoteOf([{ text: 'They share it.', reason: 'comparison' }]);

@@ -1363,8 +1363,11 @@ function statedCount(evidence: Evidence, nouns: readonly string[]): number | 'se
 
 const countHolds = (stated: number | 'several' | undefined, actual: number): boolean => stated === undefined || (stated === 'several' ? actual >= 2 : stated === actual);
 
-/** How a claim is meant: that two of the subjects are the same, that no two are, that not all are, or that exactly two are not. */
-type Reading = 'same' | 'allDifferent' | 'notAllSame' | 'twoDifferent';
+/** How a claim is meant: that two of the subjects are the same, that no two are, that not all are, that exactly two are not, or, for a denied difference, that all have one and the same. */
+type Reading = 'same' | 'allDifferent' | 'notAllSame' | 'twoDifferent' | 'oneForAll';
+
+/** A denial of a difference (`do not differ`, `no two … differ`, `do not have different …`), which says that all have the same; `not all differ` says something else and is not read. */
+const DENIED_DIFFERENCE = /(?:(?:(?<![\p{L}\p{N}_-])(?:not|never)|n['\u2019]t)\s+(?:(?:have|has|be|appear to|seem to)\s+)?|(?<![\p{L}\p{N}_-])(?:no two|none)(?![\p{L}\p{N}_-])[^]{0,80}?)(?:differ|differs|different|distinct|vary|varies)(?![\p{L}\p{N}_])/iu;
 
 /** How a claim of a clause reads, with its negation: only the forms listed are read, and any other negated claim is not (undefined). */
 function readingOf(kind: ClaimKind, word: string, clause: string, sentence: string): Reading | undefined {
@@ -1372,7 +1375,7 @@ function readingOf(kind: ClaimKind, word: string, clause: string, sentence: stri
   const each = /(?<![\p{L}\p{N}_-])(?:each|one another)(?![\p{L}\p{N}_-])/iu.test(flatten(sentence));
   const negated = NEGATION.test(clause);
   if (kind === 'differ') {
-    if (negated) return undefined;
+    if (negated) return !/(?<![\p{L}\p{N}_-])not\s+all(?![\p{L}\p{N}_-])/iu.test(flat) && DENIED_DIFFERENCE.test(flat) ? 'oneForAll' : undefined;
     return word.startsWith('var') && !each ? 'notAllSame' : 'allDifferent';
   }
   if (!negated) return 'same';
@@ -1535,12 +1538,13 @@ const noneEqual = (values: readonly string[]): boolean => new Set(values).size =
 /** Whether values read as a claim reads them. */
 function valuesRead(reading: Reading, values: readonly string[]): boolean {
   if (values.length < 2) return false;
-  if (reading === 'same') return allEqual(values);
+  if (reading === 'same' || reading === 'oneForAll') return allEqual(values);
   if (reading === 'notAllSame') return !allEqual(values);
   return noneEqual(values) && (reading !== 'twoDifferent' || values.length === 2);
 }
 
-function propertyClaimHolds(evidence: Evidence, reading: Reading, property: string, end: number): boolean {
+function propertyClaimHolds(evidence: Evidence, meant: Reading, property: string, end: number): boolean {
+  const reading: Reading = meant === 'oneForAll' ? 'same' : meant;
   const carriers = evidence.cited.filter((key) => evidence.assembled.rankedValues?.get(key)?.some((entry) => entry.key === property) === true);
   let subjects = propertySubjects(evidence, carriers);
   if (subjects === undefined) return false;
@@ -1587,7 +1591,7 @@ function dayClaimHolds(evidence: Evidence, reading: Reading): boolean {
 
 function linkClaimHolds(evidence: Evidence, reading: Reading): boolean {
   const cited = evidence.links.filter((link) => evidence.cited.includes(link.key));
-  return reading === 'same' && cited.length >= 2 && allEqual(cited.map((link) => link.type)) && countHolds(statedCount(evidence, cited.map((link) => link.type)), cited.length);
+  return (reading === 'same' || reading === 'oneForAll') && cited.length >= 2 && allEqual(cited.map((link) => link.type)) && countHolds(statedCount(evidence, cited.map((link) => link.type)), cited.length);
 }
 
 /** Both sides of every relationship type the sent text holds. */
@@ -1686,6 +1690,15 @@ function connectedClaimHolds(evidence: Evidence, claim: ConnectedClaim): boolean
       const sets = each.subjects.map((subject) => each.joined.get(subject) ?? new Set<Identity>());
       const [first] = sets;
       return spokenOf(each) && first !== undefined && first.size > 0 && sets.every((set) => set.size === first.size && [...set].every((entity) => first.has(entity))) && countHolds(stated, each.subjects.length) && completeFor(evidence, [each.group], each.subjects, connected);
+    });
+  }
+  if (reading === 'oneForAll') {
+    // a denied difference: every subject is joined to one and the same entity, by every link of the type that was sent for it
+    return sided.some((each) => {
+      const sets = each.subjects.map((subject) => each.joined.get(subject) ?? new Set<Identity>());
+      const only = new Set(sets.flatMap((set) => [...set]));
+      const every = each.group.links.filter((link) => each.subjects.includes(link.near) && connected.reaches(link.far)).every((link) => evidence.cited.includes(link.key));
+      return spokenOf(each) && only.size === 1 && sets.every((set) => set.size === 1) && every && countHolds(stated, each.subjects.length) && connected.named.filter((named) => !each.subjects.includes(named)).every((named) => only.has(named));
     });
   }
   if (reading === 'same') {
@@ -1816,6 +1829,43 @@ function entitiesAreSubject(evidence: Evidence, span: Span, claim: Span, entityT
   });
 }
 
+/** The items of a list that follows `differ in`: split at commas and `and` outside parentheses, up to the end of the sentence, each with the examples written in parentheses after it. */
+function listedItems(text: string, from: number): { readonly words: string; readonly examples: readonly string[] }[] {
+  const items: { words: string; examples: string[] }[] = [];
+  for (const piece of (/^(?:[^.;!?(]|\([^)]*\)|\.(?=\d))*/u.exec(text.slice(from))?.[0] ?? '').split(/(?:,|(?<![\p{L}\p{N}_-])and(?![\p{L}\p{N}_-]))(?![^(]*\))/iu)) {
+    const examples = [...piece.matchAll(/\(([^)]*)\)/gu)].flatMap((found) => (found[1] ?? '').replace(/^\s*(?:for example|for instance|e\.g\.|such as|including)[\s,:]*/iu, '').split(/,|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-])/iu)).map((example) => example.trim().replace(/^["\u201c]|["\u201d]$/gu, '')).filter((example) => example !== '' && !/^etc/iu.test(example));
+    const words = piece.replace(/\([^)]*\)/gu, ' ').trim().replace(/^(?:(?:in|their|its|the)\s+)+/iu, '');
+    const first = words.split(/\s+/u)[0]?.toLowerCase() ?? '';
+    // a word that opens another assertion ends the list
+    if (items.length > 0 && SENTENCE_OPENERS.has(first)) break;
+    if (words !== '') items.push({ words, examples });
+  }
+  return items;
+}
+
+/**
+ * `differ in A, B and C`: each property named is a claim of its own, that the subjects do not all hold the same value of it (no two the same with `each`). An example in parentheses that a subject holds stands; one that only an
+ * element not cited holds is passed over; one no element holds is false. Undefined when what follows `in` names no property, which is judged as any other claim.
+ */
+function differsInHolds(evidence: Evidence, claimEnd: number, apart: boolean): boolean | undefined {
+  const lead = /^\s+in(?![\p{L}\p{N}_-])/iu.exec(evidence.spoken.slice(claimEnd));
+  if (lead === null) return undefined;
+  const items = listedItems(evidence.text, claimEnd + lead[0].length);
+  const named = items.map((item) => propertiesNamed(evidence, item.words));
+  if ((named[0]?.length ?? 0) === 0) return undefined;
+  return items.every((item, index) => {
+    const [property, other] = named[index] ?? [];
+    if (property === undefined || other !== undefined) return false;
+    const subjects = propertySubjects(evidence, evidence.cited.filter((key) => evidence.assembled.rankedValues?.get(key)?.some((entry) => entry.key === property) === true));
+    if (subjects === undefined || !countHolds(statedCount(evidence, []), subjects.length)) return false;
+    const values = subjects.map((key) => comparedValue(evidence, key, property));
+    const present = values.flatMap((value) => (value === undefined ? [] : [value]));
+    if (present.length !== subjects.length || new Set(present.map((value) => value.dataClass)).size !== 1 || !valuesRead(apart ? 'allDifferent' : 'notAllSame', present.map((value) => value.value))) return false;
+    const sent = [...(evidence.assembled.elementTypes?.keys() ?? [])].flatMap((key) => comparedValue(evidence, key, property) ?? []);
+    return item.examples.every((example) => sent.some((value) => writes(example, value)));
+  });
+}
+
 /**
  * A sentence that says elements differ, are the same or share something is kept only when the cited elements show it: equal or unequal values of a property they carry, the day of their moments, the type of their links, or the
  * entities they are joined to by the cited relationships. A claim the check cannot test is not verified. Property, type and relationship names are the mapping's; nothing here is a word of a domain.
@@ -1838,6 +1888,11 @@ function comparisonClaimsHold(sentence: SummarySentence, assembled: CheckedText)
     const ownName = ownNameHolds(evidence, claim);
     if (ownName !== undefined) return ownName;
     const kind = kindOfClaim(word);
+    if (kind === 'differ' && /^(?:differ|var)/u.test(word) && !NEGATION.test(clause)) {
+      const each = /(?<![\p{L}\p{N}_-])(?:each|one another)(?![\p{L}\p{N}_-])/iu.test(evidence.spoken);
+      const listed = differsInHolds(evidence, claim.end, each);
+      if (listed !== undefined) return listed;
+    }
     const before = wordsAt(evidence.spoken, { start: span.start, end: claim.start });
     const only = kind !== 'differ' && /(?<![\p{L}\p{N}_-])only(?![\p{L}\p{N}_-])/iu.test(evidence.spoken.slice(span.start, claim.start));
     const reading = readingOf(kind, word, clause, evidence.spoken);
