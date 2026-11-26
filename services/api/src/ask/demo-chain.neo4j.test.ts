@@ -231,7 +231,7 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))(`every demo quest
     }
   }, 300_000);
 
-  it('returns the people of a name with an exact count when the matches fit the page, nothing-found for a name that is not there, and no name when the caller is masked', async () => {
+  it('returns the people of a name with an exact count when the matches fit the page, nothing-found for a name that is not there, and refuses the name query when the caller is masked', async () => {
     const question = pack.questions.find((candidate) => isNameQuestion(pack, candidate));
     if (question === undefined || question.expect === 'refuse') throw new Error('the pack has no name question');
     const [name] = Object.values(question.expect.entities);
@@ -245,9 +245,10 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))(`every demo quest
       const result = open.answered?.result as { result?: { nodes: unknown[]; count: { quality: string; value: number } } } | undefined;
       expect(result?.result?.nodes.length).toBe(Math.min(matches, result?.result?.count.value ?? 0));
       if (result?.result?.count.quality === 'exact') expect(result.result.count.value).toBe(matches);
-      const masked = readAnswer((await post(rig.app, '/v1/ask', { sourceId: rig.sourceId, question: question.wording, mask: true })).json());
-      expect(masked.answered, 'the name query runs with masking on').toBeDefined();
-      expect(JSON.stringify([masked.answered?.result, masked.answered?.summary])).not.toContain(name ?? '');
+      const masked = await post(rig.app, '/v1/ask', { sourceId: rig.sourceId, question: question.wording, mask: true });
+      expect(masked.statusCode, 'the name query filters by a marked property').toBe(400);
+      expect(masked.json()).toMatchObject({ error: { code: 'INVALID_REQUEST', details: { reason: 'file-query-masked' } } });
+      expect(masked.body).not.toContain(name ?? '');
     } finally {
       await rig.app.close();
     }
