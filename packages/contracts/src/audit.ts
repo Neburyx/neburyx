@@ -2,7 +2,7 @@ import type { Socket } from 'node:net';
 import { z } from 'zod';
 import { ASK_INTENT_NAME } from './ask-folder.js';
 import { ASK_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, ASK_VALUE_NOT_FIT_KINDS, SAVED_PATTERN_TEMPLATE_ID } from './ask.js';
-import { ERROR_CODES } from './error-codes.js';
+import { FILE_QUERY_REASONS, ERROR_CODES } from './error-codes.js';
 import { roleSchema } from './me.js';
 
 /** The id the system principal and the system actor of an event are stored under. */
@@ -79,7 +79,7 @@ const wholeCount = z.number().int().nonnegative();
  * parameters and the number of elements the result listed; never a value, a question or a sentence. The parameters' hash is an HMAC made with the signing capability of the application over the canonical text
  * `['ask-run-params', 1, intent, entities]`, so a short value cannot be confirmed by guessing; the key is the application's.
  */
-const ASK_RUN_CAUSES = [...ASK_REFUSAL_CAUSES, 'continue-invalid', ...ERROR_CODES.map((code) => code.toLowerCase().replace(/_/g, '-'))] as [string, ...string[]];
+const ASK_RUN_CAUSES = [...ASK_REFUSAL_CAUSES, 'continue-invalid', ...FILE_QUERY_REASONS, ...ERROR_CODES.map((code) => code.toLowerCase().replace(/_/g, '-'))] as [string, ...string[]];
 
 export const askRunAuditDetailSchema = z.strictObject({
   intent: label.optional(),

@@ -126,6 +126,13 @@ describe('recording an event', () => {
     await expect(mounted.sink.record({ ...EVENT, detail: { ai: withoutHash } as never })).rejects.toMatchObject({ code: 'AUDIT_DETAIL_REFUSED' });
   });
 
+  it('stores an Ask event refused by a rule of a file query, with the rule as its cause', async () => {
+    const { mounted, calls } = rig();
+    const detail = { askRun: { intent: 'who-knows', kind: 'query', outcome: 'refused', cause: 'file-query-masked', querySha256: SHA } } as const;
+    await mounted.sink.record({ ...EVENT, action: 'ask.question', result: 'refused', detail });
+    expect(calls[0]?.values.at(-1)).toBe(JSON.stringify(detail));
+  });
+
   it('stores the detail of a file-query run as written, and refuses one that adds a field', async () => {
     const { mounted, calls } = rig();
     const detail = { fileQuery: { intent: 'who-knows', queryHash: SHA }, reason: 'timeout' } as const;

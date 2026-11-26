@@ -6,6 +6,7 @@ import { fileQueryDepsOf } from '../gate/file-query.js';
 import { parseMapping } from '../mapping/load.js';
 import { packMappingText, type Pack } from '../testing/pack-fixtures.js';
 import { communitySeams } from '../seams/community-seams.js';
+import type { AuditEvent } from '../seams/seams.js';
 import { startSearchApp } from '../testing/search-app.js';
 import { configuredWith, copyOfAskFolder, demoPacks, removeDemoFolders, type DemoPack, type DemoQuestion } from '../testing/demo-packs.js';
 
@@ -31,13 +32,15 @@ function scriptedClassifier(pack: DemoPack, overrides: ReadonlyMap<string, strin
   };
 }
 
-async function started(pack: DemoPack, options: { readonly folder?: string; readonly overrides?: ReadonlyMap<string, string> } = {}) {
+async function started(pack: DemoPack, options: { readonly folder?: string; readonly overrides?: ReadonlyMap<string, string>; readonly audited?: AuditEvent[] } = {}) {
   const folder = options.folder ?? copyOfAskFolder(pack);
   const { extension, outcome } = await configuredWith(folder, [pack.sourceId]);
   expect(outcome).toEqual({ ok: true });
   const mapping = parseMapping(packMappingText(pack.pack as Pack), 'neburyx.yaml');
-  const seams = { ...communitySeams(), askClassifier: scriptedClassifier(pack, options.overrides) };
-  const rig = await startSearchApp({ mapping, respond: noRows, fileQueries: fileQueryDepsOf(() => extension.askFolder?.()), appOptions: { extension, previewOn: true, seams } });
+  // the events of the gate and of the extension's own routes, in one list
+  const audit = options.audited === undefined ? undefined : { record: (event: AuditEvent) => Promise.resolve(void options.audited?.push(event)) };
+  const seams = { ...communitySeams(), ...(audit === undefined ? {} : { audit }), askClassifier: scriptedClassifier(pack, options.overrides) };
+  const rig = await startSearchApp({ mapping, respond: noRows, fileQueries: fileQueryDepsOf(() => extension.askFolder?.()), ...(audit === undefined ? {} : { audit }), appOptions: { extension, previewOn: true, seams } });
   return { ...rig, extension };
 }
 
@@ -60,6 +63,20 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))('every question o
       if (intent?.query !== undefined) expect(calls.some((call) => call.cypher === intent.query), question.id).toBe(true);
     }
     await app.close();
+  });
+
+  it('refuses the name query while masking is on, before the source, and audits the question as refused with the reason of the gate', async () => {
+    const question = pack.questions.find((candidate) => candidate.expect !== 'refuse' && pack.intents[candidate.expect.intent]?.query !== undefined);
+    if (question === undefined) throw new Error('the pack has no name question');
+    const audited: AuditEvent[] = [];
+    const { app, executor } = await started(pack, { audited });
+    const before = executor.calls.length;
+    const answer = await post(app, '/v1/ask', { sourceId: pack.sourceId, question: question.wording, mask: true });
+    expect(answer.statusCode, answer.body).toBe(400);
+    expect(executor.calls.slice(before).filter((call) => !call.templateId.startsWith('schema-'))).toEqual([]);
+    await app.close();
+    expect(audited.find((event) => event.action === 'ask.file_query')).toMatchObject({ result: 'refused', detail: { reason: 'file-query-masked' } });
+    expect(audited.find((event) => event.action === 'ask.question')).toMatchObject({ result: 'refused', detail: { askRun: { kind: 'query', outcome: 'refused', cause: 'file-query-masked' } } });
   });
 
   it('refuses every question that expects no intent with the cause no-intent, and runs nothing against the source', async () => {

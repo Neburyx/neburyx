@@ -264,3 +264,23 @@ describe('the detail of a cleared thread', () => {
     for (const detail of [{ threadClear: {} }, { threadClear: { cleared: 1 } }, { threadClear: { cleared: true, turns: 2 } }, { threadClear: { cleared: true, text: 'x' } }, { threadClear: { cleared: true }, turn: { route: 'ask' } }]) expect(auditDetailSchema.safeParse(detail).success).toBe(false);
   });
 });
+
+describe('the cause of the Ask event', () => {
+  const RUN = { intent: 'widgetById', kind: 'query', outcome: 'failed', querySha256: SHA };
+  const parses = (outcome: string, cause: string): boolean => auditDetailSchema.safeParse({ askRun: { ...RUN, outcome, cause } }).success;
+
+  it.each(['unknown-intent', 'nothing-found', 'continue-invalid', 'invalid-request', 'query-timeout', 'internal-error'])('still reads %s, as stored before', (cause) => {
+    expect(parses('failed', cause)).toBe(true);
+    expect(parses('refused', cause)).toBe(true);
+  });
+
+  it.each(['file-query-text', 'file-query-intent', 'file-query-values', 'file-query-result', 'file-query-masked'])('reads %s, the rule by which the gate refused a file query', (cause) => {
+    expect(parses('refused', cause)).toBe(true);
+    expect(parseAuditDetail({ askRun: { ...RUN, outcome: 'refused', cause } })).toEqual({ askRun: { ...RUN, outcome: 'refused', cause } });
+  });
+
+  it('refuses any other cause', () => {
+    expect(parses('refused', 'file-query-other')).toBe(false);
+    expect(parses('refused', 'pattern-limit')).toBe(false);
+  });
+});

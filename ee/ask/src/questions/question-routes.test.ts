@@ -309,11 +309,22 @@ describe('a file-query intent', () => {
     expect(runs).toEqual([]);
   });
 
-  it.each(['file-query-result', 'file-query-masked'] as const)('gives back the refusal of the gate rule that refused the query (%s), and records a failed run', async (reason) => {
+  it.each(['file-query-text', 'file-query-intent', 'file-query-values', 'file-query-result', 'file-query-masked'] as const)('gives back the refusal of the gate rule that refused the query (%s), and records it as refused with that reason; the row of the run, which knows no refusal, is failed', async (reason) => {
     const { route, request, events, rows } = await rig({ ...ask, run: () => ({ status: 'refused', refusal: { code: 'INVALID_REQUEST', reason } }) });
     expect(await refusalOf(route.handler(request(ASK)))).toMatchObject({ code: 'INVALID_REQUEST', reason });
-    expect(detailOf(events[0])).toMatchObject({ kind: 'query', outcome: 'failed', cause: 'invalid-request' });
+    expect(events[0]).toMatchObject({ result: 'refused' });
+    expect(detailOf(events[0])).toMatchObject({ kind: 'query', outcome: 'refused', cause: reason });
     expect(rows).toEqual([{ actorId: 'p-1', intent: 'byId', outcome: 'failed', rowCount: 0, elapsedMs: 0 }]);
+  });
+
+  it.each([
+    ['parameters the service refuses', { code: 'INVALID_REQUEST' as const, reason: 'invalid-request' }, 'invalid-request'],
+    ['a refusal of another code', { code: 'QUERY_TIMEOUT' as const }, 'query-timeout'],
+  ])('records %s as failed, as before', async (_name, refusalFields, cause) => {
+    const { route, request, events } = await rig({ ...ask, run: () => ({ status: 'refused', refusal: refusalFields as never }) });
+    await refusalOf(route.handler(request(ASK)));
+    expect(events[0]).toMatchObject({ result: 'failed' });
+    expect(detailOf(events[0])).toMatchObject({ outcome: 'failed', cause });
   });
 });
 

@@ -99,7 +99,7 @@ describe('a query forced past the loader is refused by the gate before any read'
     expect(answer.body).toMatchObject({ error: { code: 'INVALID_REQUEST', details: { reason: 'file-query-text' } } });
     expect(answer.body['answered']).toBeUndefined();
     expect(rig.reads()).toEqual([]);
-    expect(rig.appEvents.find((event) => event.action === 'ask.question')).toMatchObject({ result: 'failed' });
+    expect(rig.appEvents.find((event) => event.action === 'ask.question')).toMatchObject({ result: 'refused', detail: { askRun: { outcome: 'refused', cause: 'file-query-text' } } });
     expect(rig.rows).toEqual([expect.objectContaining({ intent: 'byId', outcome: 'failed' })]);
     expectNoValue([answer.body, rig.appEvents, rig.modelEvents, rig.rows, rig.logs], ['SENTINEL_TEXT']);
     await rig.close();

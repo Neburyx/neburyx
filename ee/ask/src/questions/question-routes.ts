@@ -5,6 +5,7 @@ import {
   ERROR_CODES,
   SAVED_PATTERN_TEMPLATE_ID,
   ExtensionRefusal,
+  FILE_QUERY_REASONS,
   askAnswerSchema,
   askContinueRequestSchema,
   askQuestionRequestSchema,
@@ -333,13 +334,18 @@ async function failedRun(run: Execution, error: unknown, detail: AskRunAuditDeta
   await writeRow(run.options.runs(), logger, { actorId: run.request.principalId, intent: run.intent, outcome: 'failed', rowCount: 0, elapsedMs });
 }
 
-/** A run the gate refused: an anchor that is not there is an answer (nothing found); any other refusal is a failed run, recorded and audited, and then given back as the gate gives it. */
+/**
+ * A run the gate refused: an anchor that is not there is an answer (nothing found). Any other is recorded as a failed run, audited and given back as the gate gives it. The event of a file query the gate refused by a
+ * rule says refused, with that rule as the cause, so that a reader of the audit does not take a refusal on purpose for a fault; the row of the run knows no refusal and stays failed.
+ */
 async function refusedRun(run: Execution, fields: ExtensionRefusalFields, detail: AskRunAuditDetail, elapsedMs: number, logger: ExtensionLogger | undefined): Promise<AskAnswer> {
   if (fields.code === 'NOT_FOUND') {
     await writeEvent(run.request, run.action, 'refused', run.sourceId, { ...detail, outcome: 'refused', cause: 'nothing-found' });
     return refusal('nothing-found', { intent: run.intent });
   }
-  await writeEvent(run.request, run.action, 'failed', run.sourceId, { ...detail, outcome: 'failed', cause: causeOfCode(fields.code) });
+  const rule = fields.code === 'INVALID_REQUEST' ? FILE_QUERY_REASONS.find((reason) => reason === fields.reason) : undefined;
+  const outcome = rule === undefined ? ('failed' as const) : ('refused' as const);
+  await writeEvent(run.request, run.action, outcome, run.sourceId, { ...detail, outcome, cause: rule ?? causeOfCode(fields.code) });
   await writeRow(run.options.runs(), logger, { actorId: run.request.principalId, intent: run.intent, outcome: 'failed', rowCount: 0, elapsedMs });
   throw new ExtensionRefusal(fields);
 }

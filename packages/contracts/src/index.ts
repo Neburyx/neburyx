@@ -1,4 +1,4 @@
-export { ACCESS_DENIED_REASONS, ASK_UNSUPPORTED_REASONS, CONFLICT_REASONS, ERROR_CODES, INVALID_REQUEST_REASONS, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
+export { ACCESS_DENIED_REASONS, ASK_UNSUPPORTED_REASONS, CONFLICT_REASONS, ERROR_CODES, FILE_QUERY_REASONS, INVALID_REQUEST_REASONS, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 export { errorResponseSchema } from './error-response.js';
 export type { AccessDeniedReason, AskUnsupportedReason, ConflictReason, InvalidRequestReason, ErrorCode, ErrorDetails, ErrorResponse, SourceUnavailableReason } from './error-codes.js';
 export { ERROR_DETAIL_KEYS, allowedDetails } from './error-details.js';
