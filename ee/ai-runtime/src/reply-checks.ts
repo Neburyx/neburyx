@@ -1200,7 +1200,8 @@ interface Span {
 function clauseSpanAt(text: string, at: number): Span {
   let start = 0;
   for (const found of text.matchAll(CLAUSE_BREAK)) {
-    if (found.index >= at) return { start, end: found.index };
+    // a position inside the break itself belongs to the clause it ends, so that stepping back from a clause always moves back
+    if (found.index + found[0].length > at) return { start, end: found.index };
     start = found.index + found[0].length;
   }
   return { start, end: text.length };

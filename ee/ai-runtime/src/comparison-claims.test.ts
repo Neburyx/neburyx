@@ -381,6 +381,26 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
   });
 });
 
+describe('a sentence that opens with a word that turns it', () => {
+  const held = textOf([
+    { key: 'n1', type: 'widget', title: 'Item A', properties: [['lane', 'north'], ['amountDue', 10]] },
+    { key: 'n2', type: 'widget', title: 'Item B', properties: [['lane', 'north'], ['amountDue', 20]] },
+  ]);
+
+  it.each([
+    'But they share the lane north.',
+    'But both have the same lane.',
+    'Although the amountDue values differ, both share a lane.',
+    'And yet they share a lane.',
+    'Item A has amountDue 10. But the two share the lane north.',
+    'Item A and Item B differ in amountDue but share the lane north.',
+    'But, although, but they are alike.',
+    'but but but same',
+  ])('is judged, and the check comes back: %s', (text) => {
+    expect(['kept', 'comparison', 'name', 'number', 'citation']).toContain(verdict(held, text, ['n1', 'n2']));
+  });
+});
+
 describe('what the model is told of a removed comparison', () => {
   it('names a claim of difference, sameness or sharing and how to back it, with no value', () => {
     const note = removalNoteOf([{ text: 'They share it.', reason: 'comparison' }]);
