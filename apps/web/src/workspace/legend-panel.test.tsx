@@ -109,9 +109,9 @@ describe('the legend\'s entity types while the profile is read', () => {
     expect(rows(container)).toEqual(['KIND-A', 'KIND-B']);
   });
 
-  it('shows the failure\'s code in an alert, with no retry control, when the first read failed, and the entries replace it when they arrive', () => {
+  it('shows the failure\'s sentence in an alert, with no retry control, when the first read failed, and the entries replace it when they arrive', () => {
     const { container, set } = controlled('s', { phase: 'failed', failure: { code: 'NETWORK_UNAVAILABLE' } });
-    expect(alert()?.textContent).toBe('NETWORK_UNAVAILABLE');
+    expect(alert()?.textContent).toBe('The server could not be reached.');
     expect(status()).toBeNull();
     expect(screen.queryAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Close Legend']);
     set({ phase: 'ready', data: types(['kind-a']) });
@@ -128,7 +128,7 @@ describe('the legend\'s entity types while the profile is read', () => {
     expect(rows(container)).toEqual(['KIND-C']);
   });
 
-  it('keeps the entries when a read of the profile fails, with the failure\'s code shown beside them in an alert', () => {
+  it('keeps the entries when a read of the profile fails, with the failure\'s sentence shown beside them in an alert', () => {
     const { container, set } = controlled('s', { phase: 'ready', data: types(['kind-a', 'kind-b']) });
     set({ phase: 'loading', data: types(['kind-a', 'kind-b']) });
     set({ phase: 'ready', data: types(['kind-a', 'kind-b']), failure: { code: 'SOURCE_UNAVAILABLE', message: 'unavailable', retryable: true, traceId: 'trace-1' } });

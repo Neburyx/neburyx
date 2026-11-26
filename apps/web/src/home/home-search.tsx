@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import type { SourceSummary } from '@neburyx/contracts';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { captionOf, SEARCH_COPY } from '../search/copy.js';
 import { chooseSearchSource } from '../search/search-source.js';
 import { searchTextProblem } from '../search/search-text.js';
@@ -68,7 +68,7 @@ export function HomeSearch() {
       <div className="search-failure">
         <p>{SEARCH_COPY.couldNotReadSources}</p>
         <FailureNotice failure={failure} />
-        {canRetry(failure) ? (
+        {offersRetry(failure) ? (
           <button type="button" className="secondary" onClick={sources === undefined ? shell.reloadSources : shell.reload}>
             {SEARCH_COPY.tryAgain}
           </button>

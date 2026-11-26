@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { answerEdge, derivedDetailOf, evidenceRig, failEdge, inPanel, openOn, OWNS, panel, selectEdge, SHARED, SUMMED } from './evidence-kit.js';
 import { derivationSentence, groupsCountText } from './copy.js';
+import { assertNoCodes } from '../patterns/no-codes.js';
 
 afterEach(cleanup);
 const rigWith = () => evidenceRig({}, [OWNS, SHARED, SUMMED]);
@@ -79,7 +80,8 @@ describe('the derived relationship in the panel', () => {
     const rig = rigWith();
     openOn(rig, SHARED);
     await failEdge(rig.edgeReads[0], 'NOT_FOUND');
-    expect(inPanel().getByRole('alert').textContent).toContain('NOT_FOUND');
+    expect(inPanel().getByRole('alert').textContent).toContain('This was not found. It may have been removed.');
+    assertNoCodes(inPanel().getByRole('alert').textContent);
     expect(inPanel().queryByRole('button', { name: 'Try again' })).toBeNull();
     rig.unbind();
     const busy = rigWith();

@@ -5,7 +5,7 @@ import { hintOf, humanize } from '../ask/text.js';
 import type { TurnStep } from '../api/turn-stream.js';
 import { askFailureWords, isContinueInvalid } from '../ask/ask-failure.js';
 import { isAssistantOff } from './failure-kinds.js';
-import { rateLimitedSentence } from '../patterns/failure-words.js';
+import { rateLimitedSentence } from '../failure-words.js';
 import { ASSISTANT_COPY, unavailableSentence } from './copy.js';
 import { ConfirmationCard } from './confirmation-card.js';
 import { READ_KIND_TAGS, ReadBox, ReadSteps } from './read-steps.js';

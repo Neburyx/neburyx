@@ -127,11 +127,11 @@ describe('opening a result in the graph', () => {
     const user = userEvent.setup();
     await user.click(openButton());
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(within(notice).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(within(notice).getByRole('alert').textContent).toContain('The server could not be reached.');
     expect(screen.getByText('Title AC-1')).toBeDefined();
     answer = { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } };
     await user.click(openButton());
-    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Opening failed' })).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE'));
+    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Opening failed' })).getByRole('alert').textContent).toContain('The server could not be reached.'));
     expect(screen.getByText('Title AC-1')).toBeDefined();
     expect(seen).toHaveLength(2);
     expect(view.router.state.location.pathname).toBe('/search');

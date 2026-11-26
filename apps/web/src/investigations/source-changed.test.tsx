@@ -259,7 +259,7 @@ describe('a removed source opens read-only on its saved layout, with Delete', ()
   it('asks for no profile of the removed source and shows no failure for it', async () => {
     const { requests } = await opened('removed');
     expect(requests.map((request) => request.path)).not.toContain('/v1/sources/source-a/profile');
-    expect(document.body.textContent).not.toContain('NOT_FOUND');
+    expect(document.body.textContent).not.toContain('This was not found. It may have been removed.');
     expect(screen.queryByRole('group', { name: 'Notices' })).toBeNull();
   });
 

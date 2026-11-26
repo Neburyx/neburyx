@@ -28,7 +28,7 @@ describe('the fixture page', () => {
       getProfile: async () => ({ ok: true, value: testProfile() }),
     }));
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Source a' }));
-    expect((await screen.findAllByText('NETWORK_UNAVAILABLE')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('The server could not be reached.')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Load' }).hasAttribute('disabled')).toBe(true);
   });
 

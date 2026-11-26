@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { ApiClient, ApiFailure } from '../api/client.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { PageFrame } from '../shell/page-shell.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
@@ -100,7 +100,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
           <div role="group" aria-label="Opening failed">
             <FailureNotice failure={failure} />
             {status.kind === 'failed' && status.sourceId !== undefined ? <AttemptedSource sourceId={status.sourceId} /> : null}
-            {canRetry(failure) ? (
+            {offersRetry(failure) ? (
               <button type="button" className="secondary" onClick={retry}>
                 {TRY_AGAIN}
               </button>

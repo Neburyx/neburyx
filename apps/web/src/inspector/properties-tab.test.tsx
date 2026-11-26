@@ -240,7 +240,7 @@ describe('the masking switch in the Properties tab', () => {
     const { reads, user, rig } = await openSwitch();
     await user.click(screen.getByRole('switch', { name: 'Mask sensitive values' }));
     await act(async () => reads[0]?.answer({ ok: false, failure: failure('RATE_LIMITED', true) }));
-    expect(inInspector().getByText(/RATE_LIMITED/)).toBeTruthy();
+    expect(inInspector().getByRole('alert').textContent).toBe('Too many requests. Try again in a moment. · trace tr-1');
     expect(lines()).toEqual([]);
     expect(rig.state.loadedGraph().nodes).toEqual([]);
     await user.click(inInspector().getByRole('button', { name: 'Try again' }));

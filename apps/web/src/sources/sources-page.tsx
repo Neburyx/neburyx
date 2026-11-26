@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FailureNotice } from '../failure-notice.js';
+import { FailureNotice, offersRetry } from '../failure-notice.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 import { COPY } from './copy.js';
@@ -20,9 +20,11 @@ function Body({ opening }: { readonly opening: string }) {
       <div className="sources-failure">
         <p>{COPY.couldNotRead}</p>
         <FailureNotice failure={failure} />
-        <button type="button" className="secondary" onClick={reloadSources}>
-          {COPY.tryAgain}
-        </button>
+        {offersRetry(failure) ? (
+          <button type="button" className="secondary" onClick={reloadSources}>
+            {COPY.tryAgain}
+          </button>
+        ) : null}
       </div>
     );
   }

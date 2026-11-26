@@ -24,7 +24,7 @@ describe('the panel while the preview is not there', () => {
     expect(previews).toHaveLength(1);
   });
 
-  it('shows the failure with its code and Retry when the preview fails, asks again on Retry, and still loads', async () => {
+  it('shows the failure in words and Retry when the preview fails, asks again on Retry, and still loads', async () => {
     const { open, previews, expansions } = panelRig();
     await open();
     await act(async () => previews[0]?.answer(failure('SOURCE_UNAVAILABLE')));
@@ -163,14 +163,14 @@ describe('the page size and the button', () => {
 });
 
 describe('the failures of a load', () => {
-  it('shows the failure with its code and Retry, adds nothing, and retries the same ask', async () => {
+  it('shows the failure in words and Retry, adds nothing, and retries the same ask', async () => {
     const { open, previews, expansions, state } = panelRig();
     await open();
     await answerPreview(previews[0]);
     const user = userEvent.setup();
     await user.click(button('Load 25 per type'));
     await failExpand(expansions[0], 'SOURCE_BUSY');
-    expect(within(inPanel().getByRole('alert').parentElement as HTMLElement).getByText('SOURCE_BUSY · trace tr-9')).not.toBeNull();
+    expect(within(inPanel().getByRole('alert').parentElement as HTMLElement).getByText('The source is busy. No read slot freed within the wait. · trace tr-9')).not.toBeNull();
     expect(state.loadedGraph().edges).toHaveLength(0);
     await user.click(button('Retry'));
     expect(expansions).toHaveLength(2);

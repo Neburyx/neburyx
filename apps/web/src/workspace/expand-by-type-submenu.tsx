@@ -2,7 +2,7 @@ import type { Count, DegreePreview, ElementRef, SourceProfile } from '@neburyx/c
 import { useEffect, useRef, useState } from 'react';
 import { cursorWasRefused, type TypeProgress } from '../api/expand-store.js';
 import { useProfile } from '../canvas/profile-context.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { elementKey, nodeRefOfKey } from '../state/keys.js';
 import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
@@ -111,7 +111,7 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
       ) : state.phase === 'failed' ? (
         <>
           <FailureNotice failure={state.failure} />
-          {canRetry(state.failure) ? (
+          {offersRetry(state.failure) ? (
             <button type="button" className="menu-row" ref={retry} onClick={request.reload}>
               <span className="menu-label">{RETRY}</span>
             </button>
@@ -184,7 +184,7 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
       {expansion.status === 'failed' && expansion.failure !== undefined ? (
         <>
           <FailureNotice failure={expansion.failure} />
-          {cursorRefused || !canRetry(expansion.failure) ? null : (
+          {cursorRefused || !offersRetry(expansion.failure) ? null : (
             <button type="button" className="menu-row" onClick={() => void expansions.retry(node)}>
               <span className="menu-label">{RETRY}</span>
             </button>

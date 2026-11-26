@@ -159,7 +159,7 @@ describe('the Timed out state', () => {
     act(() => void first.expand.expand(n1, ['type-a']));
     await act(async () => first.expansions[0]?.answer({ ok: false, failure: timedOut(null) }));
     expect(noRegion()).toBeNull();
-    expect(screen.getByRole('alert').textContent).toBe('QUERY_TIMEOUT · trace tr-t');
+    expect(screen.getByRole('alert').textContent).toBe('The source did not answer in time. · trace tr-t');
     cleanup();
     const second = rig('  ');
     act(() => void second.expand.expand(n1, ['type-a']));

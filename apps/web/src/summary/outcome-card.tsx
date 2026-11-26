@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { failureWords, retryAfterMsOf } from '../patterns/failure-words.js';
+import { failureWords, retryAfterMsOf } from '../failure-words.js';
 import { FAILURE_KIND_TEXT, SUMMARY_COPY, TOO_LARGE_ELEMENTS_TEXT, TOO_LARGE_TEXT, tooLargeFigure } from './copy.js';
 import { CoverageBox, Disclosure } from './draft-card.js';
 import type { SummaryOutcome } from './summary-model.js';

@@ -39,7 +39,7 @@ describe('what shows of an expansion started outside the submenu', () => {
     expect(screen.getByRole('status').textContent).toBe('Expanding 1 item');
     await act(async () => asked[0]?.answer({ ok: false, failure: { code: 'QUERY_TIMEOUT', message: 'x', retryable: true, traceId: 'tr-1' } }));
     expect(screen.getByText('n1')).not.toBeNull();
-    expect(screen.getByRole('alert').textContent).toBe('QUERY_TIMEOUT · trace tr-1');
+    expect(screen.getByRole('alert').textContent).toBe('The source did not answer in time. · trace tr-1');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
     expect(asked).toHaveLength(2);
     expect(screen.getByRole('status').textContent).toBe('Expanding 1 item');
@@ -71,7 +71,7 @@ describe('what shows of an expansion started outside the submenu', () => {
     act(() => void store.expand(ref('a', 'type-a', 'n1'), ['type-b']));
     await act(async () => asked[0]?.answer({ ok: false, failure: { code: 'SOURCE_BUSY', message: 'x', retryable: true, traceId: 'tr-2' } }));
     act(() => void store.expand(ref('a', 'type-a', 'n2'), ['type-b']));
-    expect(within(screen.getByRole('alert')).getByText('SOURCE_BUSY · trace tr-2')).not.toBeNull();
+    expect(within(screen.getByRole('alert')).getByText('The source is busy. No read slot freed within the wait. · trace tr-2')).not.toBeNull();
     expect(screen.getByRole('status').textContent).toBe('Expanding 1 item');
   });
 

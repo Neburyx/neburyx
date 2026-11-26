@@ -76,7 +76,7 @@ describe('the evidence panel on the Search page', () => {
     const { asked } = rigged();
     await userEvent.setup().click(await screen.findByRole('button', { name: BUTTON }));
     await act(async () => asked[0]?.answer({ ok: false, failure: { code: 'NOT_FOUND', message: 'x', retryable: false, traceId: 'tr-1' } }));
-    expect(within(screen.getByRole('complementary', { name: 'Relationship evidence' })).getByRole('alert').textContent).toContain('NOT_FOUND');
+    expect(within(screen.getByRole('complementary', { name: 'Relationship evidence' })).getByRole('alert').textContent).toContain('This was not found. It may have been removed.');
   });
 
   it('links a linkable record of its panel with the masking the panel was read with', async () => {

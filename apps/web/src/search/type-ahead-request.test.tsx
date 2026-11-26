@@ -5,6 +5,7 @@ import { key as testKey, node } from '../state/test-data.js';
 import { holding, inputOf, panelWorkspace, searchAnswer, setText, settle, sourceBox, TIMEOUT, typeText, TYPEAHEAD_DEBOUNCE_MS, wait } from './panel-test-kit.js';
 import { hit } from './search-test-kit.js';
 import { lengthOf, useTypeahead } from './use-typeahead.js';
+import { assertNoCodes } from '../patterns/no-codes.js';
 
 beforeEach(() => void vi.useFakeTimers());
 afterEach(() => {
@@ -170,7 +171,8 @@ describe('the type-ahead request of the Add from source tab', () => {
     await typeText('AC');
     await wait(TYPEAHEAD_DEBOUNCE_MS);
     await settle();
-    expect(screen.getByRole('alert').textContent).toContain('UNEXPECTED_FAILURE');
+    expect(screen.getByRole('alert').textContent).toContain('Something went wrong.');
+    assertNoCodes(screen.getByRole('alert').textContent);
     expect(screen.queryByText('Searching…')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await wait(0);

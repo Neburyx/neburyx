@@ -134,7 +134,7 @@ describe('/explore/{id}', () => {
     await act(async () => {
       await first.router.navigate(`/explore/${INVESTIGATION_B}`);
     });
-    expect(await screen.findByText('NETWORK_UNAVAILABLE')).toBeTruthy();
+    expect(await screen.findByText('The server could not be reached.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
     expect(state.investigation.getState().id).toBe(INVESTIGATION_A);
     expect(screen.getByRole('button', { name: TRY_AGAIN }).className).toBe('secondary');
@@ -150,7 +150,7 @@ describe('/explore/{id}', () => {
     const state = createClientState();
     state.show({ id: INVESTIGATION_B, sourceId: 'source-b', record: { title: 'kind-a C-1', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
     renderApp(`/explore/${INVESTIGATION_A}`, client, state);
-    expect((await screen.findByRole('group', { name: 'Opening failed' })).textContent).toContain('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('group', { name: 'Opening failed' })).textContent).toContain('The server could not be reached.');
     expect(screen.queryByText(OPENING)).toBeNull();
     expect(screen.getByRole('heading', { name: 'kind-a C-1', level: 1 })).toBeTruthy();
     expect(calls.getInvestigation).toEqual([]);

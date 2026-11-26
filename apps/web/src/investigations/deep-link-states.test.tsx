@@ -94,7 +94,7 @@ describe('a failure that can be tried again', () => {
     expect(state.investigation.getState()).toBe(shown);
     expect(state.holds(INVESTIGATION_B, false)).toBe(true);
     expect(sourceLine()).toContain('Source source-b');
-    expect(notice.textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(notice.textContent).toContain('The server could not be reached.');
     expect(notice.textContent).toContain('Could not open in Source source-a.');
     expect(screen.getByRole('link', { name: BACK_TO_HOME })).toBeTruthy();
     expect(screen.getByRole('button', { name: TRY_AGAIN }).className).toBe('secondary');

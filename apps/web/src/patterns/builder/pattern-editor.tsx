@@ -12,7 +12,7 @@ import { accentPhrases } from '../accent-phrases.js';
 import { extensionTags } from '../copy.js';
 import { BUILDER_COPY, CHECK_COPY, EDITOR_COPY, blockText, checkedAtText, placeOf, previewWhy, type ProblemPlace } from './copy.js';
 import { ProblemsPanel } from './problems-panel.js';
-import { TRY_AGAIN, rateLimitedSentence, retryAfterMsOf, tryAgainIn } from '../failure-words.js';
+import { TRY_AGAIN, rateLimitedSentence, retryAfterMsOf, tryAgainIn } from '../../failure-words.js';
 import { addStepBlock, breaksOf, hasConditions, previousTypeOf, stepLimitOf, toDefinition, type Action, type BuilderState } from './model.js';
 import { rowsOf, totalConditions } from './conditions.js';
 import { StepPanel, type Part } from './step-panel.js';

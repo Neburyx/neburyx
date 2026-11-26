@@ -2,7 +2,7 @@ import { elementKey, edgeKey } from '../state/keys.js';
 import { useClientState, useVisibleGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { drawnKeys } from '../state/loaded-graph.js';
-import { failureWords } from '../patterns/failure-words.js';
+import { failureWords } from '../failure-words.js';
 import { callsText, copiedText, noneStoredText, notCopiedText, notStoredReasons, removedText, SUMMARY_COPY } from './copy.js';
 import { editedOf, storableCountOf, type CitationEntry, type DraftResponse } from './summary-model.js';
 import type { CopyStage, SummaryDraft } from './summary-session.js';

@@ -64,7 +64,7 @@ describe('the source status in the header', () => {
   it('shows the status although the principal read has failed, and the strip names that failure', async () => {
     renderApp('/explore', fakeClient({ getSources: async () => ({ ok: true, value: { items: [source('a', { alias: 'fincrime' })], nextCursor: null } }) }));
     expect((await status()).textContent).toBe('● fincrime · read-only · connected');
-    expect(screen.getByRole('alert').textContent).toBe('NETWORK_UNAVAILABLE');
+    expect(screen.getByRole('alert').textContent).toBe('The server could not be reached.');
   });
 });
 
@@ -97,7 +97,7 @@ describe('a later read of the sources', () => {
     render(<WorkspaceHarness client={client} />);
     await status();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect((await status()).textContent).toBe('● fincrime · read-only · connected');
     expect(bar().getByText('Synthetic data')).toBeTruthy();
   });

@@ -54,7 +54,7 @@ test.describe('opening an entity from the development page', () => {
     const form = page.getByRole('form', { name: 'Open an entity' });
     await form.getByLabel('Stable ID').fill('missing');
     await form.getByRole('button', { name: 'Open' }).click();
-    await expect(page.getByRole('group', { name: 'Opening failed' })).toContainText('NOT_FOUND');
+    await expect(page.getByRole('group', { name: 'Opening failed' })).toContainText('This was not found. It may have been removed.');
     await expect(form.getByLabel('Stable ID')).toHaveValue('missing');
     await expect(page).toHaveURL(/\/dev\/open-entity$/);
   });

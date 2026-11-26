@@ -2,7 +2,7 @@ import type { DegreePreview, ElementRef, SourceProfile } from '@neburyx/contract
 import { useEffect, useId, useRef, useState } from 'react';
 import { FALLBACK_PAGE_SIZE, cursorWasRefused, refinementKey, type Refinement } from '../api/expand-store.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
 import { elementKey } from '../state/keys.js';
 import { filteredKeys } from '../state/loaded-graph.js';
@@ -193,7 +193,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
       {state.phase === 'failed' ? (
         <div className="supernode-block">
           <FailureNotice failure={state.failure} />
-          {canRetry(state.failure) ? (
+          {offersRetry(state.failure) ? (
             <button type="button" className="neighbor-types-link" onClick={request.reload}>
               {RETRY}
             </button>
@@ -354,7 +354,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
       {expansion.status === 'failed' && expansion.failure !== undefined ? (
         <div className="supernode-block">
           <FailureNotice failure={expansion.failure} />
-          {refused || !canRetry(expansion.failure) ? null : (
+          {refused || !offersRetry(expansion.failure) ? null : (
             <button type="button" className="neighbor-types-link" onClick={() => void expansions.retry(node)}>
               {RETRY}
             </button>

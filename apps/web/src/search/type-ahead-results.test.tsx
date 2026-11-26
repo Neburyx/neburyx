@@ -210,14 +210,15 @@ describe('a search that fails in the Add from source tab', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
   });
 
-  it('shows the trace ID of a timeout and of a source that is not found, and Retry for both', async () => {
+  it('shows the trace ID of a timeout and of a source that is not found, and Retry for the timeout only', async () => {
     await failed(TIMEOUT);
     expect(screen.getByText('trace tr-1')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
     cleanup();
     await failed({ code: 'NOT_FOUND', message: 'gone', retryable: false, traceId: 'tr-5' });
     expect(screen.getByText('The source “a” is not configured.')).toBeDefined();
     expect(screen.getByText('trace tr-5')).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
   it('shows the sentence of an unavailable source, and Retry only when its reason says a retry can help', async () => {

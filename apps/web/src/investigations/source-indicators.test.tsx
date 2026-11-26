@@ -110,7 +110,7 @@ describe('an open into another source that does not end in a shown investigation
     const shown = state.investigation.getState();
     await go(view, `/explore/${INVESTIGATION_B}`);
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(notice.textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(notice.textContent).toContain('The server could not be reached.');
     expect(notice.textContent).toContain('Could not open in Source source-b');
     expect(sourceText()).toContain('Source source-a');
     expect(screen.getByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
@@ -141,7 +141,7 @@ describe('an open into another source that does not end in a shown investigation
     const { view } = await onFirst({ getInvestigation: async (id: string) => (id === INVESTIGATION_A ? knowing([A]).client.getInvestigation(id) : { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
     await go(view, `/explore/${INVESTIGATION_B}`);
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(notice.textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(notice.textContent).toContain('The server could not be reached.');
     expect(notice.textContent).not.toContain('Could not open in');
     expect(sourceText()).toContain('Source source-a');
   });
@@ -192,7 +192,7 @@ describe('an open into another source that does not end in a shown investigation
     await user.type(screen.getByLabelText('Stable ID'), 'missing');
     await user.click(screen.getByRole('button', { name: 'Open' }));
     const failure = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(failure.textContent).toContain('NOT_FOUND');
+    expect(failure.textContent).toContain('This was not found. It may have been removed.');
     expect(failure.textContent).toContain('Could not open in Source source-b');
     expect(sourceText()).toContain('Source source-a · read-only');
     expect(headingSource()).toContain('Source source-a');

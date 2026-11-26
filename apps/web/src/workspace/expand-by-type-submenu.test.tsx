@@ -327,7 +327,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     expect(state.loadedGraph().nodes).toHaveLength(2);
     view.rightClick(rightClick('n1'));
     await user.click(byTypeRow());
-    expect(within(submenu()).getByRole('alert').textContent).toBe('QUERY_TIMEOUT · trace tr-1');
+    expect(within(submenu()).getByRole('alert').textContent).toBe('The source did not answer in time. · trace tr-1');
     await user.click(within(submenu()).getByRole('button', { name: 'Retry' }));
     expect(expansions).toHaveLength(2);
   });
@@ -376,9 +376,9 @@ describe('the states of the preview in Expand by type', () => {
   });
 
   it.each([
-    ['INTERNAL_ERROR', false, 'INTERNAL_ERROR'],
+    ['INTERNAL_ERROR', false, 'Something went wrong on the server. Try again; if it keeps happening, tell an administrator.'],
     ['SOURCE_UNAVAILABLE', true, 'The source did not answer. Try again shortly.'],
-    ['SOURCE_BUSY', true, 'SOURCE_BUSY'],
+    ['SOURCE_BUSY', true, 'The source is busy. No read slot freed within the wait.'],
   ] as const)('names a %s failure of the preview in its notice and offers Retry, never an empty node', async (code, retryable, text) => {
     const { previews } = opened();
     const user = userEvent.setup();

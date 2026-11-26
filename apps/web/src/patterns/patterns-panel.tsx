@@ -17,7 +17,7 @@ import { isSourceChanged } from '../state/investigation-state.js';
 import { addResultToGraph, type AddedOutcome } from './add-to-graph.js';
 import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
 import { useStoreSelector } from '../state/store.js';
-import { canRetry } from '../failure-notice.js';
+import { canRetry, offersRetry } from '../failure-notice.js';
 import type { ApiFailure } from '../api/client.js';
 import { continueWith, rateLimitedRetry } from '../banner/copy.js';
 import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
@@ -589,7 +589,7 @@ function TemplatesFailure({ failure, sourceName, retry }: { readonly failure: Ap
     <div className="patterns-state" role="alert">
       <p>{view.text}</p>
       <p>{view.detail}</p>
-      {canRetry(failure) ? (
+      {offersRetry(failure) ? (
         <button type="button" className="secondary" onClick={retry}>
           {PATTERNS_COPY.retry}
         </button>

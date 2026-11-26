@@ -77,7 +77,7 @@ describe('Recent while the list is not answered or is read again', () => {
     expect(screen.getByText('Loading recent investigations…')).toBeTruthy();
     await set({ phase: 'ready', data: EMPTY, failure: FAILURE });
     expect(emptyTitle()).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(screen.getByRole('alert').textContent).toContain('The server could not be reached.');
     act(() => screen.getByRole('button', { name: 'Try again' }).click());
     expect(calls.reloads).toBe(1);
   });

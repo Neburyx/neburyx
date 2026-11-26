@@ -115,6 +115,6 @@ describe('the entry action for the demo case on Home', () => {
     await waitFor(() => expect(reads).toBe(2));
     await user.click(screen.getByRole('link', { name: 'Home' }));
     expect(await screen.findByRole('button', { name: 'Open the demo case' })).toBeTruthy();
-    expect(within(await screen.findByRole('region', { name: 'Source health' })).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(within(await screen.findByRole('region', { name: 'Source health' })).getByRole('alert').textContent).toContain('The server could not be reached.');
   });
 });

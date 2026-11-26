@@ -77,7 +77,7 @@ describe('the shell reads on Explore, each on its own', () => {
     expect(screen.queryByRole('group', { name: 'Notices' })).toBeNull();
   });
 
-  it('names the code and the trace ID in a strip under the header when the first principal read fails, and keeps the destinations', async () => {
+  it('says the failure with its trace ID in a strip under the header when the first principal read fails, and keeps the destinations', async () => {
     const { client, principal } = controlled();
     renderApp('/explore', client);
     await act(async () => principal[0]?.(serverFailure('trace-1')));
@@ -87,11 +87,11 @@ describe('the shell reads on Explore, each on its own', () => {
     expect(strip.previousElementSibling?.getAttribute('aria-label')).toBe('Investigation');
   });
 
-  it('names a failure without a trace ID by its code alone', async () => {
+  it('names a failure without a trace ID by its sentence alone', async () => {
     const { client, principal } = controlled();
     renderApp('/explore', client);
     await act(async () => principal[0]?.(networkFailure));
-    expect(screen.getByRole('alert').textContent).toBe('NETWORK_UNAVAILABLE');
+    expect(screen.getByRole('alert').textContent).toBe('The server could not be reached.');
   });
 
   it('keeps the caption while the sources read is pending, and shows the sources failure with its trace ID independently of the principal', async () => {
@@ -133,7 +133,7 @@ describe('a later read after an answer', () => {
     render(<WorkspaceHarness client={client} />);
     await screen.findByText('Local workspace');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(screen.getByText('Local workspace')).toBeTruthy();
   });
 

@@ -99,7 +99,7 @@ describe('Home: the Investigations card', () => {
     await waitFor(() => expect(within(cardOf('Investigations')).getByText('5')).toBeTruthy());
     await user.click(screen.getByRole('link', { name: /^Sources$/ }));
     await user.click(await screen.findByRole('link', { name: 'Home' }));
-    await screen.findByText('NETWORK_UNAVAILABLE');
+    await screen.findByText('The server could not be reached.');
     expect(within(cardOf('Investigations')).getByText('5')).toBeTruthy();
     expect(within(cardOf('Investigations')).getByText('Across 3 sources')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Try again' }));
@@ -168,7 +168,7 @@ describe('Home: the Saved views card', () => {
     expect(within(cardOf('Saved views')).getByText('2')).toBeTruthy();
     expect(within(cardOf('Saved views')).getByText('Last edited 09:42 UTC')).toBeTruthy();
     await act(async () => release(failure));
-    await screen.findByText('NETWORK_UNAVAILABLE');
+    await screen.findByText('The server could not be reached.');
     expect(within(cardOf('Saved views')).getByText('2')).toBeTruthy();
     expect(within(cardOf('Saved views')).getByText('Last edited 09:42 UTC')).toBeTruthy();
   });

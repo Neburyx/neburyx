@@ -164,7 +164,7 @@ describe('Show more that fails', () => {
     expect(within(main()).queryByRole('alert')).toBeNull();
   });
 
-  it('names a failed request by its code and trace, keeps the hits and offers Retry', async () => {
+  it('names a failed request by its sentence and trace, keeps the hits and offers Retry', async () => {
     const kit = moreKit(async () => ok(firstPage()), async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'The source is not available.', retryable: true, traceId: 'tr-more' } }));
     renderApp(searchAt('demo', 'needle'), kit.client);
     await userEvent.setup().click(await within(main()).findByRole('button', { name: 'Show more: Exact matches' }));

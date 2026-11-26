@@ -5,7 +5,8 @@ import { edgeKey, elementKey } from '../state/keys.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { utcDateTime } from '../views/format.js';
-import { failureWords } from '../patterns/failure-words.js';
+import { offersRetry } from '../failure-notice.js';
+import { failureWords } from '../failure-words.js';
 import { SUMMARY_COPY } from './copy.js';
 import { useNotes, type NotesStage } from './use-notes.js';
 
@@ -47,9 +48,11 @@ export function NotesSection({ copies, sourceId, request }: { readonly copies: n
       {model.stage.kind === 'failed' ? (
         <p className="summary-note" role="status">
           {SUMMARY_COPY.notesFailed} {failureWords(model.stage.failure, sourceId).text}{' '}
-          <button type="button" className="summary-link" onClick={model.reload}>
-            {SUMMARY_COPY.tryAgain}
-          </button>
+          {offersRetry(model.stage.failure) ? (
+            <button type="button" className="summary-link" onClick={model.reload}>
+              {SUMMARY_COPY.tryAgain}
+            </button>
+          ) : null}
         </p>
       ) : null}
       {entries !== undefined && entries.entries.length === 0 && entries.skipped.length === 0 && model.stage.kind !== 'loading' ? <p className="summary-note">{SUMMARY_COPY.notesNone}</p> : null}

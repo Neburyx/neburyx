@@ -5,6 +5,7 @@ import type { SearchResult } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { renderApp, renderAppWithCauses } from '../test-utils.js';
 import { answerOf, deferred, hit, searchKit, searchAt } from './search-test-kit.js';
+import { assertNoCodes } from '../patterns/no-codes.js';
 
 const main = () => screen.getByRole('main');
 const box = () => within(main()).getByRole('searchbox', { name: 'Search text' });
@@ -76,11 +77,11 @@ function user() {
 
 describe('a search that failed another way', () => {
   it.each([
-    ['SOURCE_BUSY', server('SOURCE_BUSY'), 'SOURCE_BUSY · trace tr-9'],
-    ['SOURCE_UNAVAILABLE', server('SOURCE_UNAVAILABLE'), 'The source did not answer. Try again shortly. · trace tr-9'],
-    ['QUERY_BUDGET_EXCEEDED', server('QUERY_BUDGET_EXCEEDED', { maxPage: 10 }), 'QUERY_BUDGET_EXCEEDED · trace tr-9'],
-    ['a network failure', down, 'NETWORK_UNAVAILABLE'],
-  ])('shows the code of %s, the trace ID only when the error carries one, and Retry, and keeps the earlier results', async (_name, failure, shown) => {
+    ['SOURCE_BUSY', server('SOURCE_BUSY'), 'The source is busy. No read slot freed within the wait. · trace tr-9', true],
+    ['SOURCE_UNAVAILABLE', server('SOURCE_UNAVAILABLE'), 'The source did not answer. Try again shortly. · trace tr-9', true],
+    ['QUERY_BUDGET_EXCEEDED', server('QUERY_BUDGET_EXCEEDED', { maxPage: 10 }), 'The source allows at most 10 results at a time. · trace tr-9', false],
+    ['a network failure', down, 'The server could not be reached.', true],
+  ])('says %s in words, the trace ID only when the error carries one, and Retry only when it can help, and keeps the earlier results', async (_name, failure, shown, offered) => {
     let calls = 0;
     const kit = searchKit(['demo'], async () => (calls++ === 0 ? ok(answerOf('demo', [hit('demo', 'FIRST')])) : failure));
     renderApp(searchAt('demo', 'first'), kit.client);
@@ -89,7 +90,7 @@ describe('a search that failed another way', () => {
     await user().type(box(), 'second{Enter}');
     expect((await screen.findByRole('alert')).textContent).toBe(shown);
     expect(within(main()).getByText('Your graph was not changed.')).toBeDefined();
-    expect(retryButton()).toBeDefined();
+    expect(within(main()).queryByRole('button', { name: 'Retry' }) !== null).toBe(offered);
     expect(screen.getByText('Title FIRST')).toBeDefined();
   });
 
@@ -118,7 +119,7 @@ describe('a search that failed another way', () => {
   it('shows the failure of a first search with no results and the text in the box', async () => {
     const kit = searchKit(['demo'], async () => server('SOURCE_BUSY'));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
-    expect((await screen.findByRole('alert')).textContent).toBe('SOURCE_BUSY · trace tr-9');
+    expect((await screen.findByRole('alert')).textContent).toBe('The source is busy. No read slot freed within the wait. · trace tr-9');
     expect(box()).toHaveProperty('value', 'AC-1');
     expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
   });
@@ -165,7 +166,8 @@ describe('a search of a source the server answers as not found', () => {
     renderApp(searchAt('demo', 'first'), kit.client);
     const alert = await screen.findByRole('alert');
     expect(within(alert).getByText('The source “demo” is not configured.')).toBeDefined();
-    expect(screen.queryByText('NOT_FOUND')).toBeNull();
+    assertNoCodes(document.body.textContent);
+    expect(screen.queryByText(/This was not found/)).toBeNull();
     expect(screen.queryByText(/tr-9/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });

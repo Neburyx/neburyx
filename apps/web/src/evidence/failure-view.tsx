@@ -1,12 +1,6 @@
 import type { ApiFailure } from '../api/client.js';
-import { FailureNotice } from '../failure-notice.js';
+import { FailureNotice, offersRetry } from '../failure-notice.js';
 import { READING_EVIDENCE, TRY_AGAIN } from './copy.js';
-
-/** A failure can be tried again unless the answer itself was refused as malformed or the API says a retry cannot help. */
-function canTryAgain(failure: ApiFailure): boolean {
-  if ('traceId' in failure) return failure.retryable;
-  return failure.code !== 'SCHEMA_MISMATCH';
-}
 
 interface Props {
   readonly failure: ApiFailure;
@@ -20,7 +14,7 @@ export function EvidenceFailure({ failure, reading, reload }: Props) {
     <div className="evidence-failure">
       <FailureNotice failure={failure} />
       {reading ? <p role="status">{READING_EVIDENCE}</p> : null}
-      {canTryAgain(failure) ? (
+      {offersRetry(failure) ? (
         <button type="button" className="evidence-retry" disabled={reading} onClick={reload}>
           {TRY_AGAIN}
         </button>

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import type { ApiClient } from '../api/client.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { AttemptedSource } from '../investigations/attempted-source.js';
 import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, TRY_AGAIN } from '../investigations/messages.js';
 import { useOpenInvestigation } from '../investigations/use-open-investigation.js';
@@ -89,7 +89,7 @@ export function AssistantPage({ client }: { readonly client: ApiClient }) {
         <div role="group" aria-label="Opening failed">
           <FailureNotice failure={failure} />
           {status.kind === 'failed' && status.sourceId !== undefined ? <AttemptedSource sourceId={status.sourceId} /> : null}
-          {canRetry(failure) ? (
+          {offersRetry(failure) ? (
             <button type="button" className="secondary" onClick={retry}>
               {TRY_AGAIN}
             </button>

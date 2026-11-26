@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useApiClient } from '../api/client-context.js';
 import type { ApiFailure } from '../api/client.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { messageOf } from '../lifecycle/status-flow.js';
 import { DIALOG_BEHIND_ATTRIBUTE } from '../lifecycle/dialog-behind.js';
 import { PageHeading } from '../shell/page-heading.js';
@@ -125,7 +125,7 @@ export function InvestigationsPage() {
         <div className="investigations-failure">
           <p>{state.failure.where === 'more' ? MORE_FAILED : COULD_NOT_READ}</p>
           <FailureNotice failure={state.failure.failure} />
-          {canRetry(state.failure.failure) ? (
+          {offersRetry(state.failure.failure) ? (
             <button type="button" className="secondary" onClick={state.failure.where === 'more' ? list.showMore : list.retry}>
               {TRY_AGAIN}
             </button>

@@ -187,7 +187,7 @@ describe('failures that do not show the Busy banner', () => {
     act(() => void expand.expand(ref('a', 'type-a', 'n1'), ['type-a']));
     await act(async () => expansions[0]?.answer({ ok: false, failure: otherFailure }));
     expect(screen.queryByRole('region', { name: 'Request status' })).toBeNull();
-    expect(screen.getByRole('alert').textContent).toBe('INTERNAL_ERROR · trace tr-t');
+    expect(screen.getByRole('alert').textContent).toBe('Something went wrong on the server. Try again; if it keeps happening, tell an administrator. · trace tr-t');
   });
 
   it('leaves a failure the client made itself to the node, as before', async () => {

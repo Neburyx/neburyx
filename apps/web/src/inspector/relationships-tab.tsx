@@ -3,7 +3,7 @@ import type { Count, DegreePreview } from '@neburyx/contracts';
 import type { RequestState } from '../api/use-request.js';
 import { FALLBACK_PAGE_SIZE } from '../api/expand-store.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
-import { FailureNotice, canRetry } from '../failure-notice.js';
+import { FailureNotice, offersRetry } from '../failure-notice.js';
 import { useClientState, useLoadedGraph, useSessionMask, useVisibleGraph } from '../state/context.js';
 import { createStore, readable, useStoreSelector } from '../state/store.js';
 import { degreeCountText } from '../workspace/degree-text.js';
@@ -99,7 +99,7 @@ export function RelationshipsTab({ entity }: InspectorTabProps) {
       {state.phase === 'failed' ? (
         <>
           <FailureNotice failure={state.failure} />
-          {canRetry(state.failure) && request !== undefined ? (
+          {offersRetry(state.failure) && request !== undefined ? (
             <button type="button" className="neighbor-types-link" onClick={request.reload}>
               {RETRY}
             </button>

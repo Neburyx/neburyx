@@ -39,14 +39,14 @@ describe('the sidebar', () => {
     expect(within(identity()).getByRole('status').textContent).toBe('Loading');
   });
 
-  it('shows the failure code and the trace ID of a server error, and only the code of a client failure, with the brand and links still there', async () => {
+  it('says a server error in words with its trace ID, and a client failure in words alone, with the brand and links still there', async () => {
     const server: ApiClient = fakeClient({ getMe: async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'The data source is not available. Try again shortly.', retryable: true, traceId: 'trace-9' } }) });
     const view = renderApp('/', server);
     expect((await within(identity()).findByRole('alert')).textContent).toBe('The source did not answer. Try again shortly. · trace trace-9');
     expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Assistant', 'Patterns', 'Sources', 'Investigations', 'Saved views']);
     view.unmount();
     renderApp('/', fakeClient());
-    expect((await within(identity()).findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await within(identity()).findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(screen.getByText('Neburyx')).toBeTruthy();
   });
 
@@ -103,7 +103,7 @@ describe('a later read of the shell data', () => {
     render(<Harness client={client} state={createClientState()} />);
     await screen.findByText('Local workspace');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(screen.getByText('Local workspace')).toBeTruthy();
     expect(screen.getByText(/Source a · read-only · connected/)).toBeTruthy();
   });

@@ -2,7 +2,7 @@ import type { ElementRef, SummaryFailureKind, GraphEdge, GraphNode, SummaryReque
 import type { ApiFailure, ApiResult } from '../api/client.js';
 
 import { viewRefsOf } from '../exports/export-attempt.js';
-import { reasonOf } from '../patterns/failure-words.js';
+import { reasonOf } from '../failure-words.js';
 import { edgeKey, elementKey } from '../state/keys.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 

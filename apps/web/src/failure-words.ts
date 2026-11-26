@@ -1,6 +1,6 @@
 import { PATTERN_LIMITS, type ErrorCode } from '@neburyx/contracts';
-import type { ApiFailure, ClientFailure } from '../api/client.js';
-import { busyHeadline, timedOutHeadline, unavailableHeadline } from '../banner/copy.js';
+import type { ApiFailure, ClientFailure } from './api/client.js';
+import { busyHeadline, timedOutHeadline, unavailableHeadline } from './banner/copy.js';
 
 /** Every way a call can fail: the server's codes and the client's own. */
 export type FailureCode = ErrorCode | ClientFailure['code'];
@@ -44,7 +44,7 @@ export const nameTakenSentence = 'This name is already used on this source. Choo
 type Entry = (failure: ApiFailure, source: string) => FailureWords;
 const said = (text: string, action?: FailureAction): Entry => () => ({ text, ...(action === undefined ? {} : { action }) });
 
-/** A failure of a pattern call in words, one entry for each code (a missing one does not compile): what happened, and what the person can do. */
+/** A failure of a call in words, one entry for each code (a missing one does not compile): what happened, and what the person can do. */
 const TABLE: { readonly [C in FailureCode]: Entry } = {
   QUERY_BUDGET_EXCEEDED: (failure) => {
     const hops = maxHopsOf(failure);

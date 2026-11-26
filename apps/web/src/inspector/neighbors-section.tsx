@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { DegreePreview, ElementRef } from '@neburyx/contracts';
 import type { RequestState } from '../api/use-request.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
-import { FailureNotice, canRetry } from '../failure-notice.js';
+import { FailureNotice, offersRetry } from '../failure-notice.js';
 import { useLoadedGraph, useSessionMask } from '../state/context.js';
 import { createStore, readable, useStoreSelector } from '../state/store.js';
 import { RETRY } from '../workspace/expand-copy.js';
@@ -35,7 +35,7 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
       <section className="inspector-section" aria-label={SOURCED_RELATIONSHIP_ENDS}>
         <h3 className="inspector-section-title">{SOURCED_RELATIONSHIP_ENDS}</h3>
         <FailureNotice failure={state.failure} />
-        {canRetry(state.failure) ? (
+        {offersRetry(state.failure) ? (
           <button type="button" className="neighbor-types-link" onClick={request.reload}>
             {RETRY}
           </button>

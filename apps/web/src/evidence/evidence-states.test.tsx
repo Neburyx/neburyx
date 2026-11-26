@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { edgeKey } from '../state/keys.js';
 import { answerEdge, detailOf, evidenceRig, failEdge, inPanel, openOn, OWNS, panel, SENT, selectEdge } from './evidence-kit.js';
 import { NOT_AVAILABLE_BADGE } from './copy.js';
+import { assertNoCodes } from '../patterns/no-codes.js';
 
 afterEach(cleanup);
 
@@ -25,30 +26,36 @@ describe('the not-available state', () => {
 
 describe('a read that fails', () => {
   it.each([
-    ['SOURCE_BUSY', true],
-    ['RATE_LIMITED', true],
-    ['QUERY_TIMEOUT', true],
-    ['SOURCE_UNAVAILABLE', true],
-    ['NOT_FOUND', false],
-    ['INTERNAL_ERROR', false],
-    ['INVALID_REQUEST', false],
-  ])('shows %s as the product shows it and leaves the canvas, selection and inspector as they were', async (code, retryable) => {
+    ['SOURCE_BUSY', true, true, 'The source is busy. No read slot freed within the wait.'],
+    ['RATE_LIMITED', true, true, 'Too many requests. Try again in a moment.'],
+    ['QUERY_TIMEOUT', true, true, 'The source did not answer in time.'],
+    ['SOURCE_UNAVAILABLE', true, true, 'The source did not answer. Try again shortly.'],
+    ['NOT_FOUND', false, false, 'This was not found. It may have been removed.'],
+    ['INTERNAL_ERROR', false, true, 'Something went wrong on the server. Try again; if it keeps happening, tell an administrator.'],
+    ['INVALID_REQUEST', false, false, 'The server did not accept this request.'],
+  ])('shows %s as the product shows it and leaves the canvas, selection and inspector as they were', async (code, retryable, offered, sentence) => {
     const rig = evidenceRig();
     selectEdge(rig, OWNS);
     const before = JSON.stringify([rig.state.loadedGraph(), [...rig.state.presentation.view.getState().selection]]);
     openOn(rig, OWNS);
     await failEdge(rig.edgeReads[0], code, retryable);
-    expect(inPanel().getByRole('alert').textContent).toContain(code === 'SOURCE_UNAVAILABLE' ? 'The source did not answer' : code);
-    expect(inPanel().queryByRole('button', { name: 'Try again' }) !== null).toBe(retryable);
+    expect(inPanel().getByRole('alert').textContent).toContain(sentence);
+    assertNoCodes(inPanel().getByRole('alert').textContent);
+    expect(inPanel().queryByRole('button', { name: 'Try again' }) !== null).toBe(offered);
     expect(JSON.stringify([rig.state.loadedGraph(), [...rig.state.presentation.view.getState().selection]])).toBe(before);
     rig.unbind();
   });
 
-  it.each(['NETWORK_UNAVAILABLE', 'UNREADABLE_RESPONSE', 'UNEXPECTED_FAILURE', 'SCHEMA_MISMATCH'] as const)('shows the client failure %s', async (code) => {
+  it.each([
+    ['NETWORK_UNAVAILABLE', 'The server could not be reached.'],
+    ['UNREADABLE_RESPONSE', 'The answer could not be read.'],
+    ['UNEXPECTED_FAILURE', 'Something went wrong.'],
+    ['SCHEMA_MISMATCH', 'The answer was not in the form expected.'],
+  ] as const)('shows the client failure %s', async (code, sentence) => {
     const rig = evidenceRig({ client: { getEdge: async () => ({ ok: false, failure: { code } }) } });
     openOn(rig, OWNS);
     await act(async () => undefined);
-    expect(inPanel().getByRole('alert').textContent).toContain(code);
+    expect(inPanel().getByRole('alert').textContent).toBe(sentence);
     expect(inPanel().queryByRole('button', { name: 'Try again' }) !== null).toBe(code !== 'SCHEMA_MISMATCH');
     rig.unbind();
   });
@@ -67,7 +74,7 @@ describe('a read that fails', () => {
     await failEdge(rig.edgeReads[0], 'SOURCE_BUSY', true);
     await act(async () => inPanel().getByRole('button', { name: 'Try again' }).click());
     expect(rig.edgeCalls).toHaveLength(2);
-    expect(inPanel().getByRole('alert').textContent).toContain('SOURCE_BUSY');
+    expect(inPanel().getByRole('alert').textContent).toContain('The source is busy. No read slot freed within the wait.');
     expect(inPanel().getByRole('status').textContent).toBe('Reading the evidence…');
     await answerEdge(rig.edgeReads[1], detailOf(OWNS));
     expect(inPanel().queryByRole('alert')).toBeNull();

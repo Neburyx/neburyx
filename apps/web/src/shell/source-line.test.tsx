@@ -63,9 +63,9 @@ describe('the source status line', () => {
     expect(screen.getByText('Local workspace')).toBeTruthy();
   });
 
-  it('shows the code and the trace ID of a server error', async () => {
+  it('says a server error in words with its trace ID', async () => {
     renderApp('/', fakeClient({ getMe: async () => ({ ok: true, value: me() }), getSources: async () => ({ ok: false, failure: { code: 'ACCESS_DENIED', message: 'You do not have access to this.', retryable: false, traceId: 'trace-3' } }) }));
-    expect((await within(line()).findByRole('alert')).textContent).toBe('ACCESS_DENIED · trace trace-3');
+    expect((await within(line()).findByRole('alert')).textContent).toBe('You may not do this on this source. · trace trace-3');
   });
 
   it('is read once for the whole shell: the same answer feeds the line and, across navigation, no second request is made', async () => {

@@ -5,6 +5,7 @@ import { loadGraph } from '../workspace/context-menu-kit.js';
 import { nodeOf, previewOf, relation } from '../workspace/supernode-kit.js';
 import { count, entity, inInspector, inspectorRig, keyOf, select } from './inspector-kit.js';
 import type { DegreePreview } from '@neburyx/contracts';
+import { assertNoCodes } from '../patterns/no-codes.js';
 
 const answer = (rig: ReturnType<typeof inspectorRig>, value: DegreePreview, at = 0) => act(async () => rig.previews[at]?.answer({ ok: true, value }));
 const section = () => inInspector().getByRole('region', { name: 'Sourced relationship ends' });
@@ -59,7 +60,8 @@ describe('the sourced relationship ends section', () => {
     const rig = inspectorRig();
     select(rig.state, 'n1');
     await act(async () => rig.previews[0]?.answer({ ok: false, failure: { code: 'SOURCE_BUSY', message: 'x', retryable: true, traceId: 'tr-2' } as never }));
-    expect(section().textContent).toContain('SOURCE_BUSY');
+    expect(section().textContent).toContain('The source is busy. No read slot freed within the wait.');
+    assertNoCodes(section().textContent);
     expect(inInspector().getByRole('tab', { name: 'Properties' })).toBeTruthy();
     await userEvent.setup().click(inInspector().getByRole('button', { name: 'Retry' }));
     expect(rig.previews).toHaveLength(2);

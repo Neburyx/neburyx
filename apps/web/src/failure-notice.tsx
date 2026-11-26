@@ -1,14 +1,23 @@
 import { SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS } from '@neburyx/contracts';
 import type { ApiFailure } from './api/client.js';
+import { failureWords } from './failure-words.js';
 
-/** Whether a retry can help: not for an unavailable source whose reason says so (a refused login, an index that is missing or failed, indexes that cannot be listed). */
+/** What the sentences call the source when the place that shows them has no name for it. */
+const UNNAMED_SOURCE = 'The source';
+
+/** Whether sending the same request again can help: not for an unavailable source whose reason says so (a refused login, an index that is missing or failed, indexes that cannot be listed). */
 export function canRetry(failure: ApiFailure): boolean {
   return !('traceId' in failure) || failure.code !== 'SOURCE_UNAVAILABLE' || failure.retryable;
 }
 
-/** What a failure is called: its code, or for an unavailable source the sentence of its reason (`unreachable` when it gives none). */
-export function failureText(failure: ApiFailure): string {
-  if (!('traceId' in failure) || failure.code !== 'SOURCE_UNAVAILABLE') return failure.code;
+/** Whether a failed read offers Try again: its sentence says to try again, and a retry can help. */
+export function offersRetry(failure: ApiFailure): boolean {
+  return canRetry(failure) && failureWords(failure, UNNAMED_SOURCE).action === 'try-again';
+}
+
+/** A failure in one sentence with no code in it; an unavailable source of the server says the sentence of its reason (`unreachable` when it gives none). */
+export function failureText(failure: ApiFailure, source: string = UNNAMED_SOURCE): string {
+  if (!('traceId' in failure) || failure.code !== 'SOURCE_UNAVAILABLE') return failureWords(failure, source).text;
   const reason = SOURCE_UNAVAILABLE_REASONS.find((candidate) => candidate === failure.details?.reason) ?? 'unreachable';
   return SOURCE_UNAVAILABLE_ENTRIES[reason].message;
 }

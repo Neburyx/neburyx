@@ -59,7 +59,7 @@ describe('Home: the Recent list', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Loading recent investigations…');
   });
 
-  it('shows the failure with its code and reads the list again on Try again, keeping the rest of Home', async () => {
+  it('shows the failure in words and reads the list again on Try again, keeping the rest of Home', async () => {
     let attempts = 0;
     const parts = knowing([A], {
       listInvestigations: async () => {
@@ -68,7 +68,7 @@ describe('Home: the Recent list', () => {
       },
     });
     renderApp('/', parts.client);
-    expect((await screen.findByRole('alert')).textContent).toContain('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toContain('The server could not be reached.');
     expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Investigations', level: 1 })).toBeTruthy();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
@@ -150,7 +150,7 @@ describe('Home: a visit after the first', () => {
     await screen.findByRole('link', { name: 'kind-a A-1' });
     await visit(view, '/sources');
     await visit(view, '/');
-    expect((await screen.findByRole('alert')).textContent).toContain('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toContain('The server could not be reached.');
     expect(screen.getByRole('link', { name: 'kind-a A-1' })).toBeTruthy();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());

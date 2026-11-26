@@ -178,7 +178,7 @@ describe('the reads that decide the start address', () => {
       },
     });
     renderApp('/', parts.client);
-    expect((await screen.findByRole('alert')).textContent).toContain('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toContain('The server could not be reached.');
     expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
     expect(firstRun()).toBeNull();
     // the Start from a pattern card has its own Try again, so the one of the Recent list is asked for in its region
@@ -214,7 +214,7 @@ describe('the reads that decide the start address', () => {
     });
     renderApp('/', parts.client);
     const region = await screen.findByRole('region', { name: 'Source health' });
-    expect(within(region).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(within(region).getByRole('alert').textContent).toContain('The server could not be reached.');
     expect(firstRun()).toBeNull();
     await userEvent.setup().click(within(region).getByRole('button', { name: 'Try again' }));
     expect(await within(await screen.findByRole('region', { name: 'Source health' })).findByRole('status')).toBeTruthy();

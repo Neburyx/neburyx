@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { MORE_COPY, moreFailedText, RETRY, showMoreLabel } from './copy.js';
 import type { GroupPages, PagedGroup } from './use-more-pages.js';
 
@@ -37,7 +37,7 @@ function Problem<Hit>({ group, pages, onShowMore, onSearchAgain }: Omit<ShowMore
   return (
     <div className="search-failure">
       {notice}
-      {problem.kind === 'group' || canRetry(problem.failure) ? (
+      {problem.kind === 'group' || offersRetry(problem.failure) ? (
         <button type="button" className="link" onClick={() => onShowMore(group)}>
           {RETRY}
         </button>

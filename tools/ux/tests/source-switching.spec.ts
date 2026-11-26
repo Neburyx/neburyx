@@ -96,7 +96,7 @@ test.describe('opening an entity of a second source while an investigation of th
     await page.goBack();
     await openIn(page, 'claims-demo', 'missing');
     const failure = page.getByRole('group', { name: 'Opening failed' });
-    await expect(failure).toContainText('NOT_FOUND');
+    await expect(failure).toContainText('This was not found. It may have been removed.');
     await expect(failure).toContainText('Could not open in claims-demo.');
     await expect(sourceLine(page)).toContainText('banking-demo');
     await expect(page.locator('.page-heading .source-note')).toContainText('banking-demo');

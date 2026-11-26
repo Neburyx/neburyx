@@ -1,9 +1,9 @@
 import { ERROR_CODES, PATTERN_PROBLEM_CODES, PATTERN_UNAVAILABLE_CODES, PATTERN_LIMITS } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import type { ApiFailure } from '../api/client.js';
-import { failureView } from './copy.js';
-import { assertNoCodes, codesIn } from './no-codes.js';
-import { runFailureView } from './run/run-copy.js';
+import type { ApiFailure } from './api/client.js';
+import { failureView } from './patterns/copy.js';
+import { assertNoCodes, codesIn } from './patterns/no-codes.js';
+import { runFailureView } from './patterns/run/run-copy.js';
 import { FAILURE_CODES_WITH_WORDS, failureWords, rateLimitedSentence, tryAgainIn } from './failure-words.js';
 
 const CLIENT = ['NETWORK_UNAVAILABLE', 'UNREADABLE_RESPONSE', 'SCHEMA_MISMATCH', 'ABORTED', 'UNEXPECTED_FAILURE'] as const;

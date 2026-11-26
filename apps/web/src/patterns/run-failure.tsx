@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FailureView } from './copy.js';
-import { rateLimitedSentence, tryAgainIn } from './failure-words.js';
+import { rateLimitedSentence, tryAgainIn } from '../failure-words.js';
 
 const TICK_MS = 1000;
 

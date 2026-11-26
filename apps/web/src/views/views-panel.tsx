@@ -1,6 +1,7 @@
 import type { NamedView } from '@neburyx/contracts';
 import { MAX_VIEW_NAME_LENGTH } from '@neburyx/contracts';
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { offersRetry } from '../failure-notice.js';
 import { useStoreSelector } from '../state/store.js';
 import { CANCEL, FREE_TEXT_HINT, VIEW_DELETE, deleteLabel, LOADING_MORE, MORE_FAILED, NAME_LABEL, NAME_TOO_LONG, NO_VIEWS, READ_ONLY_VIEWS, RENAME, RENAME_CONFLICT, RENAME_FAILED, RESTORE_FOOTNOTE, RESTORE_INTO_DRAFT, RETRY, SAVE_NAME, SHOW_MORE, VIEWS_FAILED, VIEWS_LOADING, VIEWS_TITLE, draftAutosaved, renameLabel, restoreLabel, savedBy, viewsCount } from './copy.js';
 import { utcDateTime, utcTime } from './format.js';
@@ -122,9 +123,11 @@ export function ViewsPanel({ list, titleId, onRestore, onDelete, message, focusA
         <p role="status" className="views-error">
           {VIEWS_FAILED}
         </p>
-        <button type="button" className="secondary" onClick={() => void list.load()}>
-          {RETRY}
-        </button>
+        {offersRetry(state.failure) ? (
+          <button type="button" className="secondary" onClick={() => void list.load()}>
+            {RETRY}
+          </button>
+        ) : null}
       </>
     );
   }

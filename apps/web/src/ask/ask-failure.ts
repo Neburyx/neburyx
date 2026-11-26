@@ -1,6 +1,6 @@
 import { ASK_REFUSAL_SENTENCES } from '@neburyx/contracts';
 import type { ApiFailure } from '../api/client.js';
-import { failureWords, type FailureWords } from '../patterns/failure-words.js';
+import { failureWords, type FailureWords } from '../failure-words.js';
 import { ASK_COPY, limitHopsText, limitPathsText } from './copy.js';
 
 const UNAVAILABLE = 'Ask is not available right now.';

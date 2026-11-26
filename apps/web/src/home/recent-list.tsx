@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import type { SourceProfile } from '@neburyx/contracts';
 import type { RequestState } from '../api/use-request.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
 import { HOME_COPY, MORE_THAN_SHOWN } from './copy.js';
 import { useRecent, useRecentState } from './recent-context.js';
@@ -34,7 +34,7 @@ export function RecentList() {
           <div className="recent-failure">
             <p>{HOME_COPY.couldNotRead}</p>
             <FailureNotice failure={failure} />
-            {canRetry(failure) ? (
+            {offersRetry(failure) ? (
               <button type="button" className="secondary" onClick={recent.reload}>
                 {HOME_COPY.tryAgain}
               </button>
@@ -47,7 +47,7 @@ export function RecentList() {
           {failure === undefined ? null : (
             <div className="recent-failure">
               <FailureNotice failure={failure} />
-              {canRetry(failure) ? (
+              {offersRetry(failure) ? (
                 <button type="button" className="secondary" onClick={recent.reload}>
                   {HOME_COPY.tryAgain}
                 </button>

@@ -143,12 +143,20 @@ describe('reading the list a page at a time', () => {
 
   it('says why the saved list cannot be read with Try again, and the built-in rows keep working', async () => {
     let calls = 0;
-    await savedWorkspace({ patterns: { listPatterns: async () => (++calls === 1 ? { ok: false, failure: failure('ACCESS_DENIED') } : page([MINE])) } });
+    await savedWorkspace({ patterns: { listPatterns: async () => (++calls === 1 ? { ok: false, failure: failure('INTERNAL_ERROR') } : page([MINE])) } });
     expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
+    expect(screen.getByText('Something went wrong on the server. Try again; if it keeps happening, tell an administrator.')).toBeTruthy();
     expect(section(/Built-in/).getAllByRole('listitem')).toHaveLength(3);
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
     expect(screen.getByText('Alpha')).toBeTruthy();
+  });
+
+  it('says a refused saved list in words with no Try again, and the built-in rows keep working', async () => {
+    await savedWorkspace({ patterns: { listPatterns: async () => ({ ok: false, failure: failure('ACCESS_DENIED') }) } });
+    expect(screen.getByText('You may not do this on this source.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(section(/Built-in/).getAllByRole('listitem')).toHaveLength(3);
   });
 
   it('shows nothing of the old source’s rows after the source changes', async () => {

@@ -201,14 +201,14 @@ describe('the Sources page', () => {
     await user.click(screen.getByRole('button', { name: 'Read again' }));
     expect(await within(main()).findByText('No sources are configured.')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Read again' }));
-    expect((await within(main()).findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await within(main()).findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(within(main()).getByText('No sources are configured.')).toBeTruthy();
   });
 
-  it('shows the code of a failed first read with a Try again that reads the sources again, and not the list', async () => {
+  it('says why the first read failed with a Try again that reads the sources again, and not the list', async () => {
     const items = [source('a', { alias: 'alpha' })];
     render(<Harness client={answering(['fail', items])} />);
-    expect((await within(main()).findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await within(main()).findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(within(main()).getByText('The sources could not be read.')).toBeTruthy();
     expect(within(main()).queryByRole('list', { name: 'Configured sources' })).toBeNull();
     expect(within(main()).getByRole('button', { name: 'Try again' }).className).toBe('secondary');
@@ -219,14 +219,21 @@ describe('the Sources page', () => {
   it('shows the trace ID of a server error on a failed first read', async () => {
     const client = profiled({ getMe: async () => ({ ok: true, value: me() }), getSources: async () => ({ ok: false, failure: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', retryable: false, traceId: 'trace-7' } }) });
     render(<Harness client={client} />);
-    expect((await within(main()).findByRole('alert')).textContent).toBe('INTERNAL_ERROR · trace trace-7');
+    expect((await within(main()).findByRole('alert')).textContent).toBe('Something went wrong on the server. Try again; if it keeps happening, tell an administrator. · trace trace-7');
+  });
+
+  it('offers no Try again for a failed first read that asking again cannot help', async () => {
+    const client = profiled({ getMe: async () => ({ ok: true, value: me() }), getSources: async () => ({ ok: false, failure: { code: 'ACCESS_DENIED', message: 'No access.', retryable: false, traceId: 'trace-8' } }) });
+    render(<Harness client={client} />);
+    expect((await within(main()).findByRole('alert')).textContent).toBe('You may not do this on this source. · trace trace-8');
+    expect(within(main()).queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
   it('keeps the list as it was and shows the failure beside it when a later read fails', async () => {
     render(<Harness client={answering([[source('a', { alias: 'alpha' })], 'fail'])} />);
     await within(main()).findByRole('list', { name: 'Configured sources' });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Read again' }));
-    expect((await within(main()).findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await within(main()).findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(rows()).toHaveLength(1);
     expect(screen.getByRole('region', { name: 'alpha health' })).toBeTruthy();
   });
@@ -410,7 +417,7 @@ describe('the Sources page', () => {
       await within(main()).findByRole('list', { name: 'Configured sources' });
       await userEvent.setup().click(button());
       const alert = await within(main()).findByRole('alert');
-      expect(alert.textContent).toBe('NETWORK_UNAVAILABLE');
+      expect(alert.textContent).toBe('The server could not be reached.');
       expect(within(screen.getByRole('region', { name: 'alpha health' })).queryByRole('alert')).toBeNull();
       expect(facts()[1]).toEqual(['Connection', 'Neo4j Kernel 5.26.32']);
     });
@@ -437,12 +444,12 @@ describe('the Sources page', () => {
     });
 
     it.each([
-      [{ code: 'SOURCE_BUSY', message: 'The source is busy.', retryable: true, traceId: 't-1' }, 'SOURCE_BUSY · trace t-1'],
-      [{ code: 'QUERY_TIMEOUT', message: 'It took too long.', retryable: true, traceId: 't-2' }, 'QUERY_TIMEOUT · trace t-2'],
-      [{ code: 'ACCESS_DENIED', message: 'No access.', retryable: false, traceId: 't-3' }, 'ACCESS_DENIED · trace t-3'],
-      [{ code: 'NOT_FOUND', message: 'No such source.', retryable: false, traceId: 't-4' }, 'NOT_FOUND · trace t-4'],
-      [{ code: 'NETWORK_UNAVAILABLE' }, 'NETWORK_UNAVAILABLE'],
-      [{ code: 'SCHEMA_MISMATCH' }, 'SCHEMA_MISMATCH'],
+      [{ code: 'SOURCE_BUSY', message: 'The source is busy.', retryable: true, traceId: 't-1' }, 'The source is busy. No read slot freed within the wait. · trace t-1'],
+      [{ code: 'QUERY_TIMEOUT', message: 'It took too long.', retryable: true, traceId: 't-2' }, 'The source did not answer in time. · trace t-2'],
+      [{ code: 'ACCESS_DENIED', message: 'No access.', retryable: false, traceId: 't-3' }, 'You may not do this on this source. · trace t-3'],
+      [{ code: 'NOT_FOUND', message: 'No such source.', retryable: false, traceId: 't-4' }, 'This was not found. It may have been removed. · trace t-4'],
+      [{ code: 'NETWORK_UNAVAILABLE' }, 'The server could not be reached.'],
+      [{ code: 'SCHEMA_MISMATCH' }, 'The answer was not in the form expected.'],
     ] as const)('shows %j beside the button, keeps the facts shown before and makes the button available again', async (failure, text) => {
       const { client } = testable(async () => ({ ok: false, failure }), [[source('a', { alias: 'alpha', lastTestAt: '2026-10-30T10:16:08.000Z' })]]);
       render(<Harness client={client} />);
@@ -633,7 +640,7 @@ describe('the Sources page', () => {
       await user.click(screen.getByRole('link', { name: 'Home' }));
       await user.click(screen.getByRole('link', { name: 'Sources' }));
       await waitFor(() => expect(asked).toHaveLength(3));
-      expect((await within(screen.getByRole('region', { name: 'alpha health' })).findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+      expect((await within(screen.getByRole('region', { name: 'alpha health' })).findByRole('alert')).textContent).toBe('The server could not be reached.');
       expect(region().textContent).toBe('after');
     });
 
@@ -701,12 +708,12 @@ describe('the Sources page', () => {
       expect(screen.getAllByRole('term').length).toBe(4);
     });
 
-    it('shows the code and trace ID of a failed first read in place of the block, and Try again reads it again', async () => {
+    it('says why the first read failed, with the trace ID, in place of the block, and Try again reads it again', async () => {
       let reads = 0;
       const { client, asked } = withExcerpts(async (id) => (++reads === 1 ? { ok: false, failure: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', retryable: false, traceId: 'trace-5' } } : profileOf(id, 'now')), [source('a', { alias: 'alpha' })]);
       render(<Harness client={client} />);
       const detail = await screen.findByRole('region', { name: 'alpha health' });
-      expect((await within(detail).findByRole('alert')).textContent).toBe('INTERNAL_ERROR · trace trace-5');
+      expect((await within(detail).findByRole('alert')).textContent).toBe('Something went wrong on the server. Try again; if it keeps happening, tell an administrator. · trace trace-5');
       expect(screen.queryByRole('region', { name: 'Mapping example' })).toBeNull();
       expect(within(detail).getByRole('button', { name: 'Test source' }).className).toBe('primary');
       expect(within(detail).getByRole('button', { name: 'Try again' }).className).toBe('secondary');
@@ -719,7 +726,7 @@ describe('the Sources page', () => {
       const { client } = withExcerpts(async () => profileOf('other', 'not mine'), [source('a', { alias: 'alpha' })]);
       render(<Harness client={client} />);
       const detail = await screen.findByRole('region', { name: 'alpha health' });
-      expect((await within(detail).findByRole('alert')).textContent).toBe('SCHEMA_MISMATCH');
+      expect((await within(detail).findByRole('alert')).textContent).toBe('The answer was not in the form expected.');
       expect(screen.queryByText('not mine')).toBeNull();
     });
 

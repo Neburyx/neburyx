@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import type { BuiltInDefinition, ListedPattern, SourceSummary, TemplateListResponse } from '@neburyx/contracts';
 import { useApiClient } from '../../api/client-context.js';
 import { useRequest } from '../../api/use-request.js';
-import { FailureNotice } from '../../failure-notice.js';
+import { FailureNotice, offersRetry } from '../../failure-notice.js';
 import { EXPLORE_PATH } from '../../shell/navigation.js';
 import { PageHeading } from '../../shell/page-heading.js';
 import { useClientState } from '../../state/context.js';
@@ -155,6 +155,7 @@ function LibraryBody({ source }: { readonly source: SourceSummary }) {
   const emptyText = tab === 'mine' ? LIBRARY_COPY.emptyMine : SAVED_COPY.emptyShared;
   const savedTab = tab !== 'built-in';
   const namesFailed = (profile.state.phase === 'failed' || templates.state.phase === 'failed') && !(tab === 'built-in' && builtInCount === undefined);
+  const namesRetryHelps = [profile.state, templates.state].some((state) => state.phase === 'failed' && offersRetry(state.failure));
   const retryNames = (): void => {
     if (profile.state.phase === 'failed') profile.reload();
     if (templates.state.phase === 'failed') templates.reload();
@@ -173,9 +174,11 @@ function LibraryBody({ source }: { readonly source: SourceSummary }) {
       templates.state.phase === 'failed' ? (
         <div role="alert" className="sources-failure">
           <FailureNotice failure={templates.state.failure} />
-          <button type="button" className="secondary" onClick={templates.reload}>
-            {LIBRARY_COPY.tryAgain}
-          </button>
+          {offersRetry(templates.state.failure) ? (
+            <button type="button" className="secondary" onClick={templates.reload}>
+              {LIBRARY_COPY.tryAgain}
+            </button>
+          ) : null}
         </div>
       ) : (
         <p className="search-panel-note">{LIBRARY_COPY.loading}</p>
@@ -213,9 +216,11 @@ function LibraryBody({ source }: { readonly source: SourceSummary }) {
       {namesFailed ? (
         <div role="alert" className="sources-failure">
           <p>{LIBRARY_COPY.namesFailed}</p>
-          <button type="button" className="secondary" onClick={retryNames}>
-            {LIBRARY_COPY.tryAgain}
-          </button>
+          {namesRetryHelps ? (
+            <button type="button" className="secondary" onClick={retryNames}>
+              {LIBRARY_COPY.tryAgain}
+            </button>
+          ) : null}
         </div>
       ) : null}
       <Tabs labels={labels} active={tab} onChoose={setTab} panelId={panelId} />
@@ -259,9 +264,11 @@ export function LibraryPage() {
         <div role="alert" className="sources-failure">
           <p>{LIBRARY_COPY.sourcesFailed}</p>
           <FailureNotice failure={source.failure} />
-          <button type="button" className="secondary" onClick={source.retry}>
-            {LIBRARY_COPY.tryAgain}
-          </button>
+          {offersRetry(source.failure) ? (
+            <button type="button" className="secondary" onClick={source.retry}>
+              {LIBRARY_COPY.tryAgain}
+            </button>
+          ) : null}
         </div>
       ) : source.kind === 'none' ? (
         <p>{LIBRARY_COPY.noSources}</p>

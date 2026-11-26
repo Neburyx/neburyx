@@ -7,6 +7,7 @@ import { openById } from '../investigations/open-flow.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from '../investigations/test-data.js';
 import { me, renderApp, source } from '../test-utils.js';
 import { testProfile } from './test-profile.js';
+import { assertNoCodes } from '../patterns/no-codes.js';
 
 const A = { investigation: investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1', { caseRef: 'CASE-1' }), node: nodeOf('source-a', 'kind-a', 'A-1') };
 
@@ -115,14 +116,15 @@ describe('the open-entity page', () => {
     await user.type(screen.getByLabelText('Case reference (optional)'), 'CASE-9');
     await user.click(screen.getByRole('button', { name: 'Open' }));
     const failure = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(failure.textContent).toContain('NOT_FOUND');
+    expect(failure.textContent).toContain('This was not found. It may have been removed.');
+    assertNoCodes(failure.textContent);
     await waitFor(() => expect(document.activeElement).toBe(failure));
     expect(screen.getByLabelText('Stable ID')).toHaveProperty('value', 'A-404');
     expect(screen.getByLabelText('Case reference (optional)')).toHaveProperty('value', 'CASE-9');
     expect(screen.getByRole('button', { name: 'Open' }).hasAttribute('disabled')).toBe(false);
   });
 
-  it('shows SOURCE_MISMATCH from the API, keeps the form as typed and leaves the investigation on screen as it was', async () => {
+  it('says a source mismatch from the API in words, keeps the form as typed and leaves the investigation on screen as it was', async () => {
     const { client } = knowing([A], { openInvestigation: async () => ({ ok: false, failure: { code: 'SOURCE_MISMATCH', message: 'The request mixes more than one source.', retryable: false, traceId: 'tr-9' } }) });
     const state = createClientState();
     await openById(client, state, INVESTIGATION_A, { principalId: 'principal-1', mask: false });
@@ -133,7 +135,8 @@ describe('the open-entity page', () => {
     await user.type(screen.getByLabelText('Stable ID'), 'C-1');
     await user.click(screen.getByRole('button', { name: 'Open' }));
     const failure = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(failure.textContent).toContain('SOURCE_MISMATCH');
+    expect(failure.textContent).toContain('The answer belongs to another source, so it was not used.');
+    assertNoCodes(failure.textContent);
     expect(screen.getByLabelText('Stable ID')).toHaveProperty('value', 'C-1');
     expect(state.investigation.getState()).toBe(shown);
   });
@@ -209,7 +212,7 @@ describe('the open-entity page', () => {
 
   it('says so when the sources cannot be read, when there is none, and when the source has no entity type', async () => {
     renderApp('/dev/open-entity', fakeClient({ getMe: async () => ({ ok: true, value: me() }) }));
-    expect(await screen.findByText('NETWORK_UNAVAILABLE')).toBeTruthy();
+    expect(await screen.findByText('The server could not be reached.')).toBeTruthy();
   });
 
   it('says so when no source is configured', async () => {
@@ -241,7 +244,7 @@ describe('the open-entity page', () => {
       }),
     );
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Source source-a' }));
-    expect(await screen.findByText('NETWORK_UNAVAILABLE')).toBeTruthy();
+    expect(await screen.findByText('The server could not be reached.')).toBeTruthy();
     expect(screen.queryByRole('form', { name: 'Open an entity' })).toBeNull();
   });
 });

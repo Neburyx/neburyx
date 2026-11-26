@@ -74,7 +74,7 @@ describe('the profile on Explore', () => {
 
   it.each([
     ['with a trace ID', { code: 'SOURCE_UNAVAILABLE', message: 'unavailable', retryable: true, traceId: 'trace-7' } as const, 'The source did not answer. Try again shortly. · trace trace-7'],
-    ['without one', { code: 'NETWORK_UNAVAILABLE' } as const, 'NETWORK_UNAVAILABLE'],
+    ['without one', { code: 'NETWORK_UNAVAILABLE' } as const, 'The server could not be reached.'],
   ])('keeps the profile\'s look and every position when a later read of it fails %s, and names the failure in the strip', async (_name, failure, text) => {
     const replies: Array<(result: ApiResult<SourceProfile>) => void> = [];
     const { client } = clientWith(replies);

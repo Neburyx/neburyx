@@ -6,7 +6,7 @@ import { formatNumber, qualityWord } from '../workspace/scope-text.js';
 import type { AddedOutcome } from './add-to-graph.js';
 import { BUSY_TEXT, RATE_LIMITED_TEXT, REFINE_FILTERS, TIMED_OUT_TEXT, UNAVAILABLE_TEXT } from '../banner/copy.js';
 import { GRAPH_UNCHANGED } from '../search/copy.js';
-import { failureWords, TRY_AGAIN } from './failure-words.js';
+import { failureWords, TRY_AGAIN } from '../failure-words.js';
 import type { PatternProblem, PatternProblemCode } from '@neburyx/contracts';
 import type { Direction } from './builder/model.js';
 
@@ -114,7 +114,7 @@ export function noticeText(notice: TemplateRunNotice): string {
   }
 }
 
-export { maxHopsOf, maxPageOf } from './failure-words.js';
+export { maxHopsOf, maxPageOf } from '../failure-words.js';
 
 export interface FailureView {
   readonly text: string;

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { canRetry, failureText } from '../failure-notice.js';
+import { offersRetry, failureText } from '../failure-notice.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { useClientState } from '../state/context.js';
 import { PATTERN_CARD_COPY as COPY } from './copy.js';
@@ -63,7 +63,7 @@ function Presets({ patterns }: { readonly patterns: Listed }) {
       <div role="alert" className="pattern-failure">
         <p>{COPY.couldNotRead(patterns.sourceName)}</p>
         <p>{failureText(list.failure)}</p>
-        {canRetry(list.failure) ? (
+        {offersRetry(list.failure) ? (
           <button type="button" className="secondary" onClick={patterns.reload}>
             {COPY.tryAgain}
           </button>

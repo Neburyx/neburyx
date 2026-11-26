@@ -223,12 +223,12 @@ describe('Home: the Source health card while the sources are not read', () => {
     expect(await screen.findByRole('link', { name: 'kind-a A-1' })).toBeTruthy();
   });
 
-  it('shows the failure with its code and Try again in the card, keeps the rest of Home, and reads the sources once more when it is activated', async () => {
+  it('shows the failure in words and Try again in the card, keeps the rest of Home, and reads the sources once more when it is activated', async () => {
     const user = userEvent.setup();
     const parts = failing(['fail', [alpha]]);
     renderApp('/', parts.client);
     await within(await screen.findByRole('region', { name: 'Source health' })).findByText('The sources could not be read.');
-    expect(within(region()).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(within(region()).getByRole('alert').textContent).toContain('The server could not be reached.');
     expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
     expect(await screen.findByRole('link', { name: 'kind-a A-1' })).toBeTruthy();
     expect(within(region()).queryByRole('link', { name: 'View sources →' })).toBeNull();
@@ -240,7 +240,7 @@ describe('Home: the Source health card while the sources are not read', () => {
     expect(within(region()).queryByRole('alert')).toBeNull();
   });
 
-  it('keeps the blocks, shows the failure code and offers Try again when a later read fails', async () => {
+  it('keeps the blocks, shows the failure in words and offers Try again when a later read fails', async () => {
     const user = userEvent.setup();
     const parts = failing([[alpha], 'fail', [alpha]]);
     renderApp('/sources', { ...parts.client, testSource: async (id) => ({ ok: true, value: testReport(id) }) });
@@ -249,7 +249,7 @@ describe('Home: the Source health card while the sources are not read', () => {
     await user.click(screen.getByRole('link', { name: 'Home' }));
     const scope = within(await screen.findByRole('region', { name: 'Source health' }));
     expect(scope.getByRole('heading', { name: 'alpha', level: 3 })).toBeTruthy();
-    expect(scope.getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(scope.getByRole('alert').textContent).toContain('The server could not be reached.');
     await user.click(scope.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(scope.queryByRole('alert')).toBeNull());
     expect(parts.reads()).toBe(3);

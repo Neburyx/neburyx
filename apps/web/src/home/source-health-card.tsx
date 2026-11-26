@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import type { SourceSummary } from '@neburyx/contracts';
 import type { ApiFailure } from '../api/client.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { SOURCES_PATH } from '../shell/navigation.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 import { COPY } from '../sources/copy.js';
@@ -33,7 +33,7 @@ function Failure({ failure, retry, headline }: { readonly failure: ApiFailure; r
     <div className="source-health-failure">
       {headline ? <p>{COPY.couldNotRead}</p> : null}
       <FailureNotice failure={failure} />
-      {canRetry(failure) ? (
+      {offersRetry(failure) ? (
         <button type="button" className="secondary" onClick={retry}>
           {COPY.tryAgain}
         </button>

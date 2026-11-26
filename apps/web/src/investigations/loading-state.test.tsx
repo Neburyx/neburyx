@@ -107,7 +107,7 @@ describe('an investigation that is being opened while another is on screen', () 
     const { view, state } = await onFirst(undefined, { getEntity: async (ref: { sourceId: string; entityType: string; stableId: string }) => (ref.stableId === 'A-1' || up ? { ok: true, value: nodeOf(ref.sourceId, ref.entityType, ref.stableId) } : { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
     const shown = state.investigation.getState();
     await go(view, `/explore/${INVESTIGATION_B}`);
-    expect((await screen.findByRole('group', { name: 'Opening failed' })).textContent).toContain('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('group', { name: 'Opening failed' })).textContent).toContain('The server could not be reached.');
     expect(strip()).toBeNull();
     expect(busy()).not.toBe('true');
     expect(title()).toBe('kind-a A-1');

@@ -6,7 +6,7 @@ import { useStoreSelector } from '../state/store.js';
 import { heldKeysOf } from '../api/merge-into-loaded.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
-import { reasonOf as invalidReasonOf } from '../patterns/failure-words.js';
+import { reasonOf as invalidReasonOf } from '../failure-words.js';
 import { citationEntries, editedOf, pressOf, settledOf, storableCountOf, summaryRequestOf, type CitationEntry } from './summary-model.js';
 import { loadedLine } from '../workspace/scope-text.js';
 import { SUMMARY_COPY } from './copy.js';

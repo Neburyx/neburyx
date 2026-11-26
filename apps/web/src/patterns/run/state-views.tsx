@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
 import type { PatternUnavailable } from '@neburyx/contracts';
 import type { ApiFailure } from '../../api/client.js';
-import { canRetry } from '../../failure-notice.js';
+import { offersRetry } from '../../failure-notice.js';
 import { SAVED_COPY, UNAVAILABLE_TEXT, UNAVAILABLE_TIME_TEXT, stepWhere } from '../saved/saved-copy.js';
 import { failureView } from '../copy.js';
-import { TRY_AGAIN } from '../failure-words.js';
+import { TRY_AGAIN } from '../../failure-words.js';
 import { RunFailure } from '../run-failure.js';
 import { RUN_COPY } from './run-copy.js';
 
@@ -100,5 +100,5 @@ interface UnreadableProps {
 /** A list that cannot be read (PB19 state 2): the sentence of the table, what stayed as it was, and Try again where trying again can help; a rate limit counts down. */
 export function ListUnreadable({ failure, sourceName, retry }: UnreadableProps) {
   const view = failureView(failure, sourceName);
-  return <RunFailure failure={{ ...view, action: view.action ?? TRY_AGAIN }} canRetry={canRetry(failure)} onRetry={retry} />;
+  return <RunFailure failure={{ ...view, action: view.action ?? TRY_AGAIN }} canRetry={offersRetry(failure)} onRetry={retry} />;
 }

@@ -3,8 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import type { InvestigationListItem } from '@neburyx/contracts';
 import { useApiClient } from '../../api/client-context.js';
-import { canRetry } from '../../failure-notice.js';
-import { failureWords } from '../../patterns/failure-words.js';
+import { offersRetry } from '../../failure-notice.js';
 import { READ_WAIT_MS } from '../read-wait.js';
 import { ListFailure } from '../list-failure.js';
 import { useInvestigationList } from '../../investigations-page/use-investigation-list.js';
@@ -274,7 +273,7 @@ export function NewChatPicker({ anchor, onClose }: NewChatPickerProps) {
         {state.failure?.where === 'first' ? (
           <div className="new-chat-note">
             <ListFailure failure={state.failure.failure} />
-            {canRetry(state.failure.failure) && failureWords(state.failure.failure, '').action === 'try-again' ? (
+            {offersRetry(state.failure.failure) ? (
               <button type="button" className="secondary" onClick={list.retry}>
                 {NEW_CHAT_COPY.tryAgain}
               </button>

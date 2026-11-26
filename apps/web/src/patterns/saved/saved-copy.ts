@@ -1,6 +1,6 @@
 import { PATTERN_LIMITS, type PATTERN_UNAVAILABLE_CODES } from '@neburyx/contracts';
 import type { ApiFailure } from '../../api/client.js';
-import { nameTakenSentence, patternLimitSentence, personalConditionSentence } from '../failure-words.js';
+import { nameTakenSentence, patternLimitSentence, personalConditionSentence } from '../../failure-words.js';
 
 export const SAVED_COPY = {
   tabs: 'Patterns',

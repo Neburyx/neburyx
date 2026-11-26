@@ -59,9 +59,9 @@ describe('the sources panel', () => {
     expect(screen.getByRole('status').textContent).toBe('Loading the sources');
   });
 
-  it('shows NETWORK_UNAVAILABLE, not an empty page, when the API cannot be reached', async () => {
+  it('says the server could not be reached, not an empty page, when the API cannot be reached', async () => {
     render(<Panel client={fakeClient()} />);
-    expect((await screen.findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toBe('The server could not be reached.');
   });
 
   it('shows a failure of a later read beside the list it already has', async () => {
@@ -75,7 +75,7 @@ describe('the sources panel', () => {
     render(<Panel client={client} />);
     await screen.findByRole('button', { name: 'Source a' });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(screen.getByRole('button', { name: 'Source a' })).toBeTruthy();
   });
 
@@ -90,7 +90,7 @@ describe('the sources panel', () => {
     render(<Panel client={client} />);
     await screen.findByText('No sources are configured.');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(screen.getByText('No sources are configured.')).toBeTruthy();
   });
 
@@ -139,7 +139,7 @@ describe('the sources panel', () => {
   it('keeps the list on screen and shows the failure beside it when the profile cannot be read', async () => {
     render(<Panel client={fakeClient({ getSources: list(source('a')) })} />);
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Source a' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await screen.findByRole('alert')).textContent).toBe('The server could not be reached.');
     expect(screen.getByRole('button', { name: 'Source a' })).toBeTruthy();
   });
 });

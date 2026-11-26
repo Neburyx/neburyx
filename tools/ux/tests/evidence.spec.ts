@@ -117,7 +117,7 @@ test.describe('the relationship evidence panel', () => {
     await openSample(page, '?evidence=on');
     await rightClickBetween(page, 'cas', 'trn');
     await choose(page, /Why is this relationship here/);
-    await expect(panel(page).getByRole('alert')).toContainText('SOURCE_BUSY');
+    await expect(panel(page).getByRole('alert')).toContainText('The source is busy. No read slot freed within the wait.');
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '10');
     await panel(page).getByRole('button', { name: 'Try again' }).click();
     await expect(panel(page).getByText('REC-sample-r-3')).toBeVisible();

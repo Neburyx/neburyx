@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { DerivedNeighborsResult, ElementRef } from '@neburyx/contracts';
 import type { DerivedStore } from '../api/derived-store.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
-import { FailureNotice, canRetry } from '../failure-notice.js';
+import { FailureNotice, offersRetry } from '../failure-notice.js';
 import { useClientState, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { useDerivedStoreWhenProvided } from '../workspace/derived-context.js';
@@ -62,7 +62,7 @@ function Rows({ store, entity, rules, mask }: { readonly store: DerivedStore; re
     return (
       <div className="inspector-derived">
         <FailureNotice failure={state.failure} />
-        {canRetry(state.failure) ? (
+        {offersRetry(state.failure) ? (
           <button type="button" className="neighbor-types-link" onClick={request.reload}>
             {RETRY}
           </button>

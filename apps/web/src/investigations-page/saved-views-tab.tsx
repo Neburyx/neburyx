@@ -5,7 +5,7 @@ import type { RemoveOutcome } from '../views/view-list.js';
 import { VIEW_ALREADY_DELETED, VIEW_DELETED, RENAME_CONFLICT, deleteViewFromTitle } from '../views/copy.js';
 import { useNavigate } from 'react-router';
 import { useApiClient } from '../api/client-context.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { utcDateTime } from '../views/format.js';
 import { VIEW_DELETE_ACTION, deleteViewLabel, viewsReadOnlyReason, COLUMN_SOURCE, COULD_NOT_READ_VIEWS, LOADING, LOADING_MORE, MORE_FAILED, NO_VIEWS, SAVED_VIEWS_LABEL, SHOW_MORE, TRY_AGAIN, VIEWS_FOOTNOTE, VIEW_INVESTIGATION, VIEW_NAME, VIEW_SAVED_AT, VIEW_SAVED_BY, openView, showing } from './copy.js';
@@ -54,7 +54,7 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
         <div className="investigations-failure">
           <p>{state.failure.where === 'more' ? MORE_FAILED : COULD_NOT_READ_VIEWS}</p>
           <FailureNotice failure={state.failure.failure} />
-          {canRetry(state.failure.failure) ? (
+          {offersRetry(state.failure.failure) ? (
             <button type="button" className="secondary" onClick={state.failure.where === 'more' ? showMore : retry}>
               {TRY_AGAIN}
             </button>

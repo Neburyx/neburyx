@@ -1,5 +1,5 @@
 import type { ApiFailure } from '../api/client.js';
-import { canRetry, FailureNotice } from '../failure-notice.js';
+import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { GRAPH_UNCHANGED, RETRY, timedOutText, unknownSourceText } from './copy.js';
 
 function timeoutOf(failure: ApiFailure): number | undefined {
@@ -22,7 +22,7 @@ export function SearchFailure({ failure, sourceId, onRetry }: { readonly failure
           <p>{GRAPH_UNCHANGED}</p>
         </>
       )}
-      {canRetry(failure) ? (
+      {offersRetry(failure) ? (
         <button type="button" className="link" onClick={onRetry}>
           {RETRY}
         </button>

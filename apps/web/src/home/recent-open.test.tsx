@@ -89,7 +89,7 @@ describe('a row that cannot be opened', () => {
     const view = renderApp('/', parts.client);
     await openRow('kind-a A-1');
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(notice.textContent).toContain('NETWORK_UNAVAILABLE');
+    expect(notice.textContent).toContain('The server could not be reached.');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy());
     await returnsHome(view);
   });
