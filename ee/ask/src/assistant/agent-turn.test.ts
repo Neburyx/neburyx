@@ -534,7 +534,7 @@ describe('the application tools of the agent', () => {
       .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: 'Rapid movement of funds is one of the shapes listed.', cites: ['t1'] }] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, typology: ['Rapid movement of funds', 'Structuring'] });
-    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const answer = await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: [] })));
     expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['t1'] }] }], reads: [{ tool: 'typology', kind: 'typology', read: true }]  });
   });
 

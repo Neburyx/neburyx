@@ -4,6 +4,7 @@ import { askRunResultSchema, type AiNotesCapability, type AskRunResult } from '@
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, VIEW_KEYS, V, answerOf, expandResult, nodeOf, ok, rig, routeAsk } from '../testing/assistant-rig.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
+import { READ_VIEW_FIRST } from './agent-turn.js';
 import { assembleResults } from './tool-answer.js';
 
 afterAll(removeAskFolders);
@@ -34,15 +35,69 @@ describe('what the loop is given about the elements on screen', () => {
     expect(afterView?.valuesText).toContain('A-1');
   });
 
-  it('accepts an answer about the screen from a turn that read no element', async () => {
-    const text = `No ${V.anchor} is identified in the question or in the elements on screen.`;
+  const notes: AiNotesCapability = {
+    ...noNotes,
+    read: () => {
+      const ref = nodeOf('A-1').ref;
+      const cites = [{ key: 'n1', kind: 'entity', ref }];
+      return Promise.resolve({ entries: [{ tokenId: 'tok-1', generatedBy: 'person-1', modelRef: 'configured-model', promptId: 'case-summary', promptVersion: '1', generatedAt: '2026-11-15T10:00:00.000Z', wordListVersion: 2, label: 'AI-drafted', sentences: [{ text: `‹${V.anchor}#1› is listed.`, placeholders: [{ name: `‹${V.anchor}#1›`, descriptor: { kind: 'entity', ref } }], cites }], inputRefs: cites }], version: 1, save: { state: 'unsaved', savedAt: null } });
+    },
+  };
+  const nothingNamed = `No ${V.anchor} is identified in the question or in the elements on screen.`;
+  const seen = `${V.title} A-1 is in view.`;
+  const told = (model: ReturnType<typeof fakeModel>): string[] => (model.calls.at(-1)?.messages ?? []).filter((message) => message.type === 'tool').map((message) => String(message.content));
+  const turn = async (model: ReturnType<typeof fakeModel>, options: Parameters<typeof rig>[0] = {}, body: unknown = VIEW_BODY, capability: AiNotesCapability = notes) => {
+    const r = await rig({ reply: VIEW, ...options, agent: { model, ...options.agent } });
+    return { r, given: await answerOf(r.route.handler(r.request(body, { aiNotes: capability }))) };
+  };
+
+  it.each([
+    ['no sentence', noNotes],
+    ['a sentence that names elements', notes],
+  ])('refuses once an answer made after only a read of notes with %s, and judges the answer made after the view', async (_name, capability) => {
     const model = fakeModel()
       .respondWithTools([{ name: 'ai-notes', args: {} }])
-      .respondWithTools([sentences({ text, cites: ['s1'] })])
+      .respondWithTools([sentences({ text: nothingNamed, cites: ['s1'] })])
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([sentences({ text: seen, cites: ['n1'] })])
       .respond(new AIMessage('Done.'));
-    const r = await rig({ reply: VIEW, agent: { model } });
-    expect(await answerOf(r.route.handler(r.request(VIEW_BODY, { aiNotes: noNotes })))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text }] }] });
-    expect(r.elementReads).toHaveLength(0);
+    const { r, given } = await turn(model, { maxInputTokens: 60_000 }, VIEW_BODY, capability);
+    expect(told(model)).toContain(READ_VIEW_FIRST);
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: seen }] }] });
+    expect(JSON.stringify(given)).not.toContain(nothingNamed);
+    expect(r.elementReads.length).toBeGreaterThan(0);
+  });
+
+  it('judges a second answer as usual, whether or not the view was read after the refusal', async () => {
+    const model = fakeModel()
+      .respondWithTools([sentences({ text: nothingNamed, cites: [] })])
+      .respondWithTools([{ name: 'ai-notes', args: {} }])
+      .respondWithTools([sentences({ text: nothingNamed, cites: ['s1'] })])
+      .respond(new AIMessage('Done.'));
+    const { given } = await turn(model, {}, VIEW_BODY, noNotes);
+    expect(told(model).filter((content) => content === READ_VIEW_FIRST)).toHaveLength(1);
+    expect(given).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: nothingNamed }] }] });
+  });
+
+  it.each([
+    ['after a read of the source that returned elements', [{ name: 'byId', args: { id: 'A-1' } }], 'r1', {}, VIEW_BODY],
+    ['with no element in view', [{ name: 'ai-notes', args: {} }], 's1', {}, { ...VIEW_BODY, viewElementKeys: [] }],
+    ['with one call left, which could not both read and answer', [{ name: 'ai-notes', args: {} }], 's1', { agent: { maxCalls: 4 } }, VIEW_BODY],
+    ['with no step left', [{ name: 'ai-notes', args: {} }], 's1', { loopSteps: 1 }, VIEW_BODY],
+  ] as const)('judges the first answer as usual %s', async (_name, call, cite, options, body) => {
+    const text = cite === 'r1' ? `${V.title} A-1 is listed.` : nothingNamed;
+    const model = fakeModel().respondWithTools([...call]).respondWithTools([sentences({ text, cites: [cite] })]).respond(new AIMessage('Done.'));
+    const { given } = await turn(model, options as Parameters<typeof rig>[0], body, noNotes);
+    expect(told(model)).not.toContain(READ_VIEW_FIRST);
+    expect(given).toMatchObject({ status: 'answered' });
+  });
+
+  it('tells the model that this and the elements on screen are the view, to be read before they are spoken of', async () => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([sentences({ text: seen, cites: ['n1'] })]).respond(new AIMessage('Done.'));
+    const runStore = createMemoryAssistantRunStore();
+    await turn(model, { runStore });
+    for (let step = 0; step < 10; step += 1) await Promise.resolve();
+    expect(runStore.runs[0]?.callStarts[1]?.instructionsText).toContain('call view before you say which element a message means, what is or is not on screen, or that nothing is identified');
   });
 });
 
