@@ -53,7 +53,7 @@ describe('the Saved views tab', () => {
     await screen.findByRole('button', { name: /Open “View 1”/ });
     failing = true;
     await user.click(screen.getByRole('button', { name: 'Show more' }));
-    await screen.findByText('The next investigations could not be read.');
+    await screen.findByText('The next views could not be read.');
     expect(bodyRows()).toHaveLength(25);
     failing = false;
     await user.click(screen.getByRole('button', { name: 'Try again' }));

@@ -200,7 +200,79 @@
   gap: var(--space-8) var(--space-16);
   padding: var(--space-8) var(--space-16);
   border-bottom: var(--border-width) solid var(--color-workspace-border);
-  background: var(--color-danger-surface);
+  background: var(--color-failure-surface);
+}
+
+/* one row for each read that failed, with the buttons in one column */
+.notice-rows {
+  display: grid;
+  flex-basis: 100%;
+  grid-template-columns: minmax(0, max-content) max-content;
+  justify-content: start;
+  align-items: center;
+  gap: var(--space-8) var(--space-16);
+}
+
+.notice-row {
+  display: contents;
+}
+
+.notice-text {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.notice-lead {
+  flex: none;
+  color: var(--color-danger-action);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  line-height: var(--line-height-note);
+}
+
+.rail-failure {
+  position: relative;
+}
+
+.rail-failure-button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: var(--failure-mark-size);
+  height: var(--failure-mark-size);
+  padding: 0;
+  border: var(--border-width) solid var(--color-danger-action);
+  border-radius: var(--radius);
+  background: var(--color-failure-surface);
+  cursor: pointer;
+}
+
+.rail-failure-button span {
+  width: var(--failure-ring-size);
+  height: var(--failure-ring-size);
+  border: var(--failure-ring-width) solid var(--color-danger-action);
+  border-radius: 50%;
+  color: var(--color-danger-action);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  line-height: calc(var(--failure-ring-size) - 2 * var(--failure-ring-width));
+  text-align: center;
+}
+
+.rail-failure-popover {
+  position: absolute;
+  bottom: 0;
+  left: var(--failure-popover-offset);
+  z-index: 20;
+  width: var(--failure-popover-width);
+  padding: var(--space-8);
+  border: var(--border-width) solid var(--color-workspace-border);
+  border-radius: var(--space-8);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
+  overflow-wrap: anywhere;
 }
 
 .workspace-stage {

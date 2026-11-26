@@ -1,11 +1,12 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AiNotesResponse, CopyToNotesResponse, SummaryResponse } from '@neburyx/contracts';
 import { draftSyncOf } from '../draft/draft-sync.js';
 import { ApiClientProvider } from '../api/client-context.js';
 import type { ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
+import { READ_WAIT_MS } from '../api/read-wait.js';
 import { failure } from '../patterns/patterns-kit.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
@@ -261,5 +262,57 @@ describe('the AI notes in changing contexts and from the workspace', () => {
     await userEvent.click(screen.getByText('AI notes'));
     expect(await screen.findByText('The AI notes cannot be shown to you.')).toBeTruthy();
     expect(screen.queryByText('ent-1 is linked to the same source.')).toBeNull();
+  });
+});
+
+describe('the AI notes whose read gets no answer', () => {
+  afterEach(() => void vi.useRealTimers());
+  const wait = (ms = 0) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+  const press = async (element: HTMLElement) => {
+    await act(async () => void fireEvent.click(element));
+    await wait();
+  };
+  const hang = () => new Promise<never>(() => undefined);
+  const UNREACHABLE = /The AI notes could not be read\. The server could not be reached\./;
+
+  it('ends the first read at the bound, with Try again, which reads', async () => {
+    vi.useFakeTimers();
+    let read = 0;
+    const h = notesRig(() => (++read === 1 ? hang() : Promise.resolve(answer())));
+    render(h.tree(true));
+    await wait();
+    await press(screen.getByText('AI notes'));
+    await wait(READ_WAIT_MS - 1);
+    expect(screen.getByText('Reading the AI notes…')).toBeTruthy();
+    expect(screen.queryByText(UNREACHABLE)).toBeNull();
+    await wait(1);
+    expect(screen.getByText(UNREACHABLE)).toBeTruthy();
+    expect(screen.queryByText('Reading the AI notes…')).toBeNull();
+    await press(screen.getByRole('button', { name: 'Try again' }));
+    expect(h.reads).toHaveLength(2);
+    expect(screen.getByText('ent-1 is linked to the same source.')).toBeTruthy();
+    expect(screen.queryByText(UNREACHABLE)).toBeNull();
+  });
+
+  it('ends the read after a copy at the bound, with Try again, which reads', async () => {
+    vi.useFakeTimers();
+    let read = 0;
+    const h = notesRig(
+      () => (++read === 2 ? hang() : Promise.resolve(answer(read === 1 ? [] : [entry()]))),
+      async () => ({ ok: true, value: { copied: 1, notCopied: 0, alreadyCopied: false, version: 2, save: { state: 'unsaved', savedAt: null } } }),
+    );
+    render(h.tree(true));
+    await wait();
+    await press(screen.getByText('AI notes'));
+    await press(screen.getByRole('button', { name: 'Copy to notes' }));
+    expect(h.reads).toHaveLength(2);
+    await wait(READ_WAIT_MS - 1);
+    expect(screen.queryByText(UNREACHABLE)).toBeNull();
+    await wait(1);
+    expect(screen.getByText(UNREACHABLE)).toBeTruthy();
+    await press(screen.getByRole('button', { name: 'Try again' }));
+    expect(h.reads).toHaveLength(3);
+    expect(screen.getByText('ent-1 is linked to the same source.')).toBeTruthy();
+    expect(screen.queryByText(UNREACHABLE)).toBeNull();
   });
 });

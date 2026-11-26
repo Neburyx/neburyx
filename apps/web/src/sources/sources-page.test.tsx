@@ -716,8 +716,8 @@ describe('the Sources page', () => {
       expect((await within(detail).findByRole('alert')).textContent).toBe('Something went wrong on the server. Try again; if it keeps happening, tell an administrator. · trace trace-5');
       expect(screen.queryByRole('region', { name: 'Mapping example' })).toBeNull();
       expect(within(detail).getByRole('button', { name: 'Test source' }).className).toBe('primary');
-      expect(within(detail).getByRole('button', { name: 'Try again' }).className).toBe('secondary');
-      await userEvent.setup().click(within(detail).getByRole('button', { name: 'Try again' }));
+      expect(within(detail).getByRole('button', { name: 'Try again to read the mapping example' }).className).toBe('secondary');
+      await userEvent.setup().click(within(detail).getByRole('button', { name: 'Try again to read the mapping example' }));
       await waitFor(() => expect(region().textContent).toBe('now'));
       expect(asked).toEqual(['a', 'a']);
     });

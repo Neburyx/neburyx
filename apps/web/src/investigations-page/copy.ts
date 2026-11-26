@@ -27,6 +27,7 @@ export const TRY_AGAIN = 'Try again';
 export const SHOW_MORE = 'Show more';
 export const LOADING_MORE = 'Loading…';
 export const MORE_FAILED = 'The next investigations could not be read.';
+export const MORE_VIEWS_FAILED = 'The next views could not be read.';
 export const showing = (shown: number, matching: number): string => `Showing ${shown} of ${matching}`;
 
 export const FILTERS_LABEL = 'Filter investigations';

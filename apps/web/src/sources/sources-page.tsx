@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { FailureBox } from '../failure-box.js';
+import { RETRY_NAMES } from '../failure-copy.js';
 import { FailureNotice, offersRetry } from '../failure-notice.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
@@ -33,7 +35,7 @@ function Body({ opening }: { readonly opening: string }) {
   if (selected?.id !== selectedId) select(selected?.id);
   return (
     <>
-      {failure === undefined ? null : <FailureNotice failure={failure} />}
+      {failure === undefined ? null : <FailureBox failure={failure} layout="row" retry={{ name: RETRY_NAMES.sources, run: reloadSources }} />}
       {selected === undefined ? (
         <p>{COPY.noSources}</p>
       ) : (

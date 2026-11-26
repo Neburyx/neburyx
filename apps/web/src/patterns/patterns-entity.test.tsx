@@ -1,6 +1,7 @@
-import { act, cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { READ_WAIT_MS, SEARCH_WAIT_MS } from '../api/read-wait.js';
 import { typedNode } from '../workspace/filters-kit.js';
 import { openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
 import { searchOf } from './search-kit.js';
@@ -94,5 +95,36 @@ describe('the starting entity', () => {
     await userEvent.selectOptions(start(), 'acc-2');
     selectAccount(kit.state, 'acc-1');
     expect(start().value).toContain('acc-2');
+  });
+});
+
+describe('the starting-entity search that gets no answer', () => {
+  const wait = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+  /** The text is typed and the pause before the request has passed: the request has just left. */
+  const typed = async (text: string): Promise<void> => {
+    const link = screen.queryByRole('button', { name: 'Search the source' });
+    if (link !== null) await act(async () => void fireEvent.click(link));
+    await act(async () => void fireEvent.change(screen.getByRole('searchbox', { name: 'Search the source' }), { target: { value: text } }));
+    await wait(250);
+  };
+
+  it('says the search failed at the longer bound and keeps the list, and a change of the text searches again and takes an answer that comes after the usual wait', async () => {
+    vi.useFakeTimers();
+    let answer: (value: never) => void = () => undefined;
+    let searches = 0;
+    const kit = await patternsWorkspace({ search: () => new Promise((resolve) => void (++searches === 2 ? (answer = resolve) : undefined)) });
+    await openBuiltIn();
+    await typed('acc');
+    await wait(SEARCH_WAIT_MS - 1);
+    expect(screen.queryByText('The search failed.')).toBeNull();
+    await wait(1);
+    expect(screen.getByRole('alert').textContent).toBe('The search failed.');
+    expect(optionTexts()).toContain('acc-1');
+    await typed('acc-9');
+    expect(kit.searches).toHaveLength(2);
+    await wait(READ_WAIT_MS + 5000);
+    await act(async () => answer(searchOf([typedNode('acc-9', 'kind-a')]) as never));
+    expect(optionTexts()).toContain('acc-9');
+    expect(screen.queryByText('The search failed.')).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ export interface ShellData {
   readonly sources: RequestState<SourcesResponse>;
   readonly reload: () => void;
   readonly reloadSources: () => void;
+  readonly reloadMe: () => void;
 }
 
 /** Reads the principal and the configured sources once, when it is created, outside React; every part of the shell reads these answers. */
@@ -24,7 +25,7 @@ export function createShellData(client: ApiClient): ReadableStore<ShellData> {
     aiStatus.reload();
     sources.reload();
   };
-  const combine = (): ShellData => ({ me: me.getState(), aiStatus: aiStatus.getState(), sources: sources.getState(), reload, reloadSources: sources.reload });
+  const combine = (): ShellData => ({ me: me.getState(), aiStatus: aiStatus.getState(), sources: sources.getState(), reload, reloadSources: sources.reload, reloadMe: me.reload });
   const store = createStore(combine());
   me.subscribe(() => store.setState(combine()));
   aiStatus.subscribe(() => store.setState(combine()));

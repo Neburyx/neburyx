@@ -53,6 +53,12 @@ button.secondary:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']
   background: var(--color-surface-muted);
 }
 
+button.secondary.failure-retry {
+  flex: none;
+  height: var(--failure-retry-height);
+  padding: 0 var(--failure-retry-padding);
+}
+
 :where(
     select:not([class]):hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']),
     select[class='']:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']),

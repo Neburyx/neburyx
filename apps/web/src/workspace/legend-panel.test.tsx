@@ -109,11 +109,11 @@ describe('the legend\'s entity types while the profile is read', () => {
     expect(rows(container)).toEqual(['KIND-A', 'KIND-B']);
   });
 
-  it('shows the failure\'s sentence in an alert, with no retry control, when the first read failed, and the entries replace it when they arrive', () => {
+  it('shows the failure\'s sentence in an alert, with a Try again, when the first read failed, and the entries replace it when they arrive', () => {
     const { container, set } = controlled('s', { phase: 'failed', failure: { code: 'NETWORK_UNAVAILABLE' } });
     expect(alert()?.textContent).toBe('The server could not be reached.');
     expect(status()).toBeNull();
-    expect(screen.queryAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Close Legend']);
+    expect(screen.queryAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Close Legend', 'Try again to read the entity types']);
     set({ phase: 'ready', data: types(['kind-a']) });
     expect(alert()).toBeNull();
     expect(rows(container)).toEqual(['KIND-A']);

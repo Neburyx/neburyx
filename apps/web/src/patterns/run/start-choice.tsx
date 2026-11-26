@@ -4,7 +4,7 @@ import type { ApiClient } from '../../api/client.js';
 import { degreeCountText } from '../../workspace/degree-text.js';
 import { elementKey } from '../../state/keys.js';
 import { failureView, PATTERNS_COPY } from '../copy.js';
-import { useEntitySearch } from '../start-entity.js';
+import { SearchFailed, useEntitySearch } from '../start-entity.js';
 import { entityLabel } from './entity-label.js';
 import { RUN_COPY, searchSummary, startFrom, startHelper, typesMatching, typesOnCanvas } from './run-copy.js';
 
@@ -32,9 +32,9 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listId = useId();
-  const { found, asked } = useEntitySearch(client, sourceId, mask, entityType, text);
+  const { found, asked, earlier, retry } = useEntitySearch(client, sourceId, mask, entityType, text);
   const typed = text.trim() !== '';
-  const options: readonly GraphNode[] = typed ? (found.kind === 'found' ? found.nodes : []) : candidates;
+  const options: readonly GraphNode[] = typed ? (found.kind === 'found' ? found.nodes : found.kind === 'failed' ? earlier : []) : candidates;
   const listing = open && (typed ? asked || found.kind === 'failed' : candidates.length > 0);
   const choose = (node: GraphNode): void => {
     onChoose(node);
@@ -84,7 +84,7 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
         placeholder={RUN_COPY.searchPlaceholder}
         autoComplete="off"
         aria-expanded={listing}
-        {...(listing && !(found.kind === 'failed' && typed) ? { 'aria-controls': listId } : {})}
+        {...(listing && !(found.kind === 'failed' && typed && options.length === 0) ? { 'aria-controls': listId } : {})}
         aria-autocomplete="list"
         {...(chosen === undefined ? { 'aria-describedby': `${inputId}-help` } : {})}
         {...(listing && options[active] !== undefined ? { 'aria-activedescendant': `${listId}-${active}` } : {})}
@@ -101,11 +101,8 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
       {listing ? (
         <div className="run-start-list" onMouseDown={(event) => event.preventDefault()}>
           <p className="run-start-heading">{typed ? typesMatching(typeName, text.trim()) : typesOnCanvas(typeName)}</p>
-          {found.kind === 'failed' && typed ? (
-            <p className="patterns-error" role="alert">
-              {failureView(found.failure, sourceName).text}
-            </p>
-          ) : (
+          {found.kind === 'failed' && typed ? <SearchFailed text={failureView(found.failure, sourceName).text} failure={found.failure} retry={retry} /> : null}
+          {found.kind === 'failed' && typed && options.length === 0 ? null : (
             <ul id={listId} role="listbox" aria-label={typed ? typesMatching(typeName, text.trim()) : typesOnCanvas(typeName)}>
               {options.map((node, index) => {
                 const label = entityLabel(node, showIds);

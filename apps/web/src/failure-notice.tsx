@@ -27,9 +27,10 @@ export function failureText(failure: ApiFailure, source: string = UNNAMED_SOURCE
   return reason === undefined ? codeText(failure.code) : SOURCE_UNAVAILABLE_ENTRIES[reason].message;
 }
 
-export function FailureNotice({ failure }: { readonly failure: ApiFailure }) {
+export function FailureNotice({ failure, prefix = '' }: { readonly failure: ApiFailure; readonly prefix?: string }) {
   return (
     <p role="alert">
+      {prefix}
       {failureText(failure)}
       {'traceId' in failure ? ` · trace ${failure.traceId}` : ''}
     </p>

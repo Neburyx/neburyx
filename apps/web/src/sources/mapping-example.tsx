@@ -1,5 +1,7 @@
 import { useId } from 'react';
-import { FailureNotice } from '../failure-notice.js';
+import { RetryButton } from '../failure-box.js';
+import { RETRY_NAMES } from '../failure-copy.js';
+import { FailureNotice, offersRetry } from '../failure-notice.js';
 import { COPY } from './copy.js';
 import { useExcerpt, useExcerpts } from './excerpts-context.js';
 
@@ -14,15 +16,16 @@ export function MappingExample({ sourceId, opening }: { readonly sourceId: strin
         <h3 id={headingId}>{COPY.mappingExample}</h3>
         <span>{COPY.mappingLabel}</span>
       </div>
-      {excerpt?.failure === undefined ? null : <FailureNotice failure={excerpt.failure} />}
+      {excerpt?.failure === undefined ? null : (
+        <>
+          <FailureNotice failure={excerpt.failure} />
+          {offersRetry(excerpt.failure) ? <RetryButton name={RETRY_NAMES.mappingExample} compact={false} run={() => excerpts.retry(sourceId, opening)} /> : null}
+        </>
+      )}
       {text === undefined ? (
         excerpt?.failure === undefined ? (
           <p>{COPY.loadingMapping}</p>
-        ) : (
-          <button type="button" className="secondary" onClick={() => excerpts.retry(sourceId, opening)}>
-            {COPY.tryAgain}
-          </button>
-        )
+        ) : null
       ) : text === '' ? (
         <p>{COPY.noExcerpt}</p>
       ) : (

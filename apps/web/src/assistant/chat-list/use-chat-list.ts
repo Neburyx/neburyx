@@ -109,7 +109,7 @@ export function useChatList(query: string | undefined, trigger: unknown): { read
   const reload = useCallback(() => setReloads((count) => count + 1), []);
 
   const refreshIfOld = useCallback(() => {
-    if (held.current.first !== 'ready' || held.current.more !== 'idle' || Date.now() - lastRead.current < STALE_AFTER_MS) return;
+    if (held.current.first !== 'ready' || held.current.more === 'loading' || Date.now() - lastRead.current < STALE_AFTER_MS) return;
     refreshing.current = true;
     setReloads((count) => count + 1);
   }, []);

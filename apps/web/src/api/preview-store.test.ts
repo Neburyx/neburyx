@@ -1,8 +1,15 @@
-import type { DegreePreview } from '@neburyx/contracts';
-import { describe, expect, it } from 'vitest';
+import type { DegreePreview, ExpandResponse } from '@neburyx/contracts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createBannerController } from '../banner/banner-controller.js';
+import { createClientState } from '../state/client-state.js';
+import { node } from '../state/test-data.js';
+import { loadGraph } from '../workspace/context-menu-kit.js';
 import type { ApiResult } from './client.js';
+import { createExpandStore } from './expand-store.js';
 import { fakeClient } from './fake-client.js';
+import { createHeavyGuard } from './heavy-guard.js';
 import { createPreviewStore } from './preview-store.js';
+import { READ_WAIT_MS } from './read-wait.js';
 
 const ref = (stableId: string, sourceId = 'demo') => ({ sourceId, entityType: 'widget', stableId });
 const previewOf = (stableId: string): DegreePreview => ({ ref: ref(stableId), total: { value: 1, quality: 'exact', scope: 'x' }, byType: [], byNeighborType: [], warnings: [], pageSize: 25, heavyOpThreshold: 500 });
@@ -149,5 +156,87 @@ describe('the preview store with a failure reporter', () => {
     pending[1]?.answer({ ok: true, value: previewOf('W-1') });
     await expect(checking).resolves.toEqual(previewOf('W-1'));
     expect(store.held(ref('W-1'), false)).toBeUndefined();
+  });
+});
+
+describe('a check before an expansion whose preview gets no answer', () => {
+  afterEach(() => void vi.useRealTimers());
+
+  /** What the check ended with, or `waiting` while it has not ended. */
+  const watched = (check: Promise<DegreePreview | undefined>) => {
+    let ended: DegreePreview | 'none' | 'waiting' = 'waiting';
+    void check.then((value) => (ended = value ?? 'none'));
+    return () => ended;
+  };
+
+  it('ends at the bound when it made the read itself, and the next ask reads afresh', async () => {
+    vi.useFakeTimers();
+    const { pending, store } = rig();
+    const check = watched(store.settle(ref('W-1'), false));
+    await vi.advanceTimersByTimeAsync(READ_WAIT_MS - 1);
+    expect(check()).toBe('waiting');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(check()).toBe('none');
+    const menu = store.forNode(ref('W-1'), false);
+    expect(pending).toHaveLength(2);
+    pending[1]?.answer({ ok: true, value: previewOf('W-1') });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(menu.getState()).toMatchObject({ phase: 'ready' });
+  });
+
+  it('ends at the bound of the menu\u2019s read it waits for, which is kept as a failure that reload reads again', async () => {
+    vi.useFakeTimers();
+    const { pending, store } = rig();
+    const menu = store.forNode(ref('W-1'), false);
+    const check = watched(store.settle(ref('W-1'), false));
+    await vi.advanceTimersByTimeAsync(READ_WAIT_MS - 1);
+    expect(check()).toBe('waiting');
+    expect(menu.getState()).toEqual({ phase: 'loading' });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(check()).toBe('none');
+    expect(menu.getState()).toEqual({ phase: 'failed', failure: { code: 'NETWORK_UNAVAILABLE' } });
+    menu.reload();
+    expect(pending).toHaveLength(2);
+    expect(menu.getState()).toEqual({ phase: 'loading' });
+  });
+
+  it('ends at the bound of the quiet read made after a failed one, and a later check reads again', async () => {
+    vi.useFakeTimers();
+    const { pending, store } = rig();
+    store.forNode(ref('W-1'), false);
+    pending[0]?.answer({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } });
+    await vi.advanceTimersByTimeAsync(0);
+    const check = watched(store.settle(ref('W-1'), false));
+    await vi.advanceTimersByTimeAsync(READ_WAIT_MS - 1);
+    expect(check()).toBe('waiting');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(check()).toBe('none');
+    const later = watched(store.settle(ref('W-1'), false));
+    expect(pending).toHaveLength(3);
+    pending[2]?.answer({ ok: true, value: previewOf('W-1') });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(later()).toEqual(previewOf('W-1'));
+  });
+
+  it('lets the expansion go ahead at the bound, and leaves it free to be asked again', async () => {
+    vi.useFakeTimers();
+    const anchor = ref('n1', 'a');
+    let expansions = 0;
+    const answer: ExpandResponse = { ref: { sourceId: 'a', entityType: 'widget', stableId: 'n1' }, pageSize: 25, nodes: [], edges: [], pages: [{ neighborType: 'kind-b', returned: 0, hasMore: false, matchingTotal: { quality: 'unknown', scope: 'x' } }], warnings: [] };
+    const client = fakeClient({
+      previewExpansion: () => new Promise<never>(() => undefined),
+      expandNeighbors: async () => ((expansions += 1), { ok: true, value: answer }),
+    });
+    const state = createClientState();
+    loadGraph(state, [{ ...node('a', 'n1'), ref: anchor }], []);
+    const previews = createPreviewStore(client, () => 'person-1');
+    const store = createExpandStore(client, state, () => 'person-1', undefined, createHeavyGuard(previews, createBannerController(), state));
+    void store.expand(anchor, ['kind-b']);
+    await vi.advanceTimersByTimeAsync(READ_WAIT_MS - 1);
+    expect(store.of(anchor).status).toBe('loading');
+    expect(expansions).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(expansions).toBe(1);
+    expect(store.of(anchor).status).toBe('idle');
   });
 });

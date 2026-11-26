@@ -8,7 +8,7 @@ import { useApiClient } from '../api/client-context.js';
 import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { utcDateTime } from '../views/format.js';
-import { VIEW_DELETE_ACTION, deleteViewLabel, viewsReadOnlyReason, COLUMN_SOURCE, COULD_NOT_READ_VIEWS, LOADING, LOADING_MORE, MORE_FAILED, NO_VIEWS, SAVED_VIEWS_LABEL, SHOW_MORE, TRY_AGAIN, VIEWS_FOOTNOTE, VIEW_INVESTIGATION, VIEW_NAME, VIEW_SAVED_AT, VIEW_SAVED_BY, openView, showing } from './copy.js';
+import { VIEW_DELETE_ACTION, deleteViewLabel, viewsReadOnlyReason, COLUMN_SOURCE, COULD_NOT_READ_VIEWS, LOADING, LOADING_MORE, MORE_VIEWS_FAILED, NO_VIEWS, SAVED_VIEWS_LABEL, SHOW_MORE, TRY_AGAIN, VIEWS_FOOTNOTE, VIEW_INVESTIGATION, VIEW_NAME, VIEW_SAVED_AT, VIEW_SAVED_BY, openView, showing } from './copy.js';
 import { intentOf } from './restore-intent.js';
 import { NO_VIEW_LEFT, useOwnedViews } from './use-owned-views.js';
 
@@ -52,7 +52,7 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
       </p>
       {state.failure === undefined ? null : (
         <div className="investigations-failure">
-          <p>{state.failure.where === 'more' ? MORE_FAILED : COULD_NOT_READ_VIEWS}</p>
+          <p>{state.failure.where === 'more' ? MORE_VIEWS_FAILED : COULD_NOT_READ_VIEWS}</p>
           <FailureNotice failure={state.failure.failure} />
           {offersRetry(state.failure.failure) ? (
             <button type="button" className="secondary" onClick={state.failure.where === 'more' ? showMore : retry}>

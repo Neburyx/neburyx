@@ -107,7 +107,7 @@ describe('the shell reads on Explore, each on its own', () => {
 });
 
 describe('a later read after an answer', () => {
-  it('keeps the caption through a pending refresh of the principal, and through its failure, and names the failure in the strip', async () => {
+  it('keeps the caption through a pending refresh of the principal, and on its failure puts the alert button in its place and names the failure in the strip', async () => {
     const replies: Array<(result: ApiResult<ReturnType<typeof me>>) => void> = [];
     let reads = 0;
     const client = fakeClient({
@@ -120,7 +120,9 @@ describe('a later read after an answer', () => {
     expect(screen.getByText('Local workspace')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
     await act(async () => replies[0]?.(serverFailure('trace-3')));
-    expect(screen.getByText('Local workspace')).toBeTruthy();
+    expect(screen.queryByText('Local workspace')).toBeNull();
+    expect(within(rail()).queryByRole('button')).toBeNull();
+    expect(screen.getByRole('button', { name: 'The source did not answer. Try again shortly.' })).toBeTruthy();
     expect(within(screen.getByRole('group', { name: 'Notices' })).getByRole('alert').textContent).toBe('The source did not answer. Try again shortly. · trace trace-3');
   });
 

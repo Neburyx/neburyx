@@ -1,8 +1,9 @@
 import { setMaskKeepingView } from '../state/test-data.js';
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chooseEnd, okPaths, openPaths, pathsWorkspace, settle, typesGroup } from './paths-kit.js';
+import { READ_WAIT_MS, SEARCH_WAIT_MS } from '../api/read-wait.js';
 import { elementKey } from '../state/keys.js';
 import { nodeRef } from './paths-kit.js';
 import { searchOf } from '../patterns/search-kit.js';
@@ -258,5 +259,34 @@ describe('searching the source for an end', () => {
     await settle();
     expect(screen.getByRole('alert').textContent).toBe('The search could not be completed.');
     expect((screen.getByLabelText('To') as HTMLInputElement).value).toBe('acc-2');
+  });
+});
+
+describe('the search of an end that gets no answer', () => {
+  afterEach(() => void vi.useRealTimers());
+  const wait = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+  /** The text is typed and the pause before the request has passed: the request has just left. */
+  const typed = async (text: string): Promise<void> => {
+    await act(async () => void fireEvent.change(screen.getByLabelText('From'), { target: { value: text } }));
+    await wait(250);
+  };
+
+  it('says the search could not be completed at the longer bound, and a change of the text searches again and takes an answer that comes after the usual wait', async () => {
+    vi.useFakeTimers();
+    let answer: (value: ReturnType<typeof searchOf>) => void = () => undefined;
+    let searches = 0;
+    const kit = await pathsWorkspace({ search: () => new Promise((resolve) => void (++searches === 2 ? (answer = resolve as typeof answer) : undefined)) });
+    await openPaths();
+    await typed('fa');
+    await wait(SEARCH_WAIT_MS - 1);
+    expect(screen.queryByRole('alert')).toBeNull();
+    await wait(1);
+    expect(screen.getByRole('alert').textContent).toBe('The search could not be completed.');
+    await typed('far');
+    expect(kit.searches).toHaveLength(2);
+    await wait(READ_WAIT_MS + 5000);
+    await act(async () => answer(searchOf([typedNode('far-1', 'kind-a')])));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(within(screen.getByRole('listbox', { name: 'From results' })).getAllByRole('option').map((option) => option.textContent).join()).toContain('far-1');
   });
 });

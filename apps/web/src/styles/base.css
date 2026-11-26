@@ -84,7 +84,7 @@ nav ul {
   border-top: var(--border-width) solid var(--color-border);
 }
 
-.sidebar section[aria-label='Identity'] p:first-child {
+.sidebar section[aria-label='Identity'] > p:first-child {
   color: var(--color-text);
 }
 
@@ -92,7 +92,7 @@ nav ul {
   color: var(--color-text-muted);
 }
 
-.sidebar section[aria-label='Identity'] p:not(:first-child) {
+.sidebar section[aria-label='Identity'] > p:not(:first-child) {
   color: var(--color-text-muted);
 }
 
@@ -219,6 +219,34 @@ section {
   margin: 0;
   color: var(--color-danger);
   font-family: var(--font-mono);
+}
+
+.failure-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-10);
+  border-radius: var(--radius);
+  background: var(--color-failure-surface);
+}
+
+.failure-box[data-layout='row'] {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* the sentence of a framed failure is set as the interface text, in the frames' red, wherever the box stands */
+.failure-box.failure-box > [role='alert'],
+.mapping-example > p[role='alert'],
+.search-failed > p[role='alert'],
+.notice-text > [role='alert'] {
+  margin: 0;
+  color: var(--color-danger-action);
+  font-family: var(--font-family);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-note);
 }
 
 :focus-visible {

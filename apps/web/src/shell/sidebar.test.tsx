@@ -94,7 +94,7 @@ function Reloader() {
 }
 
 describe('a later read of the shell data', () => {
-  it('keeps the identity and the source line and shows the failure beside them when it fails', async () => {
+  it('puts the failure in place of the identity, and keeps the source line, when a later read of the account fails', async () => {
     let reads = 0;
     const client = fakeClient({
       getMe: async () => (reads++ === 0 ? { ok: true, value: me() } : { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }),
@@ -104,7 +104,7 @@ describe('a later read of the shell data', () => {
     await screen.findByText('Local workspace');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
     expect((await screen.findByRole('alert')).textContent).toBe('The server could not be reached.');
-    expect(screen.getByText('Local workspace')).toBeTruthy();
+    expect(screen.queryByText('Local workspace')).toBeNull();
     expect(screen.getByText(/Source a · read-only · connected/)).toBeTruthy();
   });
 

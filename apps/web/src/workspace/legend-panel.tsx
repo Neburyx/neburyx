@@ -1,8 +1,9 @@
 import type { IconKey, SourceProfile, StyleRuleProfile } from '@neburyx/contracts';
 import { GLYPHS, glyphUri } from '../canvas/glyphs.js';
 import { GLYPH_COLOR, STYLE_TONE_COLORS } from '../canvas/look.js';
-import { useProfileState } from '../canvas/profile-context.js';
-import { FailureNotice } from '../failure-notice.js';
+import { useProfileReload, useProfileState } from '../canvas/profile-context.js';
+import { FailureBox } from '../failure-box.js';
+import { RETRY_NAMES } from '../failure-copy.js';
 import { answeredData, retainedFailure } from '../shell/shell-data.js';
 import { useStoreSelector } from '../state/store.js';
 import { useClientState } from '../state/context.js';
@@ -24,9 +25,10 @@ export function legendGlyph(key: string): string {
   return glyphUri(isIconKey(key) ? key : 'generic', GLYPH_COLOR);
 }
 
-/** What the entity types section shows: the types of the bound source's profile when it has been read, kept on screen while it is read again and when that fails, with the failure's code beside them; before the first read a loading line, after a first read that failed the code. */
+/** What the entity types section shows: the types of the bound source's profile when it has been read, kept on screen while it is read again and when that fails, with the failure and its Try again beside them; before the first read a loading line, after a first read that failed the failure. */
 function EntityTypes() {
   const profileState = useProfileState();
+  const reload = useProfileReload();
   const bound = useStoreSelector(useClientState().investigation, (investigation) => investigation.sourceId);
   const current = bound !== null && profileState.sourceId === bound;
   const profile = current ? answeredData(profileState.request) : undefined;
@@ -34,7 +36,7 @@ function EntityTypes() {
   return (
     <>
       <h3 className="legend-label">ENTITY TYPES</h3>
-      {failure === undefined ? null : <FailureNotice failure={failure} />}
+      {failure === undefined ? null : <FailureBox failure={failure} retry={{ name: RETRY_NAMES.entityTypes, run: reload }} />}
       {profile === undefined ? (
         failure === undefined ? (
           <p role="status" className="legend-note">

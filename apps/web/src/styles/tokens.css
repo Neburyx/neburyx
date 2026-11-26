@@ -18,6 +18,15 @@
   --color-caution-surface: #fff3d7;
   --color-caution-text: #99610d;
   --color-danger-surface: #fbecee;
+  --color-failure-surface: #fdeeee;
+  --failure-retry-height: 28px;
+  --failure-retry-padding: 9px;
+  --failure-popover-width: 288px;
+  --failure-popover-offset: 52px;
+  --failure-mark-size: 32px;
+  --failure-ring-size: 16px;
+  --failure-ring-width: 1.5px;
+  --shadow-popover: 0 4px 14px rgba(0, 0, 0, 0.12);
   --color-danger: #992933;
   --color-focus: var(--color-accent);
   --style-tone-amber: #e8890c;

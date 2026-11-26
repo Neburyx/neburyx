@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode, PathsOk } from '@neburyx/contracts';
-import { useEntitySearch } from '../patterns/start-entity.js';
+import { SearchFailed, useEntitySearch } from '../patterns/start-entity.js';
 import type { ApiClient } from '../api/client.js';
 import { withoutReadsWhileSourceChanged } from '../api/changed-source-guard.js';
 import { useApiClient } from '../api/client-context.js';
@@ -44,11 +44,12 @@ function EndField({ client, sourceId, mask, id, label, candidates, chosen, onCho
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const typed = text ?? '';
-  const { found, asked } = useEntitySearch(client, sourceId, mask, undefined, typed);
+  const { found, asked, earlier, retry } = useEntitySearch(client, sourceId, mask, undefined, typed);
   const query = typed.trim().toLowerCase();
   const local = candidates.filter((node) => query === '' || node.display.title.toLowerCase().includes(query)).slice(0, LOCAL_OPTIONS);
   const loadedKeys = new Set(candidates.map((node) => elementKey(node.ref)));
-  const hits = found.kind === 'found' ? found.nodes.filter((node) => !loadedKeys.has(elementKey(node.ref))) : [];
+  const searched = found.kind === 'found' ? found.nodes : found.kind === 'failed' ? earlier : [];
+  const hits = searched.filter((node) => !loadedKeys.has(elementKey(node.ref)));
   const options = [...local, ...hits];
   const listId = `${id}-options`;
   const pick = (node: GraphNode): void => {
@@ -112,9 +113,7 @@ function EndField({ client, sourceId, mask, id, label, candidates, chosen, onCho
         ) : null}
       </div>
       {found.kind === 'failed' ? (
-        <p className="patterns-error" role="alert">
-          {PATHS_COPY.searchFailed}
-        </p>
+        <SearchFailed text={PATHS_COPY.searchFailed} failure={found.failure} retry={retry} />
       ) : asked && found.kind === 'found' && found.nodes.length === 0 && local.length === 0 ? (
         <p className="search-panel-note">{PATHS_COPY.searchNone}</p>
       ) : null}
