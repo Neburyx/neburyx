@@ -93,16 +93,16 @@ describe('the warm-up of a statement', () => {
     expect(calls.count).toBe(1);
   });
 
-  it.each([[1, [timedOut, { ok: true }]], [2, [timedOut, timedOut, { ok: true }]]])('reads again after %d timeout(s), until one succeeds', async (_timeouts, answers) => {
+  it.each([[1, [timedOut, { ok: true }]], [4, [timedOut, timedOut, timedOut, timedOut, { ok: true }]]])('reads again after %d timeout(s), until one succeeds', async (_timeouts, answers) => {
     const { calls, read } = answering(...answers);
     await warmUp('the expansion', read);
     expect(calls.count).toBe(answers.length);
   });
 
-  it('fails after three reads that all timed out, naming the read', async () => {
-    const { calls, read } = answering(timedOut, timedOut, timedOut, { ok: true });
-    await expect(warmUp('the expansion', read)).rejects.toThrow('the warm-up of the expansion did not succeed in 3 reads (each "QUERY_TIMEOUT")');
-    expect(calls.count).toBe(3);
+  it('fails after five reads that all timed out, naming the read', async () => {
+    const { calls, read } = answering(timedOut, timedOut, timedOut, timedOut, timedOut, { ok: true });
+    await expect(warmUp('the expansion', read)).rejects.toThrow('the warm-up of the expansion did not succeed in 5 reads (each "QUERY_TIMEOUT")');
+    expect(calls.count).toBe(5);
   });
 
   it('fails at once on a failure that is no timeout, naming its code', async () => {

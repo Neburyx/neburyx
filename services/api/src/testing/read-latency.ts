@@ -14,13 +14,13 @@ function failureOf(answer: unknown): string | undefined {
   return 'failure' in answer && typeof answer.failure === 'object' && answer.failure !== null && 'code' in answer.failure ? JSON.stringify(answer.failure.code) : 'unknown';
 }
 
-const WARM_UP_ATTEMPTS = 3;
+const WARM_UP_ATTEMPTS = 5;
 const TIMED_OUT = JSON.stringify('QUERY_TIMEOUT');
 
 /**
- * Runs `read` until it succeeds, at most three times, so that the server has planned its statement before a case holds a read of it to a budget:
+ * Runs `read` until it succeeds, at most five times (runs on the dev server have needed three), so that the server has planned its statement before a case holds a read of it to a budget:
  * on the dev server the first read of a statement on a new database spent 1.3 to 1.8 s in planning, over a 1,000 ms budget.
- * Only a timeout is read again; another failure, an error the read throws, or three timeouts are an error.
+ * Only a timeout is read again; another failure, an error the read throws, or five timeouts are an error.
  */
 export async function warmUp(what: string, read: () => Promise<unknown>): Promise<void> {
   for (let attempt = 1; attempt <= WARM_UP_ATTEMPTS; attempt += 1) {
