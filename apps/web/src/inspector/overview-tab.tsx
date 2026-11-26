@@ -6,9 +6,16 @@ import type { EntityRead } from './entity-read.js';
 import type { InspectorTabProps } from './inspector-tabs.js';
 import { NeighborsSection } from './neighbors-section.js';
 import { propertyText } from './property-text.js';
+import { DetailsShape, LoadingBlock } from '../waiting.js';
 
 function ReadNote({ read }: { readonly read: EntityRead }) {
-  if (read.phase === 'loading') return <p role="status">{READING_DETAILS}</p>;
+  if (read.phase === 'loading') {
+    return (
+      <LoadingBlock sentence={READING_DETAILS}>
+        <DetailsShape />
+      </LoadingBlock>
+    );
+  }
   const failure = read.failure;
   if (failure === undefined) return null;
   if (failure.code === 'NOT_FOUND') return <p role="alert">{NO_LONGER_IN_SOURCE}</p>;

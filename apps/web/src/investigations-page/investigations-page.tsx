@@ -16,6 +16,7 @@ import { Tabs } from './tabs.js';
 import { NO_ROW_LEFT, useInvestigationList, type ListFilters } from './use-investigation-list.js';
 import { useRowLabels } from './use-row-labels.js';
 import { useSourceProfiles } from './use-source-profiles.js';
+import { TableShape } from '../waiting.js';
 
 const TABS = { investigations: 'investigations', views: 'views', evidence: 'evidence' } as const;
 type TabId = (typeof TABS)[keyof typeof TABS];
@@ -116,6 +117,11 @@ export function InvestigationsPage() {
       <p role="status" className="investigations-status">
         {statusText}
       </p>
+      {items === undefined && state.failure === undefined ? (
+        <div className="loading-shape" aria-busy="true" aria-hidden="true">
+          <TableShape rows={7} />
+        </div>
+      ) : null}
       {notice === undefined ? null : (
         <p role="alert" className="investigations-notice">
           {messageOf(notice)}

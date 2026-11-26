@@ -31,6 +31,7 @@ import { useInspectorOpen, useNarrowWhenInspectorOpens } from './yield-to-inspec
 import { useQuietTipsAfterLayoutChange } from './use-quiet-tips.js';
 import { popOut } from '../windows/pop-out.js';
 import { useOtherWindowRoles, useWindowChannelAvailable } from '../windows/use-window-channel.js';
+import { LoadingBlock, ThreadShape } from '../waiting.js';
 
 function Chat() {
   return (
@@ -314,7 +315,11 @@ export function AssistantSurface({ variant, onClose }: { readonly variant: Assis
       }} onFocusLost={noteLostFocus} /> : null}
       <div className="ask-body assistant-body" ref={body} hidden={collapsed}>
         {unavailable ? <NotAvailable /> : showNewThread ? <NewThreadCard /> : null}
-        {!unavailable && stored.kind === 'loading' ? <p className="ask-note" role="status">{ASSISTANT_COPY.storedLoading}</p> : null}
+        {!unavailable && stored.kind === 'loading' ? (
+          <LoadingBlock sentence={ASSISTANT_COPY.storedLoading}>
+            <ThreadShape />
+          </LoadingBlock>
+        ) : null}
         {!unavailable && stored.kind === 'failed' ? (
           <p className="ask-note" role="alert">
             {ASSISTANT_COPY.storedFailed}{' '}

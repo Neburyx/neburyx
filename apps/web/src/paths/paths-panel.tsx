@@ -19,6 +19,8 @@ import { usePathsEnvironment } from './paths-context.js';
 import { choiceOf, DEFAULT_LIMIT, LIMIT_CHOICES, initialForm, problemOf, relationshipTypesOf, requestOf, type EndChoice, type PathsForm } from './paths-form.js';
 import { focusPathsTool } from './paths-tool.js';
 import { usePathsRun } from './use-paths-run.js';
+import { SEARCHING } from '../waiting-copy.js';
+import { WaitingLine } from '../waiting.js';
 
 const DIRECTIONS = ['both', 'out', 'in'] as const;
 const PANEL_GAP = 16;
@@ -44,7 +46,7 @@ function EndField({ client, sourceId, mask, id, label, candidates, chosen, onCho
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const typed = text ?? '';
-  const { found, asked, earlier, retry } = useEntitySearch(client, sourceId, mask, undefined, typed);
+  const { found, asked, waiting, earlier, retry } = useEntitySearch(client, sourceId, mask, undefined, typed);
   const query = typed.trim().toLowerCase();
   const local = candidates.filter((node) => query === '' || node.display.title.toLowerCase().includes(query)).slice(0, LOCAL_OPTIONS);
   const loadedKeys = new Set(candidates.map((node) => elementKey(node.ref)));
@@ -58,7 +60,7 @@ function EndField({ client, sourceId, mask, id, label, candidates, chosen, onCho
     setOpen(false);
   };
   return (
-    <div className="patterns-field paths-end">
+    <div className="patterns-field paths-end" aria-busy={waiting ? true : undefined}>
       <label htmlFor={id}>{label}</label>
       <div
         className="paths-search"
@@ -112,7 +114,9 @@ function EndField({ client, sourceId, mask, id, label, candidates, chosen, onCho
           </ul>
         ) : null}
       </div>
-      {found.kind === 'failed' ? (
+      {waiting ? (
+        <WaitingLine word={SEARCHING} />
+      ) : found.kind === 'failed' ? (
         <SearchFailed text={PATHS_COPY.searchFailed} failure={found.failure} retry={retry} />
       ) : asked && found.kind === 'found' && found.nodes.length === 0 && local.length === 0 ? (
         <p className="search-panel-note">{PATHS_COPY.searchNone}</p>

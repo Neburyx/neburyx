@@ -13,6 +13,8 @@ type SavedListState =
       /** The cursor of the next page, or `null` when the list is whole. */
       readonly nextCursor: string | null;
       readonly loadingMore: boolean;
+      /** The first page is being read again while these rows stay. */
+      readonly rereading?: boolean;
       /** What the last Load more could not do; the rows already read stay. */
       readonly moreFailure: ApiFailure | undefined;
       /** Set when the list was read again from its first page because a cursor was refused. */
@@ -44,6 +46,7 @@ export function useSavedPatterns(client: ApiClient, sourceId: string | null): Sa
       if (sourceId === null) return;
       const controller = new AbortController();
       newest.current = controller;
+      setState((now) => (now.phase === 'ready' ? { ...now, rereading: true } : now));
       const send = async (): Promise<void> => {
         let result: Awaited<ReturnType<ApiClient['listPatterns']>>;
         try {
@@ -54,7 +57,7 @@ export function useSavedPatterns(client: ApiClient, sourceId: string | null): Sa
         if (newest.current !== controller) return;
         if (!result.ok) {
           if (result.failure.code === 'ABORTED') return;
-          setState((now) => (now.phase === 'ready' ? { ...now, loadingMore: false, moreFailure: result.failure } : { phase: 'failed', failure: result.failure }));
+          setState((now) => (now.phase === 'ready' ? { ...now, loadingMore: false, rereading: false, moreFailure: result.failure } : { phase: 'failed', failure: result.failure }));
           return;
         }
         setState({ phase: 'ready', items: result.value.items, nextCursor: result.value.nextCursor, loadingMore: false, moreFailure: undefined, cursorReset });

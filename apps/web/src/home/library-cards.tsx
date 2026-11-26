@@ -3,6 +3,7 @@ import { useRecentState } from './recent-context.js';
 import { LIBRARY_COPY, PATTERN_CARD_COPY } from './copy.js';
 import { useHomePatterns } from './home-patterns.js';
 import { utcClock } from './relative-time.js';
+import { Bar } from '../waiting.js';
 
 export function LibraryCards() {
   const { list } = useRecentState();
@@ -10,7 +11,16 @@ export function LibraryCards() {
   const presets = patterns.kind === 'list' && (patterns.list.phase === 'ready' || patterns.list.phase === 'loading') ? patterns.list.data?.presets : undefined;
   const presetCount = presets?.length;
   const counts = list.phase === 'ready' || list.phase === 'loading' ? list.data?.counts : undefined;
-  const unanswered = <p className="library-note">{list.phase === 'failed' ? LIBRARY_COPY.notRead : LIBRARY_COPY.loading}</p>;
+  const unanswered =
+    list.phase === 'failed' ? (
+      <p className="library-note">{LIBRARY_COPY.notRead}</p>
+    ) : (
+      <div className="loading-block" aria-busy="true">
+        <span className="visually-hidden">{LIBRARY_COPY.loading}</span>
+        <Bar width="tag" size="block" />
+        <Bar width="label" size="second" />
+      </div>
+    );
   return (
     <div role="group" aria-label={LIBRARY_COPY.label} className="library-cards">
       <div className="library-card">
@@ -46,8 +56,13 @@ export function LibraryCards() {
             <p className="library-figure">{presetCount}</p>
             <p className="library-note">{presetCount === 0 ? PATTERN_CARD_COPY.noPatterns : LIBRARY_COPY.approvedPatterns}</p>
           </>
+        ) : patterns.list.phase === 'failed' ? (
+          <p className="library-note">{LIBRARY_COPY.notRead}</p>
         ) : (
-          <p className="library-note">{patterns.list.phase === 'failed' ? LIBRARY_COPY.notRead : LIBRARY_COPY.loading}</p>
+          <div className="loading-block" aria-busy="true">
+            <p className="loading-line">{PATTERN_CARD_COPY.loading}</p>
+            <Bar width="short" size="second" />
+          </div>
         )}
       </div>
     </div>

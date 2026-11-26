@@ -7,6 +7,8 @@ import { failureView, PATTERNS_COPY } from '../copy.js';
 import { SearchFailed, useEntitySearch } from '../start-entity.js';
 import { entityLabel } from './entity-label.js';
 import { RUN_COPY, searchSummary, startFrom, startHelper, typesMatching, typesOnCanvas } from './run-copy.js';
+import { SEARCHING } from '../../waiting-copy.js';
+import { WaitingLine } from '../../waiting.js';
 
 interface Props {
   readonly client: ApiClient;
@@ -32,7 +34,7 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listId = useId();
-  const { found, asked, earlier, retry } = useEntitySearch(client, sourceId, mask, entityType, text);
+  const { found, asked, waiting, earlier, retry } = useEntitySearch(client, sourceId, mask, entityType, text);
   const typed = text.trim() !== '';
   const options: readonly GraphNode[] = typed ? (found.kind === 'found' ? found.nodes : found.kind === 'failed' ? earlier : []) : candidates;
   const listing = open && (typed ? asked || found.kind === 'failed' : candidates.length > 0);
@@ -71,7 +73,7 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
   }, [listing]);
   const total = found.kind === 'found' && found.count?.value !== undefined ? degreeCountText(found.count) : undefined;
   return (
-    <div className="patterns-field run-start">
+    <div className="patterns-field run-start" aria-busy={waiting && typed ? true : undefined}>
       <label className="supernode-label" htmlFor={inputId}>
         {startFrom(typeName)}
       </label>
@@ -101,7 +103,8 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
       {listing ? (
         <div className="run-start-list" onMouseDown={(event) => event.preventDefault()}>
           <p className="run-start-heading">{typed ? typesMatching(typeName, text.trim()) : typesOnCanvas(typeName)}</p>
-          {found.kind === 'failed' && typed ? <SearchFailed text={failureView(found.failure, sourceName).text} failure={found.failure} retry={retry} /> : null}
+          {waiting && typed ? <WaitingLine word={SEARCHING} /> : null}
+          {found.kind === 'failed' && typed && !waiting ? <SearchFailed text={failureView(found.failure, sourceName).text} failure={found.failure} retry={retry} /> : null}
           {found.kind === 'failed' && typed && options.length === 0 ? null : (
             <ul id={listId} role="listbox" aria-label={typed ? typesMatching(typeName, text.trim()) : typesOnCanvas(typeName)}>
               {options.map((node, index) => {

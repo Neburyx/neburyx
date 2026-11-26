@@ -17,6 +17,8 @@ export type ViewListState =
       readonly count: number;
       readonly draft: ViewListResponse['draft'];
       readonly loadingMore: boolean;
+      /** The first page is being read again while these rows stay. */
+      readonly rereading?: boolean;
       /** Set when the rows after the last one shown could not be read; the rows shown stay. */
       readonly moreFailed: boolean;
     };
@@ -60,7 +62,9 @@ export function createViewList(client: ApiClient, shown: ClientState): ViewList 
     const sameInvestigation = readOf === id;
     readOf = id;
     // what is shown stays while it is read again, but never the list of another investigation
-    if (store.getState().kind !== 'ready' || !sameInvestigation) store.setState({ kind: 'loading' });
+    const shownNow = store.getState();
+    if (shownNow.kind !== 'ready' || !sameInvestigation) store.setState({ kind: 'loading' });
+    else store.setState({ ...shownNow, rereading: true });
     const result = await boundedRead((signal) => client.listViews(id, {}, signal));
     if (mine !== read) return;
     if (!result.ok) {

@@ -9,6 +9,7 @@ import { offersRetry } from '../failure-notice.js';
 import { failureWords } from '../failure-words.js';
 import { SUMMARY_COPY } from './copy.js';
 import { useNotes, type NotesStage } from './use-notes.js';
+import { LoadingBlock, NotesShape } from '../waiting.js';
 
 type Entry = AiNotesResponse['entries'][number];
 type Citation = Entry['sentences'][number]['citations'][number];
@@ -43,7 +44,11 @@ export function NotesSection({ copies, sourceId, request }: { readonly copies: n
     <details className="summary-notes" open={model.open} onToggle={(event) => (event.currentTarget.open === model.open ? undefined : model.toggle(event.currentTarget.open))}>
       <summary ref={heading}>{SUMMARY_COPY.notesTitle}</summary>
       <p className="summary-note">{SUMMARY_COPY.notesRebuilt}</p>
-      {model.stage.kind === 'loading' && entries === undefined ? <p className="summary-note">{SUMMARY_COPY.notesLoading}</p> : null}
+      {model.stage.kind === 'loading' && entries === undefined ? (
+        <LoadingBlock sentence={SUMMARY_COPY.notesLoading}>
+          <NotesShape />
+        </LoadingBlock>
+      ) : null}
       {model.stage.kind === 'refused' ? <p className="summary-note">{SUMMARY_COPY.notesRefused}</p> : null}
       {model.stage.kind === 'failed' ? (
         <p className="summary-note" role="status">

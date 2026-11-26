@@ -8,9 +8,12 @@ import { useApiClient } from '../api/client-context.js';
 import { offersRetry, FailureNotice } from '../failure-notice.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { utcDateTime } from '../views/format.js';
-import { VIEW_DELETE_ACTION, deleteViewLabel, viewsReadOnlyReason, COLUMN_SOURCE, COULD_NOT_READ_VIEWS, LOADING, LOADING_MORE, MORE_VIEWS_FAILED, NO_VIEWS, SAVED_VIEWS_LABEL, SHOW_MORE, TRY_AGAIN, VIEWS_FOOTNOTE, VIEW_INVESTIGATION, VIEW_NAME, VIEW_SAVED_AT, VIEW_SAVED_BY, openView, showing } from './copy.js';
+import { VIEW_DELETE_ACTION, deleteViewLabel, viewsReadOnlyReason, COLUMN_SOURCE, COULD_NOT_READ_VIEWS, LOADING_MORE, MORE_VIEWS_FAILED, NO_VIEWS, SAVED_VIEWS_LABEL, SHOW_MORE, TRY_AGAIN, VIEWS_FOOTNOTE, VIEW_INVESTIGATION, VIEW_NAME, VIEW_SAVED_AT, VIEW_SAVED_BY, openView, showing } from './copy.js';
 import { intentOf } from './restore-intent.js';
 import { NO_VIEW_LEFT, useOwnedViews } from './use-owned-views.js';
+import { VIEWS_LOADING } from '../views/copy.js';
+import { READING_AGAIN } from '../waiting-copy.js';
+import { TableShape, WaitingLine } from '../waiting.js';
 
 /** The named views of all the caller's investigations, newest first, each with an Open that leads to the investigation and asks before the view replaces the draft. */
 export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from this tab: the count in the tab's name goes down by one. */ readonly onViewDeleted?: (() => void) | undefined } = {}) {
@@ -48,7 +51,7 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
   return (
     <div className="investigations-views">
       <p role="status" className="investigations-status">
-        {state.note ?? (items === undefined ? (state.failure === undefined ? LOADING : '') : items.length === 0 ? '' : state.count === undefined ? '' : showing(items.length, state.count))}
+        {state.note ?? (items === undefined ? (state.failure === undefined ? VIEWS_LOADING : '') : items.length === 0 ? '' : state.count === undefined ? '' : showing(items.length, state.count))}
       </p>
       {state.failure === undefined ? null : (
         <div className="investigations-failure">
@@ -61,6 +64,12 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
           ) : null}
         </div>
       )}
+      {items === undefined && state.failure === undefined ? (
+        <div className="loading-shape" aria-busy="true" aria-hidden="true">
+          <TableShape rows={5} />
+        </div>
+      ) : null}
+      {items !== undefined && state.loading ? <WaitingLine word={READING_AGAIN} /> : null}
       {items === undefined ? null : items.length === 0 ? (
         <p>{NO_VIEWS}</p>
       ) : (

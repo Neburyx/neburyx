@@ -11,6 +11,8 @@ import { SAVED_COPY } from './saved-copy.js';
 import { legendGlyph } from '../../workspace/legend-panel.js';
 import { controlsOf, countText, kindLineOf, lastRunText } from './saved-model.js';
 import type { SavedList } from './use-saved-patterns.js';
+import { READING_AGAIN } from '../../waiting-copy.js';
+import { WaitingLine } from '../../waiting.js';
 
 type Preset = TemplateListResponse['presets'][number];
 
@@ -91,6 +93,7 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
               {SAVED_COPY.cursorReset}
             </p>
           ) : null}
+          {state.rereading === true ? <WaitingLine word={READING_AGAIN} /> : null}
           <Section id="mine" label={SAVED_COPY.mine} count={countText(mine.length, more)}>
             {mine.length === 0 && !more ? <EmptyMine newRef={newRef} onNew={actions.newPattern} onSeeBuiltIn={() => builtIn.current?.focus()} /> : <SavedRows items={mine} empty={SAVED_COPY.emptyMine} presets={presets} actions={actions} nameOf={nameOf} windowOf={windowOf} />}
           </Section>

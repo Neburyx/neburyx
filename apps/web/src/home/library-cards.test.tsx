@@ -210,7 +210,7 @@ describe('Home: the Patterns card', () => {
   it('shows no number while the list is being read', async () => {
     renderApp('/', withPresets(() => new Promise<never>(() => undefined)).client);
     await screen.findByRole('link', { name: 'kind-a A-1' });
-    expect(within(cardOf('Patterns')).getByText('Loading…')).toBeTruthy();
+    expect(within(cardOf('Patterns')).getByText('Loading patterns…')).toBeTruthy();
     expect(cardOf('Patterns').querySelector('.library-figure')).toBeNull();
   });
 

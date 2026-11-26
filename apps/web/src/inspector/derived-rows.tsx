@@ -10,6 +10,7 @@ import { RETRY } from '../workspace/expand-copy.js';
 import { formatNumber } from '../workspace/scope-text.js';
 import { COUNTING_DERIVED, LINKED } from './copy.js';
 import { derivedCountText, showLabel } from './derived-text.js';
+import { Bar, LoadingBlock } from '../waiting.js';
 
 interface Rule {
   readonly id: string;
@@ -70,7 +71,14 @@ function Rows({ store, entity, rules, mask }: { readonly store: DerivedStore; re
       </div>
     );
   }
-  if (state.phase !== 'ready') return <p role="status">{COUNTING_DERIVED}</p>;
+  if (state.phase !== 'ready') {
+    return (
+      <LoadingBlock sentence={COUNTING_DERIVED}>
+        <Bar width="full" size="block" />
+        <Bar width="full" size="block" />
+      </LoadingBlock>
+    );
+  }
   return (
     <div className="inspector-derived">
       {rules.flatMap((rule) => {

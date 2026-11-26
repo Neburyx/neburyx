@@ -13,6 +13,8 @@ import { SearchFailure } from './search-failure.js';
 import { FiltersPanel } from './filters-panel.js';
 import { requestFieldsOf, sameSelection, type Selection } from './selection.js';
 import { boundedRead, SEARCH_WAIT_MS } from '../api/read-wait.js';
+import { SEARCHING } from '../waiting-copy.js';
+import { FacetsShape, ResultsShape, WaitingLine } from '../waiting.js';
 
 interface Searched {
   readonly key: QueryKey;
@@ -81,10 +83,20 @@ export function SearchResults({ client, source, principalId, profile, text, mask
   };
   const panel = latest === undefined || !latest.searchable ? undefined : { facets: latest.total.quality === 'unknown' ? (kept ?? latest) : atLeastHeld(latest, held), counted: latest.total.quality !== 'unknown' };
   return (
-    <div className={panel === undefined ? 'search-body' : 'search-body search-body-filtered'}>
+    <div className={panel === undefined && !(state.phase === 'loading' && shown === undefined) ? 'search-body' : 'search-body search-body-filtered'}>
+      {panel === undefined && state.phase === 'loading' && shown === undefined ? (
+        <div className="search-facets-loading loading-shape" aria-hidden="true">
+          <FacetsShape />
+        </div>
+      ) : null}
       {panel === undefined ? null : <FiltersPanel facets={panel.facets} counted={panel.counted} selection={selection} profile={profile} loading={state.phase === 'loading'} onChange={onSelect} onRetry={retry} />}
       <div ref={region} tabIndex={-1} className="search-results" aria-busy={state.phase === 'loading'}>
-        {state.phase === 'loading' ? <p role="status">{SEARCH_COPY.searching}</p> : null}
+        {state.phase === 'loading' ? <WaitingLine word={SEARCHING} /> : null}
+        {state.phase === 'loading' && shown === undefined ? (
+          <div className="loading-shape" aria-hidden="true">
+            <ResultsShape rows={7} />
+          </div>
+        ) : null}
         {failure === undefined ? null : <SearchFailure failure={failure} sourceId={source.id} onRetry={retry} />}
         {shown === undefined ? null : <SearchAnswer result={shown.result} answeredText={shown.text} currentText={text} profile={profile} busy={busy} mask={mask} onOpen={onOpen} onRetry={retry} onReset={() => onSelect({ entityTypes: [], matchModes: [] })} pages={pages} />}
       </div>

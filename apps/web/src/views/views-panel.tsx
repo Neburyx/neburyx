@@ -6,6 +6,8 @@ import { useStoreSelector } from '../state/store.js';
 import { CANCEL, FREE_TEXT_HINT, VIEW_DELETE, deleteLabel, LOADING_MORE, MORE_FAILED, NAME_LABEL, NAME_TOO_LONG, NO_VIEWS, READ_ONLY_VIEWS, RENAME, RENAME_CONFLICT, RENAME_FAILED, RESTORE_FOOTNOTE, RESTORE_INTO_DRAFT, RETRY, SAVE_NAME, SHOW_MORE, VIEWS_FAILED, VIEWS_LOADING, VIEWS_TITLE, draftAutosaved, renameLabel, restoreLabel, savedBy, viewsCount } from './copy.js';
 import { utcDateTime, utcTime } from './format.js';
 import type { ViewList } from './view-list.js';
+import { READING_AGAIN } from '../waiting-copy.js';
+import { WaitingLine } from '../waiting.js';
 
 type RenameProblem = 'failed' | 'conflict';
 
@@ -132,7 +134,7 @@ export function ViewsPanel({ list, titleId, onRestore, onDelete, message, focusA
     );
   }
   return (
-    <div ref={root}>
+    <div ref={root} aria-busy={state.rereading === true ? true : undefined}>
       <h2 id={titleId} className="views-title">
         {viewsCount(state.count)}
       </h2>
@@ -147,6 +149,7 @@ export function ViewsPanel({ list, titleId, onRestore, onDelete, message, focusA
           {RENAME_CONFLICT}
         </p>
       ) : null}
+      {state.rereading === true ? <WaitingLine word={READING_AGAIN} /> : null}
       <p role="status" className={message === undefined ? 'visually-hidden' : 'views-note'}>
         {message ?? ''}
       </p>

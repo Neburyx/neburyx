@@ -19,6 +19,8 @@ import { definitionRowOf, presetRowOf, savedRowOf } from './library-model.js';
 import { LibraryTable, type TableEntry } from './library-table.js';
 import { useLibrarySource } from './use-library-source.js';
 import { boundedRead } from '../../api/read-wait.js';
+import { READING_AGAIN } from '../../waiting-copy.js';
+import { WaitingLine } from '../../waiting.js';
 
 type Preset = TemplateListResponse['presets'][number];
 type Tab = 'mine' | 'shared' | 'built-in';
@@ -225,12 +227,13 @@ function LibraryBody({ source }: { readonly source: SourceSummary }) {
         </div>
       ) : null}
       <Tabs labels={labels} active={tab} onChoose={setTab} panelId={panelId} />
-      <div role="tabpanel" id={panelId} ref={panel} tabIndex={-1} aria-label={labels[tab]} className="library-panel">
+      <div role="tabpanel" id={panelId} ref={panel} tabIndex={-1} aria-label={labels[tab]} aria-busy={savedTab && list.phase === 'ready' && list.rereading === true ? true : undefined} className="library-panel">
         {savedTab && list.phase === 'ready' && list.cursorReset ? (
           <p className="search-panel-note" role="status">
             {SAVED_COPY.cursorReset}
           </p>
         ) : null}
+        {savedTab && list.phase === 'ready' && list.rereading === true ? <WaitingLine word={READING_AGAIN} /> : null}
         {body}
         {savedTab && list.phase === 'ready' && list.moreFailure !== undefined ? (
           <p className="patterns-error" role="alert">

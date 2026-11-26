@@ -7,6 +7,7 @@ import { HOME_COPY, MORE_THAN_SHOWN } from './copy.js';
 import { useRecent, useRecentState } from './recent-context.js';
 import { HomeEmptyState } from './home-empty-state.js';
 import { RecentRow } from './recent-row.js';
+import { CardRowsShape, LoadingBlock } from '../waiting.js';
 
 // a profile whose last read failed is not used, so the row falls back to what is stored; one that is being read again is kept until its answer
 function usableProfile(state: RequestState<SourceProfile> | undefined): SourceProfile | undefined {
@@ -29,7 +30,9 @@ export function RecentList() {
       <h2 id="recent-title">{HOME_COPY.recentTitle}</h2>
       {data === undefined ? (
         failure === undefined ? (
-          <p role="status">{HOME_COPY.loading}</p>
+          <LoadingBlock sentence={HOME_COPY.loading}>
+            <CardRowsShape rows={5} />
+          </LoadingBlock>
         ) : (
           <div className="recent-failure">
             <p>{HOME_COPY.couldNotRead}</p>
