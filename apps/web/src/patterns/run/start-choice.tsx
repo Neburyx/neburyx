@@ -73,7 +73,13 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
   }, [listing]);
   const total = found.kind === 'found' && found.count?.value !== undefined ? degreeCountText(found.count) : undefined;
   return (
-    <div className="patterns-field run-start" aria-busy={waiting && typed ? true : undefined}>
+    <div
+      className="patterns-field run-start"
+      aria-busy={waiting && typed ? true : undefined}
+      onBlur={(event) => {
+        if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setOpen(false);
+      }}
+    >
       <label className="supernode-label" htmlFor={inputId}>
         {startFrom(typeName)}
       </label>
@@ -97,7 +103,6 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
           setActive(0);
         }}
         onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
         onKeyDown={onKey}
       />
       {listing ? (
@@ -125,6 +130,7 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
           ) : null}
         </div>
       ) : null}
+      {waiting && typed && !listing ? <WaitingLine word={SEARCHING} /> : null}
       {chosen === undefined ? null : <ChosenLine node={chosen} showIds={showIds} />}
       {chosen === undefined ? (
         <p className="search-panel-note" id={`${inputId}-help`}>

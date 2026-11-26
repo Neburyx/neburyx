@@ -67,7 +67,7 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
   const builtIn = useRef<HTMLHeadingElement>(null);
   const groups = useMemo(() => groupsOf(definitions), [definitions]);
   return (
-    <div className="pattern-list">
+    <div className="pattern-list" aria-busy={state.phase === 'ready' && state.rereading === true ? true : undefined}>
       {groups.named.length > 0 && groups.general.length === 0 && presets?.length === 0 ? null : (
       <Section id="built-in" label={groups.named.length === 0 ? SAVED_COPY.builtIn : `${SAVED_COPY.builtIn} · ${SAVED_COPY.builtInGeneral}`} count={presets === undefined ? undefined : String(presets.length + groups.general.length)} headingRef={builtIn}>
         {words === undefined || groups.general.length === 0 ? null : <TypologyRows items={groups.general} client={words.client} sourceId={words.sourceId} sourceName={sourceName} mask={words.mask} actions={words.actions} />}

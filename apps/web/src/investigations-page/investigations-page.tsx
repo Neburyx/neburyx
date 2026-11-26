@@ -118,8 +118,10 @@ export function InvestigationsPage() {
         {statusText}
       </p>
       {items === undefined && state.failure === undefined ? (
-        <div className="loading-shape" aria-busy="true" aria-hidden="true">
-          <TableShape rows={7} />
+        <div aria-busy="true">
+          <div className="loading-shape" aria-hidden="true">
+            <TableShape rows={7} />
+          </div>
         </div>
       ) : null}
       {notice === undefined ? null : (

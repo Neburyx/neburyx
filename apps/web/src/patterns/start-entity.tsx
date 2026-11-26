@@ -93,10 +93,10 @@ export function useEntitySearch(client: ApiClient, sourceId: string, mask: boole
   return { found, asked, waiting, earlier: text.trim() === '' || answered.scope !== scope ? [] : answered.nodes, retry };
 }
 
-/** The line of a picker's failed search, with Try again beside it where a retry helps. */
+/** The line of a picker's failed search, with Try again beside it where a retry helps. A press on it leaves the focus in the field, whose blur ends the search. */
 export function SearchFailed({ text, failure, retry }: { readonly text: string; readonly failure: ApiFailure; readonly retry: () => void }) {
   return (
-    <div className="search-failed">
+    <div className="search-failed" onMouseDown={(event) => event.preventDefault()}>
       <p className="patterns-error" role="alert">
         {text}
       </p>

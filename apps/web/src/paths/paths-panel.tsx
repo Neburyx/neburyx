@@ -60,17 +60,18 @@ function EndField({ client, sourceId, mask, id, label, candidates, chosen, onCho
     setOpen(false);
   };
   return (
-    <div className="patterns-field paths-end" aria-busy={waiting ? true : undefined}>
+    <div
+      className="patterns-field paths-end"
+      aria-busy={waiting ? true : undefined}
+      onBlur={(event) => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        if (text !== undefined && text.trim() === '') onChoose(undefined);
+        setText(undefined);
+        setOpen(false);
+      }}
+    >
       <label htmlFor={id}>{label}</label>
-      <div
-        className="paths-search"
-        onBlur={(event) => {
-          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-          if (text !== undefined && text.trim() === '') onChoose(undefined);
-          setText(undefined);
-          setOpen(false);
-        }}
-      >
+      <div className="paths-search">
         <span className="icon icon-find paths-search-icon" aria-hidden="true" />
         <input
           id={id}

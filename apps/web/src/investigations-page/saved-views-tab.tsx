@@ -65,8 +65,10 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
         </div>
       )}
       {items === undefined && state.failure === undefined ? (
-        <div className="loading-shape" aria-busy="true" aria-hidden="true">
-          <TableShape rows={5} />
+        <div aria-busy="true">
+          <div className="loading-shape" aria-hidden="true">
+            <TableShape rows={5} />
+          </div>
         </div>
       ) : null}
       {items !== undefined && state.loading ? <WaitingLine word={READING_AGAIN} /> : null}

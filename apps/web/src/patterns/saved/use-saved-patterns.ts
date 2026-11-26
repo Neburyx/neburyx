@@ -80,7 +80,7 @@ export function useSavedPatterns(client: ApiClient, sourceId: string | null): Sa
     newest.current?.abort();
     const controller = new AbortController();
     newest.current = controller;
-    setState({ ...now, loadingMore: true, moreFailure: undefined, cursorReset: false });
+    setState({ ...now, loadingMore: true, rereading: false, moreFailure: undefined, cursorReset: false });
     const send = async (): Promise<void> => {
       let result: Awaited<ReturnType<ApiClient['listPatterns']>>;
       try {
@@ -95,7 +95,7 @@ export function useSavedPatterns(client: ApiClient, sourceId: string | null): Sa
           readFirst(true);
           return;
         }
-        setState({ ...now, loadingMore: false, moreFailure: result.failure, cursorReset: false });
+        setState({ ...now, loadingMore: false, rereading: false, moreFailure: result.failure, cursorReset: false });
         return;
       }
       setState({ phase: 'ready', items: [...now.items, ...result.value.items], nextCursor: result.value.nextCursor, loadingMore: false, moreFailure: undefined, cursorReset: false });
