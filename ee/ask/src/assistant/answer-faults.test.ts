@@ -175,12 +175,13 @@ describe('a list of connected elements', () => {
 describe('a question for the largest', () => {
   const VALUES = [1200.5, 1664.72, 99];
   const listed: AskRunResult = askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: VALUES.length, scope: 'test' }, matchIds: [], nodes: VALUES.map((value, index) => ({ ...nodeOf(`A-${index + 1}`), properties: [{ key: 'amountValue', value, dataClass: 'number', masked: false }] })), edges: [], notices: [], warnings: [] } });
-  const turn = async (text: string, cites: string[], reads = 1) => {
+  const turn = async (text: string, cites: string[], reads = 1, uncounted: ReturnType<typeof nodeOf>[] = []) => {
     const model = fakeModel();
+    if (uncounted.length > 0) model.respondWithTools([{ name: 'view', args: {} }]);
     for (let read = 0; read < reads; read += 1) model.respondWithTools([{ name: 'byId', args: { id: `A-${read + 1}` } }]);
     model.respondWithTools([sentences({ text, cites })]).respond(new AIMessage('Done.'));
-    const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), agent: { model }, run: () => ({ status: 'ok', result: listed }) });
-    return answerOf(r.route.handler(r.request(BODY)));
+    const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), agent: { model, maxInputTokens: 200_000 }, ...(uncounted.length === 0 ? {} : { viewNodes: uncounted }), run: () => ({ status: 'ok', result: listed }) });
+    return answerOf(r.route.handler(r.request(uncounted.length === 0 ? BODY : { ...BODY, viewElementKeys: uncounted.map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId])) })));
   };
   const largest = `${V.title} A-2 has the largest amountValue, 1664.72.`;
   const limited = `Of the ${plural} in the read, ${V.title} A-2 has the largest amountValue, 1664.72.`;
@@ -191,5 +192,38 @@ describe('a question for the largest', () => {
 
   it('stands in the form limited to one read that cites every element of it', async () => {
     expect(await turn(limited, ['r1', 'r2', 'r3', 's1'])).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: limited }] }] });
+  });
+
+  // the form the instructions teach, with the words in its slots
+  const taught = `Among the ${plural} in the read, ${V.title} A-2 has the largest amountValue, 1664.72.`;
+
+  it('stands in the taught form, and the model is told that form, to rank over one read only and to say nothing beyond it', async () => {
+    expect(await turn(taught, ['r1', 'r2', 'r3', 's1'])).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: taught }] }] });
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([sentences({ text: `${V.title} A-1 is in view.`, cites: ['n1'] })]).respond(new AIMessage('Done.'));
+    const runStore = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model, maxInputTokens: 200_000 }, runStore });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    for (let step = 0; step < 10; step += 1) await Promise.resolve();
+    const told = runStore.runs[0]?.callStarts[1]?.instructionsText ?? '';
+    expect(told).toContain('Among the <type name, plural> in the read, <element> has the largest <property>, <value>.');
+    expect(told).toContain('over one read only, citing every element that read listed and that read\'s line');
+    expect(told).toContain('say nothing beyond that read');
+  });
+
+  it.each([
+    ['leaves an element of the read uncited', taught, ['r1', 'r2', 's1'], 1],
+    ['names the read after saying in the read', `Among the ${plural} in the read of the neighbours of ${V.title} A-1, ${V.title} A-2 has the largest amountValue, 1664.72.`, ['r1', 'r2', 'r3', 's1'], 1],
+  ])('is removed when it %s', async (_name, text, cites, reads) => {
+    expect(await turn(text, cites, reads)).toMatchObject({ status: 'not-answered' });
+  });
+
+  const bothReads = ['r1', 'r2', 'r3', 's1', 's2'];
+
+  it('stands when it ranks over two reads that are cited whole and together hold every element of the type', async () => {
+    expect(await turn(taught, bothReads, 2)).toMatchObject({ status: 'answered' });
+  });
+
+  it('is removed when it ranks over two reads that are cited whole while an element of the type is not cited', async () => {
+    expect(await turn(taught, bothReads, 2, [nodeOf('A-9')])).toMatchObject({ status: 'not-answered' });
   });
 });
