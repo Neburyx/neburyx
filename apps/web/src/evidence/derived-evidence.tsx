@@ -24,7 +24,7 @@ import {
   WHY_HERE,
 } from './copy.js';
 import type { EvidenceKind, EvidenceKindProps } from './evidence-kinds.js';
-import { Bar, LoadingBlock } from '../waiting.js';
+import { BlocksShape, LoadingBlock } from '../waiting.js';
 
 const isDerived = (ref: EdgeRef): ref is Extract<EdgeRef, { derived: unknown }> => 'derived' in ref;
 
@@ -81,9 +81,7 @@ function Frame({ read, children }: { readonly read: DerivedRead; readonly childr
     if (failure !== undefined) return <EvidenceFailure failure={failure} reading={reading} reload={reload} />;
     return (
       <LoadingBlock sentence={READING_EVIDENCE}>
-        <Bar width="full" size="block" />
-        <Bar width="full" size="block" />
-        <Bar width="full" size="block" />
+        <BlocksShape />
       </LoadingBlock>
     );
   }

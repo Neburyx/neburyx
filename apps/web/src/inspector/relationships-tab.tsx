@@ -13,7 +13,7 @@ import { usePreviewStoreWhenProvided } from '../workspace/preview-context.js';
 import { COUNTING_RELATIONSHIP_ENDS, FROM_THIS_ENTITY, NO_RELATIONSHIPS_DRAWN, ORIGIN_NOT_STATED_GROUP, RULE_DERIVED, RULE_DERIVED_GROUP, SHOW_MORE, TO_THIS_ENTITY, leftOutText } from './copy.js';
 import type { InspectorTabProps } from './inspector-tabs.js';
 import { relationshipList, type RelationshipRow } from './relationship-rows.js';
-import { DetailsShape, LoadingBlock } from '../waiting.js';
+import { BlocksShape, LoadingBlock } from '../waiting.js';
 
 const NO_REQUEST = readable(createStore<RequestState<DegreePreview>>({ phase: 'idle' }));
 /** An aggregate of exactly one member reads as the plain relationship it is. */
@@ -108,7 +108,7 @@ export function RelationshipsTab({ entity }: InspectorTabProps) {
         </>
       ) : state.phase === 'loading' ? (
         <LoadingBlock sentence={COUNTING_RELATIONSHIP_ENDS}>
-          <DetailsShape />
+          <BlocksShape />
         </LoadingBlock>
       ) : null}
       {none ? <p>{NO_RELATIONSHIPS_DRAWN}</p> : null}

@@ -342,24 +342,140 @@ h1[tabindex='-1']:focus-visible,
   height: var(--skeleton-block);
 }
 
-.skeleton-bar[data-width='tag'] {
-  width: var(--skeleton-tag);
+.skeleton-bar[data-size='middle'] {
+  height: var(--skeleton-middle);
 }
 
-.skeleton-bar[data-width='label'] {
-  width: var(--skeleton-label);
+.skeleton-bar[data-width='24'] {
+  width: var(--bar-24);
 }
 
-.skeleton-bar[data-width='short'] {
-  width: var(--skeleton-short);
+.skeleton-bar[data-width='48'] {
+  width: var(--bar-48);
 }
 
-.skeleton-bar[data-width='medium'] {
-  width: var(--skeleton-medium);
+.skeleton-bar[data-width='58'] {
+  width: var(--bar-58);
 }
 
-.skeleton-bar[data-width='long'] {
-  width: var(--skeleton-long);
+.skeleton-bar[data-width='72'] {
+  width: var(--bar-72);
+}
+
+.skeleton-bar[data-width='76'] {
+  width: var(--bar-76);
+}
+
+.skeleton-bar[data-width='81'] {
+  width: var(--bar-81);
+}
+
+.skeleton-bar[data-width='88'] {
+  width: var(--bar-88);
+}
+
+.skeleton-bar[data-width='92'] {
+  width: var(--bar-92);
+}
+
+.skeleton-bar[data-width='96'] {
+  width: var(--bar-96);
+}
+
+.skeleton-bar[data-width='98'] {
+  width: var(--bar-98);
+}
+
+.skeleton-bar[data-width='100'] {
+  width: var(--bar-100);
+}
+
+.skeleton-bar[data-width='110'] {
+  width: var(--bar-110);
+}
+
+.skeleton-bar[data-width='115'] {
+  width: var(--bar-115);
+}
+
+.skeleton-bar[data-width='120'] {
+  width: var(--bar-120);
+}
+
+.skeleton-bar[data-width='128'] {
+  width: var(--bar-128);
+}
+
+.skeleton-bar[data-width='150'] {
+  width: var(--bar-150);
+}
+
+.skeleton-bar[data-width='160'] {
+  width: var(--bar-160);
+}
+
+.skeleton-bar[data-width='166'] {
+  width: var(--bar-166);
+}
+
+.skeleton-bar[data-width='176'] {
+  width: var(--bar-176);
+}
+
+.skeleton-bar[data-width='180'] {
+  width: var(--bar-180);
+}
+
+.skeleton-bar[data-width='196'] {
+  width: var(--bar-196);
+}
+
+.skeleton-bar[data-width='200'] {
+  width: var(--bar-200);
+}
+
+.skeleton-bar[data-width='240'] {
+  width: var(--bar-240);
+}
+
+.skeleton-bar[data-width='262'] {
+  width: var(--bar-262);
+}
+
+.skeleton-bar[data-width='300'] {
+  width: var(--bar-300);
+}
+
+.skeleton-bar[data-width='320'] {
+  width: var(--bar-320);
+}
+
+.skeleton-bar[data-width='330'] {
+  width: var(--bar-330);
+}
+
+.skeleton-bar[data-width='336'] {
+  width: var(--bar-336);
+}
+
+.skeleton-bar[data-width='340'] {
+  width: var(--bar-340);
+}
+
+.skeleton-bar[data-width='348'] {
+  width: var(--bar-348);
+}
+
+.skeleton-bar[data-width='360'] {
+  width: var(--bar-360);
+}
+
+.skeleton-bar[data-width='372'] {
+  width: var(--bar-372);
+}
+
+.skeleton-bar[data-width='420'] {
+  width: var(--bar-420);
 }
 
 .skeleton-bar[data-width='full'] {
@@ -375,10 +491,6 @@ h1[tabindex='-1']:focus-visible,
   padding: 0 var(--space-12);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius);
-}
-
-.skeleton-card > .skeleton-bar[data-width='medium'] {
-  width: var(--skeleton-card-second);
 }
 
 .skeleton-table-row {
@@ -455,9 +567,27 @@ h1[tabindex='-1']:focus-visible,
   gap: var(--space-8);
 }
 
+.skeleton-question.skeleton-question[data-turn='1'] {
+  width: var(--skeleton-question-narrow);
+}
+
 .skeleton-question {
   align-self: flex-end;
   width: var(--skeleton-question-width);
   height: var(--skeleton-question-height);
   border-radius: var(--space-8);
+}
+
+.search-facets-loading {
+  flex: 0 0 var(--search-filters-width);
+  align-self: stretch;
+  gap: var(--space-24);
+  padding: var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.search-body-filtered > .loading-shape + .search-results,
+.search-results > .loading-shape {
+  gap: var(--space-12);
 }

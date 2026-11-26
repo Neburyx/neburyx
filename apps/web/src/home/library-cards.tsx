@@ -17,8 +17,8 @@ export function LibraryCards() {
     ) : (
       <div className="loading-block" aria-busy="true">
         <span className="visually-hidden">{LIBRARY_COPY.loading}</span>
-        <Bar width="tag" size="block" />
-        <Bar width="label" size="second" />
+        <Bar width={48} size="middle" />
+        <Bar width={110} size="second" />
       </div>
     );
   return (
@@ -61,7 +61,7 @@ export function LibraryCards() {
         ) : (
           <div className="loading-block" aria-busy="true">
             <p className="loading-line">{PATTERN_CARD_COPY.loading}</p>
-            <Bar width="short" size="second" />
+            <Bar width={160} size="second" />
           </div>
         )}
       </div>

@@ -25,7 +25,7 @@ import {
 } from './copy.js';
 import type { EvidenceKind, EvidenceKindProps } from './evidence-kinds.js';
 import { observedProperty } from './stored-evidence.js';
-import { Bar, LoadingBlock } from '../waiting.js';
+import { BlocksShape, LoadingBlock } from '../waiting.js';
 
 const isAggregate = (ref: EdgeRef): ref is Extract<EdgeRef, { aggregate: unknown }> => 'aggregate' in ref;
 
@@ -56,9 +56,7 @@ function Frame({ read, children }: { readonly read: AggregateRead; readonly chil
     if (failure !== undefined) return <EvidenceFailure failure={failure} reading={reading} reload={reload} />;
     return (
       <LoadingBlock sentence={READING_EVIDENCE}>
-        <Bar width="full" size="block" />
-        <Bar width="full" size="block" />
-        <Bar width="full" size="block" />
+        <BlocksShape />
       </LoadingBlock>
     );
   }

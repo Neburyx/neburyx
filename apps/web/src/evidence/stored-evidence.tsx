@@ -6,7 +6,7 @@ import { useEdgeRead, type EdgeRead } from './edge-read.js';
 import { EvidenceFailure } from './failure-view.js';
 import { DIRECTED_ARROW, ID_LABEL, NOT_AVAILABLE_BADGE, STORED_RELATIONSHIP, NOT_AVAILABLE_TEXT, NOT_AVAILABLE_TITLE, OBSERVED_LABEL, READING_EVIDENCE, reasonSentence, SUPPORTING_RECORDS, WHY_HERE } from './copy.js';
 import type { EvidenceKind, EvidenceKindProps } from './evidence-kinds.js';
-import { Bar, LoadingBlock } from '../waiting.js';
+import { BlocksShape, LoadingBlock } from '../waiting.js';
 
 const isStored = (ref: EdgeRef): ref is Extract<EdgeRef, { stableId: string }> => 'stableId' in ref;
 
@@ -32,9 +32,7 @@ function StoredEvidenceTab(props: EvidenceKindProps) {
     if (failure !== undefined) return <EvidenceFailure failure={failure} reading={reading} reload={reload} />;
     return (
       <LoadingBlock sentence={READING_EVIDENCE}>
-        <Bar width="full" size="block" />
-        <Bar width="full" size="block" />
-        <Bar width="full" size="block" />
+        <BlocksShape />
       </LoadingBlock>
     );
   }
@@ -85,9 +83,7 @@ function StoredPropertiesTab(props: EvidenceKindProps) {
     if (failure !== undefined) return <EvidenceFailure failure={failure} reading={reading} reload={reload} />;
     return (
       <LoadingBlock sentence={READING_EVIDENCE}>
-        <Bar width="full" size="block" />
-        <Bar width="full" size="block" />
-        <Bar width="full" size="block" />
+        <BlocksShape />
       </LoadingBlock>
     );
   }

@@ -12,7 +12,7 @@ import { usePreviewStoreWhenProvided } from '../workspace/preview-context.js';
 import { COUNTING_RELATIONSHIP_ENDS, NOT_COUNTED, SOURCED_RELATIONSHIP_ENDS } from './copy.js';
 import { useInspector } from './inspector.js';
 import { useOrdered } from './ordered-registry.js';
-import { Bar, LoadingBlock } from '../waiting.js';
+import { BlocksShape, LoadingBlock } from '../waiting.js';
 
 const NO_REQUEST = readable(createStore<RequestState<DegreePreview>>({ phase: 'idle' }));
 
@@ -62,8 +62,7 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
       <section className="inspector-section" aria-label={SOURCED_RELATIONSHIP_ENDS}>
         <h3 className="inspector-section-title">{SOURCED_RELATIONSHIP_ENDS}</h3>
         <LoadingBlock sentence={COUNTING_RELATIONSHIP_ENDS}>
-          <Bar width="full" size="block" />
-          <Bar width="full" size="block" />
+          <BlocksShape />
         </LoadingBlock>
         {extra}
       </section>
