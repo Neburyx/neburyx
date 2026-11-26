@@ -133,6 +133,14 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
       expect(verdict(held('Wire', 'Wire'), 'Both fall on the same day.', two)).toBe('comparison');
     });
 
+    it('reads the property after "in", and every value the sentence lists', () => {
+      const apart = held('Wire', 'Card');
+      for (const text of [`These two differ in ${statusWords}.`, `These two differ in their ${statusWords}.`, `The two vary in ${statusWords}.`]) expect(verdict(apart, text, two), text).toBe('kept');
+      expect(verdict(held('Wire', 'Wire'), `These two are identical in ${statusWords}.`, two)).toBe('kept');
+      expect(verdict(apart, `These two have different ${statusWords}s, Wire and Card.`, two)).toBe('kept');
+      expect(verdict(apart, `These two have different ${statusWords}s, Wire and cash.`, two)).toBe('comparison');
+    });
+
     it('removes what it cannot test: a missing or masked value, one subject, a wrong number, an unnamed aspect', () => {
       expect(verdict(held('Wire', 'Wire', undefined), `These ${items} share the same ${statusWords}.`, three)).toBe('comparison');
       expect(verdict(textOf([element(1, 'W***'), element(2, 'W***', [], true)]), `Both have the same ${statusWords}.`, two)).toBe('comparison');
@@ -230,6 +238,36 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
       expect(verdict(held, `These went to Delta, Epsilon and Zeta, which are different ${holders}, so none of them share a ${pack.receiver === 'receiving' ? 'receiver' : 'repairer'} among those read.`, [...receives, 'h1', 'h2', 'h3'])).toBe('kept');
     });
 
+    it('takes every name that speaks of a subject as one, and removes a claim in which another stands in for it', () => {
+      const shared = textOf([...elements.filter((each) => each.ends === undefined), link('e1', pack.send, 'h1', 'n1'), link('e2', pack.send, 'h3', 'n1'), link('e3', pack.send, 'h2', 'n2')]);
+      // Zeta shares with Delta; Epsilon, which is named, does not, though Zeta could stand in for it
+      expect(verdict(shared, `Delta and Epsilon share the same ${item}.`, ['h1', 'h3', 'n1', 'e1', 'e2'])).toBe('comparison');
+      const peers = textOf([entity('a', holder, 'Alpha'), entity('b', holder, 'Beta'), entity('c', holder, 'Gamma'), link('e6', pack.peer, 'a', 'c'), link('e7', pack.peer, 'b', 'c')]);
+      expect(verdict(peers, `Gamma and Beta ${pack.peerWord} to the same ${holder}.`, ['a', 'b', 'c', 'e6', 'e7'])).toBe('comparison');
+      expect(verdict(peers, `Alpha and Beta ${pack.peerWord} to the same ${holder}.`, ['a', 'b', 'c', 'e6', 'e7'])).toBe('kept');
+    });
+
+    it('keeps a shared entity named with no type word, and tests it', () => {
+      expect(verdict(held, 'Item A, Item B and Item C have Gamma in common.', [...sends, 'n1', 'n2', 'n3'])).toBe('kept');
+      expect(verdict(held, 'Gamma is common to Item A, Item B and Item C.', [...sends, 'n1', 'n2', 'n3'])).toBe('kept');
+      expect(verdict(held, 'Item A, Item B and Item C share Gamma.', [...sends, 'n1', 'n2', 'n3'])).toBe('kept');
+      expect(verdict(held, 'Item A, Item B and Item C share Delta.', [...all, 'n1', 'n2', 'n3', 'h1'])).toBe('comparison');
+    });
+
+    it('takes the same or different connected entities in the plural as a claim of every one of every subject', () => {
+      const lopsided = textOf([entity('a', holder, 'Alpha'), entity('b', holder, 'Beta'), entity('d', item, 'Item D'), entity('e', item, 'Item E'), link('e1', pack.send, 'a', 'd'), link('e2', pack.send, 'a', 'e'), link('e3', pack.send, 'b', 'e')]);
+      const cites = ['a', 'b', 'd', 'e', 'e1', 'e2', 'e3'];
+      for (const text of [`Alpha and Beta have the same ${items}.`, `Alpha and Beta have identical ${items}.`, `In view, the ${items} of Alpha and Beta are different.`, `In view, Alpha and Beta have ${items} that differ.`, `In view, the ${items} Alpha and Beta have are distinct.`]) expect(verdict(lopsided, text, cites), text).toBe('comparison');
+    });
+
+    it('does not take pointing words for a limit where the view states that not all of it was retrieved', () => {
+      const partial = (line: string): CheckedText => textOf(elements, { c1: { line: `view coverage: ${line}`, lists: [] } });
+      const text = `None of these three share a ${pack.receiver} ${holder}.`;
+      expect(verdict(partial('7 entities shown · 0 not yet retrieved'), text, receives)).toBe('kept');
+      expect(verdict(partial('7 entities shown · ≥ 40 not yet retrieved (lower bound)'), text, receives)).toBe('comparison');
+      expect(verdict(partial('7 entities shown · ≥ 40 not yet retrieved (lower bound)'), `${text.slice(0, -1)} in view.`, receives)).toBe('kept');
+    });
+
     it('keeps the only shared element when exactly one is joined to two or more subjects, over every link of them', () => {
       expect(verdict(held, `The only shared ${holder} in this sample is Gamma.`, all)).toBe('kept');
       expect(verdict(held, `The only shared ${holder} in this sample is Delta.`, [...all, 'h1'])).toBe('comparison');
@@ -282,6 +320,11 @@ describe.each(PACKS)('claims that elements differ, are the same or share somethi
       ]) expect(verdict(held, text, ['c1']), text).toBe('kept');
       expect(verdict(held, `The view does not show their ${holders}, and these two have the same ${statusWords}.`, ['n1', 'n2', 'c1'])).toBe('comparison');
       expect(verdict(held, `These two do not share a ${holder}.`, ['n1', 'n2'])).toBe('comparison');
+    });
+
+    it('does not take a negated verb that another assertion carries for a clause that cannot tell', () => {
+      expect(verdict(held, `These two share a ${holder} and its keeper is not known.`, ['n1', 'n2', 'c1'])).toBe('comparison');
+      expect(verdict(held, `The view does not show their keepers and these two share a ${holder}.`, ['n1', 'n2', 'c1'])).toBe('comparison');
     });
 
     it('reads no claim in a name, a quoted text or a restated read, and removes any other claim that cites no element', () => {

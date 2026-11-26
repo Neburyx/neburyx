@@ -1108,18 +1108,29 @@ function clauseSpanAt(text: string, at: number): Span {
 }
 
 const KNOWING = '(?:show|shows|shown|say|tell|know|known|see|seen|establish|established|answer|answered|identify|identified|state|stated|read|retrieve|retrieved)';
-const CANNOT_TELL = new RegExp(`(?:(?<![\\p{L}\\p{N}_-])(?:cannot|can not|could not|does not|do not|did not|not|never)|n['\\u2019]t)\\s+(?:(?:yet|be|been|fully)\\s+)*${KNOWING}(?![\\p{L}\\p{N}_-])`, 'iu');
-const NONE_TOLD = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:no|nothing|none)(?![\\p{L}\\p{N}_-]).*?(?<![\\p{L}\\p{N}_-])(?:is|are|was|were|can be|could be)\\s+(?:(?:yet|fully)\\s+)?${KNOWING}(?![\\p{L}\\p{N}_-])`, 'iu');
+const CANNOT_TELL = new RegExp(`(?:(?<![\\p{L}\\p{N}_-])(?:cannot|can not|could not|does not|do not|did not|not|never)|n['\\u2019]t)\\s+(?:(?:yet|be|been|fully)\\s+)*${KNOWING}(?![\\p{L}\\p{N}_-])`, 'giu');
+/** `no … is shown`: a span that a negation opens and a verb of knowing ends, within one clause. */
+const NONE_TOLD = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:no|nothing|none)(?![\\p{L}\\p{N}_-])[^.;]{0,160}?(?<![\\p{L}\\p{N}_-])(?:is|are|was|were|can be|could be)\\s+(?:(?:yet|fully)\\s+)?${KNOWING}(?![\\p{L}\\p{N}_-])`, 'giu');
+/** A word that opens another assertion: what stands across it from a negated verb is not what the verb denies. */
+const ANOTHER_ASSERTION = /(?<![\p{L}\p{N}_-])(?:and|so|which|while|whereas|yet)(?![\p{L}\p{N}_-])/iu;
 
-/** Whether a clause only says that it cannot be told, or is not shown, whether elements differ or share: judged as before, since it claims nothing of them. */
+/**
+ * Whether the claim word of a clause stands where the clause only says that it cannot be told, or is not shown: after `whether` or `if`, on either side of a negated verb of showing or knowing with no other assertion between,
+ * or inside a `no … is shown`. Such words claim nothing of the elements and are judged as before.
+ */
 function saysItCannotBeTold(clause: string, claimAt: number): boolean {
-  return /(?<![\p{L}\p{N}_-])(?:whether|if)(?![\p{L}\p{N}_-])/iu.test(clause.slice(0, claimAt)) || CANNOT_TELL.test(clause) || NONE_TOLD.test(clause);
+  if (/(?<![\p{L}\p{N}_-])(?:whether|if)(?![\p{L}\p{N}_-])/iu.test(clause.slice(0, claimAt))) return true;
+  const joined = (from: number, to: number): boolean => from <= to && !ANOTHER_ASSERTION.test(clause.slice(from, to));
+  const denied = [...clause.matchAll(CANNOT_TELL)].some((found) => joined(found.index + found[0].length, claimAt) || joined(claimAt, found.index));
+  return denied || [...clause.matchAll(NONE_TOLD)].some((found) => found.index <= claimAt && claimAt < found.index + found[0].length && joined(claimAt, found.index + found[0].length));
 }
 
 /** The fixed phrases by which a sentence says it speaks of what was read or shown. */
 const LIMITED_TO_READ = /(?<![\p{L}\p{N}_-])(?:in view|in the view|on screen|shown|in the reads?|that were read|among those read|(?:in|within) (?:this|that) sample|sampled)(?![\p{L}\p{N}_-])/iu;
 /** Words that point at a named few (`these three`, `among these`, `none of them`): they limit a claim only where no read listed what it rests on, since the check is not told how a read was filtered. */
 const POINTED_FEW = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:(?:these|those)\\s+(?:\\d+|${CARDINAL_WORDS})|among (?:these|those)|of them|of the (?:\\d+|${CARDINAL_WORDS}) [\\p{L}]+ read)(?![\\p{L}\\p{N}_-])`, 'iu');
+/** What a line writes for a count that is not exact. */
+const NOT_EXACT = /\u2265|~|(?<![\p{L}\p{N}_-])(?:lower bound|estimated|not known|unknown)(?![\p{L}\p{N}_-])/iu;
 /** The finding of a read that states its count as exact. */
 const EXACT_FINDING = /(?<!not )(?<![\p{L}\p{N}_-])exact(?![\p{L}\p{N}_-])/iu;
 
@@ -1137,9 +1148,12 @@ interface Word {
 const wordsAt = (text: string, span: Span): Word[] => [...text.slice(span.start, span.end).matchAll(PHRASE_WORD)].map((found) => ({ text: found[0], index: span.start + found.index }));
 
 /** The noun phrase that follows a claim word: up to six words, ended by a word that opens something else; `kind of` and `type of` go on past their `of`. */
-function phraseAfter(text: string, from: number, until: number): Word[] {
+function phraseAfter(text: string, from: number, until: number, claim: string): Word[] {
   const out: Word[] = [];
-  for (const word of wordsAt(text, { start: from, end: until })) {
+  const words = wordsAt(text, { start: from, end: until });
+  // `differ in <property>`, `identical in their <property>`: what is compared follows the `in`
+  const skip = /^(?:differ|var|identical|alike|same)/u.test(claim) && words[0]?.text.toLowerCase() === 'in' ? (/^(?:their|its)$/iu.test(words[1]?.text ?? '') ? 2 : 1) : 0;
+  for (const word of words.slice(skip)) {
     const lower = word.text.toLowerCase();
     const afterKind = lower === 'of' && /^(?:kind|type|sort)$/iu.test(out[out.length - 1]?.text ?? '');
     if ((PHRASE_STOP.has(lower) && !afterKind) || out.length === 6) break;
@@ -1190,21 +1204,26 @@ interface Evidence {
   readonly text: string;
   readonly spoken: string;
   readonly cited: readonly string[];
-  /** The cited entities the sentence names, with where it does. */
-  readonly named: readonly { readonly key: string; readonly identity: Identity; readonly index: number }[];
+  /** The entities sent that the sentence names, cited or not, with where it does. */
+  readonly named: readonly { readonly key: string; readonly identity: Identity; readonly index: number; readonly end: number }[];
   readonly links: readonly Link[];
 }
 
 function evidenceOf(sentence: SummarySentence, assembled: CheckedText): Evidence {
   const text = sentence.text.normalize('NFC');
   const cited = citedElements(sentence, assembled);
-  const mentions: { key: string; identity: Identity; index: number }[] = [];
+  const mentions: { key: string; identity: Identity; index: number; end: number }[] = [];
+  const entities = [...(assembled.elementTypes ?? [])].flatMap(([key, type]) => (type.startsWith('entity ') ? [key] : []));
   let spoken = text;
   for (const name of namesOfElements(assembled)) {
     spoken = spoken.replace(new RegExp(`${WB}${ESCAPED(name)}${WE}`, 'giu'), (found, index: number) => {
-      for (const key of cited) {
+      // a name that a cited element and one not cited share is the cited one's
+      const holders = entities.filter((key) => namesOfKey(key, assembled).includes(name));
+      const own = holders.filter((key) => cited.includes(key));
+      // an element is spoken of only where its name is written as it is: an id of one letter is not the article
+      for (const key of found === name ? (own.length > 0 ? own : holders) : []) {
         const end = assembled.elementEnds?.get(key)?.[0];
-        if (end !== undefined && assembled.elementTypes?.get(key)?.startsWith('entity ') === true && namesOfKey(key, assembled).includes(name)) mentions.push({ key, identity: identityOf(end), index });
+        if (end !== undefined) mentions.push({ key, identity: identityOf(end), index, end: index + found.length });
       }
       return ' '.repeat(found.length);
     });
@@ -1271,10 +1290,10 @@ type Aspect =
 /** The entity types of the mapping that the sent text holds, as elements or as the ends of relationships. */
 const entityTypesSent = (evidence: Evidence): string[] => [...new Set([...evidence.assembled.elementEnds?.values() ?? []].flatMap((ends) => ends.map(([type]) => type)))];
 
-/** The cited entities a sentence names for a claim: those of its clause; when it names none there, the one that follows it as an apposition (`the same widget, Gamma`); otherwise those of the last clause before it that names one. */
-function namedFor(evidence: Evidence, span: Span): Evidence['named'] {
+/** The entities a sentence names for a claim: those of its clause where they stand; when it names none there, the one that follows it as an apposition (`the same widget, Gamma`); otherwise those of the last clause before it that names one. */
+function namedFor(evidence: Evidence, span: Span, subjects: (mention: Evidence['named'][number]) => boolean): Evidence['named'] {
   const within = (each: Span): Evidence['named'] => evidence.named.filter((mention) => mention.index >= each.start && mention.index < each.end);
-  const own = within(span);
+  const own = within(span).filter((mention) => !subjects(mention));
   if (own.length > 0) return own;
   const following = evidence.named.filter((mention) => mention.index >= span.end && /^[\s,:(]*$/u.test(evidence.text.slice(span.end, mention.index)));
   if (following.length > 0) return following;
@@ -1364,15 +1383,32 @@ function statedValue(text: string, from: number): string | undefined {
   return found?.[1] ?? found?.[2] ?? found?.[3];
 }
 
+/** Every value a sentence lists after the words of a property (`…, A, B and C`): the items up to the end of the sentence, ending at the first item that is neither one word nor a value the elements hold. */
+function statedList(text: string, from: number, known: readonly string[]): string[] {
+  const rest = /^\s*(?:[,:]|(?:of|is)\s)\s*([^.;!?]*(?:\.\d[^.;!?]*)*)/u.exec(text.slice(from))?.[1] ?? '';
+  const out: string[] = [];
+  for (const item of rest.split(/,|:|(?<![\p{L}\p{N}_-])(?:and|or)(?![\p{L}\p{N}_-])/iu)) {
+    const value = item.trim().replace(/^["\u201c]|["\u201d]$/gu, '');
+    if (value === '') continue;
+    const held = known.some((each) => each.toLowerCase() === value.toLowerCase());
+    const word = value.toLowerCase();
+    if (!held && (/\s/u.test(value) || STRUCTURAL_VOCABULARY.has(word) || SENTENCE_OPENERS.has(word) || PHRASE_STOP.has(word) || FILLER.has(word))) break;
+    out.push(value);
+  }
+  return out;
+}
+
 /** The cited elements a claim about their properties speaks of: those the sentence names, two or more of one type, or every cited element of the one type that carries the property. */
 function propertySubjects(evidence: Evidence, carriers: readonly string[]): string[] | undefined {
   const typeOf = (key: string): string => evidence.assembled.elementTypes?.get(key) ?? '';
   const named = [...new Set(evidence.named.map((mention) => mention.key))];
-  if (named.length >= 2 && new Set(named.map(typeOf)).size === 1) return named;
+  if (named.length >= 2 && new Set(named.map(typeOf)).size === 1) return named.every((key) => evidence.cited.includes(key)) ? named : undefined;
   let types = [...new Set(carriers.map(typeOf))];
   if (types.length > 1) types = types.filter((type) => termIn(type.replace(/^(?:entity|relationship) /u, ''), evidence.spoken));
   const [type] = types;
-  return type === undefined || types.length !== 1 ? undefined : evidence.cited.filter((key) => typeOf(key) === type);
+  // an element of the type that the sentence names and does not cite is spoken of and not shown
+  if (type === undefined || types.length !== 1 || named.some((key) => typeOf(key) === type && !evidence.cited.includes(key))) return undefined;
+  return evidence.cited.filter((key) => typeOf(key) === type);
 }
 
 const allEqual = (values: readonly string[]): boolean => new Set(values).size === 1;
@@ -1408,6 +1444,8 @@ function propertyClaimHolds(evidence: Evidence, reading: Reading, property: stri
   if (values.some((value) => value === undefined) || classes.size !== 1 || !countHolds(stated, subjects.length)) return false;
   const present = values.flatMap((value) => (value === undefined ? [] : [value]));
   if (literal !== undefined && !(reading === 'same' ? present.every((value) => writes(literal, value)) : present.some((value) => writes(literal, value)))) return false;
+  const known = evidence.cited.flatMap((key) => held(key) ?? []);
+  if (reading !== 'same' && literal !== undefined && !statedList(evidence.text, end, known.map((value) => value.text)).every((each) => present.some((value) => writes(each, value)))) return false;
   // a value of the property that the sentence writes and no subject holds is a false statement of it
   const others = evidence.cited.flatMap((key) => held(key) ?? []);
   if (others.some((value) => value.dataClass !== 'boolean' && occursWhole(value.text, evidence.text) && !present.some((own) => own.value === value.value))) return false;
@@ -1467,7 +1505,9 @@ function completeFor(evidence: Evidence, groups: readonly Group[], subjects: rea
   if (!touching.every((link) => evidence.cited.includes(link.key))) return false;
   const reads = [...(evidence.assembled.readElements ?? [])].filter(([, listed]) => touching.some((link) => listed.includes(link.key))).map(([read]) => read);
   if (reads.some((read) => evidence.assembled.unknownCountKeys.has(read) || !EXACT_FINDING.test(evidence.assembled.lines.get(read) ?? ''))) return false;
-  return LIMITED_TO_READ.test(evidence.spoken) || (reads.length === 0 && POINTED_FEW.test(flatten(evidence.spoken)));
+  // a view that states it is not all retrieved is as partial as a filtered read
+  const partial = [...(evidence.assembled.readKeys ?? [])].some((key) => /^c\d+$/u.test(key) && (evidence.assembled.unknownCountKeys.has(key) || NOT_EXACT.test(evidence.assembled.lines.get(key) ?? '')));
+  return LIMITED_TO_READ.test(evidence.spoken) || (reads.length === 0 && !partial && POINTED_FEW.test(flatten(evidence.spoken)));
 }
 
 /** The entities joined to every one of the sets. */
@@ -1480,6 +1520,12 @@ interface ConnectedClaim {
   /** The clause that holds the claim word: an entity type written there, other than the one claimed, is the subjects'. */
   readonly clause: string;
   readonly only: boolean;
+  /** The part of the sentence that makes the claim, from the end of the one before it to the end of its clause. */
+  readonly within: Span;
+  /** Whether a name of the sentence speaks of a subject: one before the claim word in its clause. */
+  readonly ofSubjects: (mention: Evidence['named'][number]) => boolean;
+  /** Whether the same connected entities, in the plural, are claimed of every subject. */
+  readonly everyOne: boolean;
   /** Whether the connected entities themselves are what differ (`three different widgets`, `the widgets differ`). */
   readonly themselves: boolean;
 }
@@ -1488,7 +1534,7 @@ function connectedClaimHolds(evidence: Evidence, claim: ConnectedClaim): boolean
   const { aspect, reading } = claim;
   // an entity the sentence names, of the type claimed (or of any when the claim points to it), must be the one that is shared
   // the connected entities that differ are all the sentence names; a shared one is what is named for the claim
-  const typed = (claim.themselves ? evidence.named : claim.named).filter((mention) => aspect.entityType === undefined || mention.identity.startsWith(`${aspect.entityType}\u0000`));
+  const typed = (claim.themselves ? evidence.named.filter((mention) => mention.index >= claim.within.start && mention.index < claim.within.end) : claim.named).filter((mention) => aspect.entityType === undefined || mention.identity.startsWith(`${aspect.entityType}\u0000`));
   const connected: Connected = { reaches: (far) => aspect.entityType === undefined || typeOfIdentity(far) === aspect.entityType, named: [...new Set(typed.map((mention) => mention.identity))] };
   const subjectTypes = entityTypesSent(evidence).filter((type) => type !== aspect.entityType && termIn(type, claim.clause));
   const groups = groupsOf(evidence.links)
@@ -1506,9 +1552,27 @@ function connectedClaimHolds(evidence: Evidence, claim: ConnectedClaim): boolean
   }
   // of the two sides of a type, the one the claim speaks from has two or more subjects, of the type the sentence names for them when it names one, and the connected entity is none of them
   const sided = groups.filter((each) => each.subjects.length >= 2 && !each.subjects.some((subject) => connected.named.includes(subject) && aspect.entityType === undefined) && (subjectTypes.length === 0 || each.subjects.some((subject) => subjectTypes.includes(typeOfIdentity(subject)))));
-  if (claim.only) return onlyOneShared(evidence, claim, sided, connected);
+  // every entity the sentence names of the subjects' type is a subject or one it is joined to; one named before the claim word, in its clause, is a subject
+  const spokenOf = (each: (typeof sided)[number]): boolean => {
+    const fars = new Set([...each.joined.values()].flatMap((set) => [...set]));
+    const nearTypes = new Set(each.subjects.map(typeOfIdentity));
+    return evidence.named.every(
+      (mention) =>
+        (!claim.ofSubjects(mention) || each.subjects.includes(mention.identity)) &&
+        (mention.index < claim.within.start || mention.index >= claim.within.end || !nearTypes.has(typeOfIdentity(mention.identity)) || each.subjects.includes(mention.identity) || fars.has(mention.identity)),
+    );
+  };
+  if (claim.only) return sided.every(spokenOf) && onlyOneShared(evidence, claim, sided, connected);
+  if (reading === 'same' && claim.everyOne) {
+    return sided.some((each) => {
+      const sets = each.subjects.map((subject) => each.joined.get(subject) ?? new Set<Identity>());
+      const [first] = sets;
+      return spokenOf(each) && first !== undefined && first.size > 0 && sets.every((set) => set.size === first.size && [...set].every((entity) => first.has(entity))) && countHolds(stated, each.subjects.length) && completeFor(evidence, [each.group], each.subjects, connected);
+    });
+  }
   if (reading === 'same') {
     return sided.some((each) => {
+      if (!spokenOf(each)) return false;
       const sets = each.subjects.map((subject) => each.joined.get(subject) ?? new Set<Identity>());
       const common = commonTo(sets);
       return common.length > 0 && connected.named.filter((named) => !each.subjects.includes(named)).every((named) => common.includes(named)) && countHolds(stated, each.subjects.length);
@@ -1519,7 +1583,7 @@ function connectedClaimHolds(evidence: Evidence, claim: ConnectedClaim): boolean
     const sets = each.subjects.map((subject) => [...(each.joined.get(subject) ?? [])]);
     const all = sets.flat();
     const apart = reading === 'notAllSame' ? commonTo(sets.map((set) => new Set(set))).length === 0 : noneEqual(all);
-    return sets.every((set) => set.length > 0) && apart && (reading !== 'twoDifferent' || each.subjects.length === 2) && countHolds(stated, each.subjects.length) && completeFor(evidence, [each.group], each.subjects, connected);
+    return spokenOf(each) && sets.every((set) => set.length > 0) && apart && (reading !== 'twoDifferent' || each.subjects.length === 2) && countHolds(stated, each.subjects.length) && completeFor(evidence, [each.group], each.subjects, connected);
   });
 }
 
@@ -1607,6 +1671,22 @@ function earlierAspect(evidence: Evidence, span: Span, before: readonly Word[], 
   }
 }
 
+/** Words that may stand before `are different` or `differ` when the connected entities alone are the subject, beside their type and role words. */
+const BARE_SUBJECT: ReadonlySet<string> = new Set([...FILLER, 'are', 'is', 'and', 'each', 'others', 'which', 'they', 'among', 'their']);
+
+/** Whether the connected entities themselves are the subject of the claim (`these three <entities> are different`, `which are different <entities>`), and not what the subjects have (`the <entities> of A and B differ`). */
+function entitiesAreSubject(evidence: Evidence, span: Span, claim: Span, entityType: string, predicative: boolean): boolean {
+  const said = /(?<![\p{L}\p{N}_-])(?:are|is)\s+(?:[\p{L}\p{N}_-]+\s+)?$/iu.test(evidence.spoken.slice(span.start, claim.start));
+  if (!said && !(predicative && /^\s*(?:$|[.,;:]|from(?![\p{L}\p{N}_-]))/iu.test(evidence.spoken.slice(claim.end)))) return false;
+  if (evidence.named.some((mention) => mention.index >= span.start && mention.index < claim.start)) return false;
+  const types = [...new Set(evidence.links.map((link) => link.type))];
+  const before = evidence.spoken.slice(span.start, claim.start).replace(new RegExp(LIMITED_TO_READ.source, 'giu'), ' ').replace(/(?<![\p{L}\p{N}_-])in the sample(?![\p{L}\p{N}_-])/giu, ' ');
+  return [...before.matchAll(PHRASE_WORD)].every(([found]) => {
+    const word = found.toLowerCase();
+    return BARE_SUBJECT.has(word) || new RegExp(`^${termPattern(flatten(entityType).trim())}$`, 'iu').test(word) || relationshipTypesNamedBy(word, types).length > 0;
+  });
+}
+
 /**
  * A sentence that says elements differ, are the same or share something is kept only when the cited elements show it: equal or unequal values of a property they carry, the day of their moments, the type of their links, or the
  * entities they are joined to by the cited relationships. A claim the check cannot test is not verified. Property, type and relationship names are the mapping's; nothing here is a word of a domain.
@@ -1622,6 +1702,8 @@ function comparisonClaimsHold(sentence: SummarySentence, assembled: CheckedText)
     if (saysItCannotBeTold(clause, found.index - span.start)) return true;
     const nothing = claimsNothing(evidence, claim);
     if (nothing !== undefined) return nothing;
+    const stops = [...evidence.spoken.slice(0, claim.start).matchAll(/[.;!?](?!\d)/gu)];
+    const within = { start: stops.at(-1)?.index ?? 0, end: span.end };
     const ownName = ownNameHolds(evidence, claim);
     if (ownName !== undefined) return ownName;
     const kind = kindOfClaim(word);
@@ -1630,9 +1712,20 @@ function comparisonClaimsHold(sentence: SummarySentence, assembled: CheckedText)
     const reading = readingOf(kind, word, clause, evidence.spoken);
     if (reading === undefined) return false;
     // the noun phrase the claim word governs, or, when it governs none, the one before it in its clause or in the sentence
-    const after = word === 'in common' || word === 'common to' ? [] : phraseAfter(evidence.spoken, claim.end, span.end);
+    const common = word === 'in common' || word === 'common to';
+    const after = common ? [] : phraseAfter(evidence.spoken, claim.end, span.end, word);
     const pointed = (phrase: readonly Word[]): boolean => /(?<![\p{L}\p{N}_-])(?:that|this|the one)(?![\p{L}\p{N}_-])/iu.test(phrase.map((each) => each.text).join(' '));
-    const named = namedFor(evidence, span);
+    // a name before the claim word in its clause is a subject's, unless the clause says it is the shared one (`<name> is the shared …`)
+    const ofSubjects = (mention: Evidence['named'][number]): boolean =>
+      !common && mention.index >= span.start && mention.end <= claim.start && !/^\s*(?:is|was)\s+(?:(?:the|a|an|that|their|one)\s+)*(?:only\s+)?$/iu.test(evidence.text.slice(mention.end, claim.start));
+    const named = namedFor(evidence, span, ofSubjects);
+    // the claim word governs the name of an entity: that entity is the connected one (`share <name>`, `<name> is common to`, `have <name> in common`)
+    const governed = evidence.named.filter((mention) =>
+      common
+        ? mention.index >= span.start && mention.end <= claim.start && /^\s*(?:(?:is|are)\s+)?$/iu.test(evidence.text.slice(mention.end, claim.start))
+        : kind !== 'differ' && mention.index >= claim.end && /^\s*(?:(?:the|that|this)\s+)?$/iu.test(evidence.text.slice(claim.end, mention.index)),
+    );
+    if (governed.length > 0) return connectedClaimHolds(evidence, { named: governed, reading, aspect: { of: 'connected' }, clause, only, themselves: false, everyOne: false, ofSubjects, within });
     let aspect = aspectOf(evidence, after, pointed(after), named);
     let predicative = false;
     if (aspect === undefined) {
@@ -1644,9 +1737,11 @@ function comparisonClaimsHold(sentence: SummarySentence, assembled: CheckedText)
     if (aspect.of === 'day') return dayClaimHolds(evidence, reading);
     if (aspect.of === 'link') return linkClaimHolds(evidence, reading);
     const numberBefore = new RegExp(`${WB}${NUMBER_SAID}\\s+$`, 'iu').test(evidence.spoken.slice(0, claim.start));
-    const said = /(?<![\p{L}\p{N}_-])(?:are|is)\s+(?:[\p{L}\p{N}_-]+\s+)?$/iu.test(evidence.spoken.slice(span.start, claim.start));
-    const themselves = kind === 'differ' && aspect.entityType !== undefined && reading === 'allDifferent' && (said || (predicative ? /^\s*(?:$|[.,;:]|from(?![\p{L}\p{N}_-]))/iu.test(evidence.spoken.slice(claim.end)) : numberBefore));
-    return connectedClaimHolds(evidence, { named, reading, aspect, clause, only, themselves });
+    const themselves = kind === 'differ' && aspect.entityType !== undefined && reading === 'allDifferent' && (numberBefore || entitiesAreSubject(evidence, span, claim, aspect.entityType, predicative));
+    // `the same <entities>`, in the plural, says it of every subject
+    const noun = aspect.nounAt === undefined ? '' : evidence.spoken.slice(aspect.nounAt.start, aspect.nounAt.end);
+    const everyOne = /^(?:same|identical|alike)$/u.test(word) && /s(?![\p{L}\p{N}_])/u.test(noun.split(/\s+/u).at(-1)?.slice(-1) ?? '');
+    return connectedClaimHolds(evidence, { named, reading, aspect, clause, only, themselves, everyOne, ofSubjects, within });
   });
 }
 
