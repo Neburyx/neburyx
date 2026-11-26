@@ -739,22 +739,30 @@ function readDescribedHolds(sentence: SummarySentence, assembled: CheckedText): 
 
 /** The English words that make what follows a name's, or a thing's before it: `<thing> of <name>`, `<thing> held by <name>`. */
 const BELONGING = '(?:of|belonging\\s+to|owned\\s+by|held\\s+by)';
+/** A sentence without one of these ties nothing to a name this way, and is not read further. */
+const MAY_BELONG = /['\u2019]|(?<![\p{L}])(?:of|belonging|owned|held)(?![\p{L}])/iu;
+const LINK_WORD = /^(?:relationships?|links?)$/iu;
 
 /**
  * A sentence that ties a named entity to others by a possessive (`<name>'s <things>`, `<things> of <name>`), where the thing is a type of an element or a kind (an entity, a relationship), cites a relationship with that entity at
- * an end: a name found anywhere in what was sent shows nothing of what is said to be its own. Which relationship it is does not matter, and a property of the named entity (`<name>'s <property>`) is no such claim.
+ * an end: a name found anywhere in what was sent shows nothing of what is said to be its own. Which relationship it is does not matter, and a property of the named entity (`<name>'s <property>`) is no such claim. What is said of the
+ * entity's relationships is also backed by a cited read that counts its relationship ends.
  */
 function possessivesAreLinked(sentence: SummarySentence, assembled: CheckedText): boolean {
   const types = assembled.elementTypes;
   const cited = citedElements(sentence, assembled);
-  if (types === undefined || cited.length === 0) return true;
+  if (types === undefined || cited.length === 0 || !MAY_BELONG.test(sentence.text)) return true;
   const entities = [...types].filter(([, type]) => type.startsWith('entity '));
   const things = [...new Set([...typesSent(assembled).map(({ word }) => word), ...(assembled.elementEnds === undefined ? [] : [...assembled.elementEnds.values()].flatMap((ends) => ends.map(([type]) => flatten(type)))), ...KIND_FORMS.map(([kind]) => kind), 'link'])];
   const thing = `(?:${things.map(termPattern).join('|')})`;
   const linked = new Set(cited.filter((key) => types.get(key)?.startsWith('relationship ') === true).flatMap((key) => assembled.elementEnds?.get(key) ?? []).map(identityOf));
+  // the entities by name, read once: a name is looked for only where the sentence holds it
+  const byName = new Map<string, string[]>();
+  for (const [key] of entities) for (const name of namesOfKey(key, assembled)) byName.set(name, [...(byName.get(name) ?? []), key]);
+  const counted = sentence.cites.filter((cite) => assembled.readKeys?.has(cite) === true && /relationship ends/iu.test(assembled.lines.get(cite) ?? '')).flatMap((cite) => assembled.readElements?.get(cite) ?? []);
   let left = withoutQuoted(sentence.text);
-  for (const name of namesOfElements(assembled)) {
-    const holders = entities.filter(([key]) => namesOfKey(key, assembled).includes(name)).map(([key]) => key);
+  for (const name of namesOfElements(assembled).filter((each) => sentence.text.includes(each))) {
+    const holders = byName.get(name) ?? [];
     const written = new RegExp(`${WB}${ESCAPED(name)}(?![\\p{L}\\p{N}_])`, 'gu');
     const mentions = holders.length === 0 ? [] : [...left.matchAll(written)];
     // nothing is tied to the name where the sentence cites no element but the one named
@@ -762,10 +770,11 @@ function possessivesAreLinked(sentence: SummarySentence, assembled: CheckedText)
     const properties = holders.flatMap((key) => (assembled.rankedValues?.get(key) ?? []).map((entry) => flatten(entry.key)));
     for (const mention of untied ? mentions : []) {
       const after = flatten(left.slice(mention.index + name.length, mention.index + name.length + 80));
-      const owns = new RegExp(`^['\u2019]s?(?![\\p{L}])\\s+(?:[\\p{L}-]+\\s+){0,2}?${thing}(?![\\p{L}\\p{N}_])`, 'iu').exec(after);
+      const owns = new RegExp(`^['\u2019]s?(?![\\p{L}])\\s+(?:[\\p{L}-]+\\s+){0,2}?(${thing})(?![\\p{L}\\p{N}_])`, 'iu').exec(after);
       const ownProperty = properties.some((property) => after.replace(/^['\u2019]s?\s+/u, '').startsWith(property));
-      const belongs = new RegExp(`${WB}${thing}\\s+${BELONGING}\\s+(?:the\\s+)?$`, 'iu').test(flatten(left.slice(Math.max(0, mention.index - 80), mention.index)));
-      if ((owns !== null && !ownProperty) || belongs) return false;
+      const belongs = new RegExp(`${WB}(${thing})\\s+${BELONGING}\\s+(?:the\\s+)?$`, 'iu').exec(flatten(left.slice(Math.max(0, mention.index - 80), mention.index)));
+      const claimed = [ownProperty ? undefined : owns?.[1], belongs?.[1] === undefined || properties.includes(flatten(belongs[1])) ? undefined : belongs[1]].filter((word) => word !== undefined);
+      if (claimed.some((word) => !(LINK_WORD.test(word) && holders.some((key) => counted.includes(key))))) return false;
     }
     left = left.replace(written, (found) => ' '.repeat(found.length));
   }

@@ -79,6 +79,28 @@ describe.each([
     expect(judged.kept).toHaveLength(1);
   });
 
+  it('takes a cited read that counts the relationship ends of the one named for what is said of its relationships, and for nothing else', () => {
+    const counted = (anchor: string): CheckedText => ({
+      ...held,
+      readKeys: new Set(['s1']),
+      readElements: new Map([['s1', [anchor]]]),
+      lines: new Map([...held.lines, ['s1', 's1: read of degree: relationship ends by the type at the other end: all relationship ends 2 (exact)']]),
+      keys: new Map([...held.keys, ['s1', true]]),
+    });
+    const reasons = (text: string, anchor: string): readonly string[] => judgeSentences([{ text, cites: ['o1', 'h2', 's1'] }], counted(anchor)).rejected.map((each) => each.reason);
+    for (const text of ["Gamma Partners' relationships number 2, and Holder B is listed.", 'The links of Gamma Partners number 2, and Holder B is listed.']) {
+      expect(reasons(text, 'o1')).not.toContain('citation');
+      expect(reasons(text, 'o2')).toContain('citation');
+    }
+    expect(reasons(`Gamma Partners' ${holders} are Holder B.`, 'o1')).toContain('citation');
+  });
+
+  it(`asks for nothing of a property of the one named said with "of"`, () => {
+    const named: CheckedText = { ...held, propertyKeys: new Map([['o1', [holder]]]), rankedValues: new Map([['o1', [{ key: holder, dataClass: 'string' }]]]) };
+    expect(judgeSentences([{ text: `The ${holder} of Gamma Partners is listed beside Holder B.`, cites: ['o1', 'h2'] }], named).rejected.map((each) => each.reason)).not.toContain('citation');
+    expect(verdict(`The ${holder} of Gamma Partners is Holder B.`, ['o1', 'h2'])).toBe('citation');
+  });
+
   it('tells the model to cite the link', () => {
     expect(removalNoteOf([{ text: 'T.', reason: 'citation' }])).toContain('cite a relationship that joins it');
   });

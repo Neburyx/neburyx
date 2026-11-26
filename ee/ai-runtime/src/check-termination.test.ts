@@ -10,14 +10,21 @@ const WORKER = `
 const { parentPort, workerData } = require('node:worker_threads');
 import(workerData.checks).then(({ judgeSentences }) => {
   parentPort.on('message', ({ sentence, text }) => {
+    const started = performance.now();
     const judged = judgeSentences([sentence], text);
-    parentPort.postMessage({ kept: judged.kept.length, reason: judged.rejected[0] && judged.rejected[0].reason });
+    parentPort.postMessage({ kept: judged.kept.length, reason: judged.rejected[0] && judged.rejected[0].reason, ms: performance.now() - started });
   });
   parentPort.postMessage('ready');
 });
 `;
 
-async function judgeEach(text: CheckedText, sentences: readonly string[], cites: readonly string[], boundMs: number): Promise<{ readonly kept: number; readonly reason?: Judged['rejected'][number]['reason'] }[]> {
+interface Answer {
+  readonly kept: number;
+  readonly reason?: Judged['rejected'][number]['reason'];
+  readonly ms: number;
+}
+
+async function judgeEach(text: CheckedText, sentences: readonly string[], cites: readonly string[], boundMs: number): Promise<Answer[]> {
   const worker = new Worker(WORKER, { eval: true, workerData: { checks: new URL('./reply-checks.ts', import.meta.url).href } });
   const next = (what: string, limit: number): Promise<unknown> =>
     new Promise((resolve, reject) => {
@@ -32,11 +39,11 @@ async function judgeEach(text: CheckedText, sentences: readonly string[], cites:
     });
   try {
     await next('the worker to start', 20_000);
-    const out: { kept: number; reason?: Judged['rejected'][number]['reason'] }[] = [];
+    const out: Answer[] = [];
     for (const sentence of sentences) {
       const answer = next(JSON.stringify(sentence.slice(0, 200)), boundMs);
       worker.postMessage({ sentence: { text: sentence, cites: [...cites] }, text });
-      out.push((await answer) as { kept: number; reason?: Judged['rejected'][number]['reason'] });
+      out.push((await answer) as Answer);
     }
     return out;
   } finally {
@@ -103,7 +110,27 @@ describe.each([
   it('removes a sentence far longer than any answer writes, without reading it', async () => {
     const long = ['these two share a thing ', 'no two ', 'two '].map((unit) => unit.repeat(Math.ceil(128_000 / unit.length)).slice(0, 128_000));
     const judged = await judgeEach(held, long, cites, 500);
-    expect(judged).toEqual(long.map(() => ({ kept: 0, reason: 'citation' })));
+    expect(judged.map(({ kept, reason }) => ({ kept, reason }))).toEqual(long.map(() => ({ kept: 0, reason: 'citation' })));
+  }, 60_000);
+
+  it('judges a sentence over some thousands of elements within its bound, with and without a possessive', async () => {
+    const keys = Array.from({ length: 4000 }, (_, index) => `n${index + 10}`);
+    const many: CheckedText = {
+      text: keys.map((key) => `${key}: Unit Zed${key.slice(1)}`).join('\n'),
+      keys: new Map(keys.map((key) => [key, true])),
+      lines: new Map(keys.map((key) => [key, `${key}: Unit Zed${key.slice(1)}`])),
+      inexactCounts: [],
+      unknownCountKeys: new Set(),
+      elementTypes: new Map(keys.map((key) => [key, `entity ${item}`])),
+      elementNames: new Map(keys.map((key) => [key, [`Unit Zed${key.slice(1)}`]])),
+      elementEnds: new Map(keys.map((key) => [key, [[item, key]]])),
+    };
+    // a name must not read as a key of the text sent
+    const sentences = Array.from({ length: 6 }, (_, index) => (index % 2 === 0 ? 'Unit Zed10 and Unit Zed11 are shown.' : `Unit Zed10 and the ${item}s of Unit Zed11 are shown.`));
+    const judged = await judgeEach(many, sentences, ['n10', 'n11'], 20_000);
+    expect(judged.map((each) => each.reason)).toEqual(sentences.map((_, index) => (index % 2 === 0 ? undefined : 'citation')));
+    // the first sentences warm the check up; after them a rule that reads every element for every name takes some seconds a sentence
+    expect(Math.max(...judged.slice(2).map((each) => each.ms))).toBeLessThan(800);
   }, 60_000);
 
   it('removes a sentence with dozens of comparison words, which it does not read one by one', async () => {
