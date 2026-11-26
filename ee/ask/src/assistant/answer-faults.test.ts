@@ -266,6 +266,37 @@ describe('a column label that is refused', () => {
     expect(told).toContain('A column label was refused.');
     expect(told.split('A column label was refused')[1]).not.toContain(label);
   });
+
+  it('is not repeated back when its word occurs only in the message', async () => {
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([table('Orion')]).respond(new AIMessage('Done.'));
+    const r = await rig({ reply: TABLE, agent: { model, maxInputTokens: 200_000 }, viewNodes: nodes });
+    await answerOf(r.route.handler(r.request({ ...VIEW_BODY, message: 'List what Orion is linked to, as a table', viewElementKeys: VIEW_KEYS })));
+    const told = (model.calls.at(-1)?.messages ?? []).filter((message) => message.type === 'tool').map((message) => String(message.content)).find((content) => content.startsWith('Checked:')) ?? '';
+    expect(told).toContain('A column label was refused.');
+    expect(told).not.toContain('"Orion"');
+  });
+
+  it('is not repeated back when its word occurs only in a note of the person that the turn read, not in any line of an element', async () => {
+    const ref = nodeOf('A-1').ref;
+    const cites = [{ key: 'n1', kind: 'entity', ref }];
+    const aiNotes: AiNotesCapability = {
+      append: () => Promise.reject(new Error('not used')),
+      canWrite: () => Promise.resolve(),
+      read: () => Promise.resolve({ entries: [{ tokenId: 'tok-1', generatedBy: 'person-1', modelRef: 'configured-model', promptId: 'case-summary', promptVersion: '1', generatedAt: '2026-11-15T10:00:00.000Z', wordListVersion: 2, label: 'AI-drafted', sentences: [{ text: `‹${V.anchor}#1› was reviewed by Orion.`, placeholders: [{ name: `‹${V.anchor}#1›`, descriptor: { kind: 'entity', ref } }], cites }], inputRefs: cites }], version: 1, save: { state: 'unsaved', savedAt: null } }),
+    };
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'ai-notes', args: {} }])
+      .respondWithTools([table('Orion')])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: TABLE, agent: { model, maxInputTokens: 200_000 }, viewNodes: nodes });
+    await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: VIEW_KEYS }, { aiNotes })));
+    const given = (model.calls.at(-1)?.messages ?? []).filter((message) => message.type === 'tool').map((message) => String(message.content));
+    expect(given.join('\n')).toContain('reviewed by Orion');
+    const told = given.find((content) => content.startsWith('Checked:')) ?? '';
+    expect(told).toContain('A column label was refused.');
+    expect(told).not.toContain('"Orion"');
+  });
 });
 
 describe('a row that cites a relationship', () => {

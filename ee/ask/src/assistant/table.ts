@@ -94,12 +94,13 @@ const isLabelWord = (word: string, known: ReadonlySet<string>): boolean => FIXED
 
 /**
  * What the model is told when a column label of its table is refused: the labels refused, and the words a label may use. A label is repeated back only when it is plain words with no verdict word and none of its refused
- * words occurs anywhere in the text sent, so that no value of the source is repeated. Undefined when every label holds.
+ * words occurs anywhere in what the turn sent of the source, the thread and the person (`alsoSent`: the message, its context and every result of a read, beside the lines of `text`), so that no value is repeated.
+ * Undefined when every label holds.
  */
-export function refusedLabelNote(columns: readonly string[], text: string): string | undefined {
+export function refusedLabelNote(columns: readonly string[], text: string, alsoSent: readonly string[]): string | undefined {
   if (labelsHold(columns, text)) return undefined;
   const known = labelWordsOf(text);
-  const sent = text.toLowerCase();
+  const sent = [text, ...alsoSent].join('\n').toLowerCase();
   const named = columns.filter((label) => !labelsHold([label], text) && isPlainLabel(label) && wordsOfLabel(label).filter((word) => !isLabelWord(word, known)).every((word) => !sent.includes(word)));
   return `A column label was refused${named.length === 0 ? '' : `: ${named.map((label) => JSON.stringify(label)).join(', ')}`}. A column label is words of the property names and types in the lines, or of these words: ${OFFERED_LABEL_WORDS.join(', ')}.`;
 }

@@ -267,6 +267,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
       steps < settings.maxSteps &&
       (settings.rowsAllowed === undefined || rows < settings.rowsAllowed) &&
       settings.maxCalls - input.callsUsed - control.calls - control.extra >= 2;
+    /** What each read of the turn returned to the model: with the message and its context, everything of the source and the person that the model holds. */
+    const readResults: string[] = [];
     const tools: AgentTool[] = readable.map((tool) => ({
       name: tool.name,
       description: describeTool(tool),
@@ -300,6 +302,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
           return LIMIT_TEXT;
         }
         notePropertyValuesSent(assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId), view === undefined ? undefined : viewCoverageOf(view.reading, typeNamesOf(scope.request, scope.sourceId))).assembled.carriesPropertyValues);
+        readResults.push(text);
         return text;
       },
     }));
@@ -340,7 +343,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
             const wider = withEndsCited(block.draft.rows, basis.assembled);
             const draft = { ...block.draft, rows: wider.rows };
             for (const [row, count] of wider.added) citesAdded.set(JSON.stringify([row.cells, row.cites]), count);
-            const labelNote = refusedLabelNote(draft.columns, basis.checkedText.text);
+            const labelNote = refusedLabelNote(draft.columns, basis.checkedText.text, [user, ...readResults]);
             if (labelNote !== undefined) labelNotes.push(labelNote);
             const judgedRows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks: options.checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
             if ('refused' in judgedRows) return 'The answer could not be checked. Reply "Done."';
