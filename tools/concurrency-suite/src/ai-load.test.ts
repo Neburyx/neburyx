@@ -185,13 +185,17 @@ describe.skipIf(CALIBRATING)('a manual expand beside real assistant turns', () =
   }
   const within = (record: AiRuntimeRecord, statistics: Statistics, alone: Statistics): boolean => statistics.medianMs <= alone.medianMs * record.margin.ratio && statistics.p95Ms <= alone.p95Ms * record.margin.ratio;
 
-  it('stays within the recorded margin of its time alone with a third of the AI requests real assistant turns, whose model is asked for a next step and whose reads go through the gate', async () => {
+  // Each case builds an agent run for every assistant turn of its 18 loads: 1 to 1.6 s on the dev machine, and over the suite's 15 s on a CI runner beside other packages' tests, where this file's other cases took 6 to 14 times as long.
+  // The asserted figures are on the suite's clock and came out the same on fast and slow cores, so 60 s, as for the calibration above, gives a loaded machine time and still ends a hang.
+  const LOADED_RUN_TIMEOUT_MS = 60_000;
+
+  it('stays within the recorded margin of its time alone with a third of the AI requests real assistant turns, whose model is asked for a next step and whose reads go through the gate', { timeout: LOADED_RUN_TIMEOUT_MS }, async () => {
     const { record, alone, withAi, steps } = await measured(readRecord().share);
     expect(steps).toBeGreaterThan(0);
     expect(within(record, withAi, alone)).toBe(true);
   });
 
-  it('is caught when the share is off: the same run goes over the margin', async () => {
+  it('is caught when the share is off: the same run goes over the margin', { timeout: LOADED_RUN_TIMEOUT_MS }, async () => {
     const { record, alone, withAi } = await measured(undefined);
     expect(within(record, withAi, alone)).toBe(false);
   });
