@@ -157,7 +157,7 @@ describe('the suite\'s own rule for a count written in words', () => {
   });
 
   it('breaks the rule of the quality of a count when a count that is not known is stated in words', () => {
-    const lines = 'n1 | "payment" | title: "P" | id: "p1x" | relationships on this line: not known';
+    const lines = 'n1 | "payment" | title: "P" | id: "p1x" | relationships between them: not known';
     expect(countRuleBroken({ text: 'Twenty-five payments are listed.', cites: ['n1'] }, lines)).toBe(true);
     expect(countRuleBroken({ text: 'The payments are listed.', cites: ['n1'] }, lines)).toBe(false);
   });
@@ -296,7 +296,7 @@ describe.each([
   { pack: 'banking-fraud', one: 'account', ones: 'accounts' },
   { pack: 'insurance-claims', one: 'claim', ones: 'claims' },
 ])('the suite\'s own rule for a count through a relationship, on $pack', ({ one, ones }) => {
-  const sent = [`n1 | "${one}" | title: "Alpha" | id: "a1"`, `n2 | "${one}" | title: "Beta" | id: "b2"`, `n3 | "${one}" | title: "Gamma" | id: "g3"`, 'e1 | "LINKED" | n1 -> n2 | stored | relationships on this line: 7 (exact)', 'e2 | "LINKED" | n1 -> n3 | stored | relationships on this line: 7 (exact)'].join('\n');
+  const sent = [`n1 | "${one}" | title: "Alpha" | id: "a1"`, `n2 | "${one}" | title: "Beta" | id: "b2"`, `n3 | "${one}" | title: "Gamma" | id: "g3"`, 'e1 | "LINKED" | n1 -> n2 | stored | relationships between them: 7 (exact)', 'e2 | "LINKED" | n1 -> n3 | stored | relationships between them: 7 (exact)'].join('\n');
   const unsupported = (text: string, cites: string[]): string[] => numbersUnsupported({ text, cites }, sent);
 
   it('keeps the count of the distinct entities at the ends of the cited relationships, in words and in digits', () => {
@@ -313,7 +313,7 @@ describe.each([
   });
 
   it('counts an end that was not read by its type and id, and no entity twice', () => {
-    const unread = [`n1 | "${one}" | title: "Alpha" | id: "a1"`, `e1 | "LINKED" | n1 -> an end that was not read (${JSON.stringify(one)} "b2") | stored | relationships on this line: 7 (exact)`].join('\n');
+    const unread = [`n1 | "${one}" | title: "Alpha" | id: "a1"`, `e1 | "LINKED" | n1 -> an end that was not read (${JSON.stringify(one)} "b2") | stored | relationships between them: 7 (exact)`].join('\n');
     expect(numbersUnsupported({ text: `The relationship joins 2 ${ones}.`, cites: ['n1', 'e1'] }, unread)).toEqual([]);
     expect(numbersUnsupported({ text: `The relationship joins 1 ${one}.`, cites: ['n1', 'e1'] }, unread)).toEqual(['1']);
   });

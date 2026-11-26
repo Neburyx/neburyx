@@ -53,7 +53,7 @@ describe('what the model is sent: the text of the elements, written by hand', ()
       'n1 | "account" | title: "AC-1" | id: "AC-1" | phone: "***-1234" (masked); note: (not shown)',
       'n2 | "account" | title: "AC-2" | id: "AC-2"',
       'Relationships:',
-      'e1 | "TRANSFERRED_TO" | n1 -> n2 | stored | observed "2026-02-01" to "2026-02-09" | relationships on this line: ~40 (estimated)',
+      'e1 | "TRANSFERRED_TO" | n1 -> n2 | stored | observed "2026-02-01" to "2026-02-09" | relationships between them: ~40 (estimated)',
       'e2 | "SHARES_DEVICE" | n1 -> n2 | derived | derived by rule "shared-device" version 2',
       'e3 | "PAID_TO" | n2 -> an end that was not read ("merchant" "MR-9") | stored',
       '2 references could not be read.',

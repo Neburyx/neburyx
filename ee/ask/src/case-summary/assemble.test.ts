@@ -84,7 +84,7 @@ describe('the text sent to the model', () => {
     const a = node('W-1', 'A');
     const aggregate = edge('L-1', a.ref, a.ref, { memberCount: count, ref: { sourceId: 'demo', aggregate: { type: 'USES', from: a.ref, to: a.ref } } });
     const { text } = assembleText(reading([a], [aggregate]));
-    expect(text).toContain(`| relationships on this line: ${phrase}`);
+    expect(text).toContain(`| relationships between them: ${phrase}`);
     expect(text).not.toContain('members');
   });
 

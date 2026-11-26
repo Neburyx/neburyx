@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { RELATIONSHIP_COUNT_LABEL } from '@neburyx/contracts';
 import { promptRecordOf } from '@neburyx/ee-ai-runtime';
 import { buildSummaryInstructions, MAX_SUMMARY_SENTENCES } from './instructions.js';
 
@@ -68,6 +69,12 @@ describe('the shipped summary files', () => {
     'Write a compound ranking as separate sentences',
   ])('has the prompt state: %s', (statement) => {
     expect(shipped('summary-prompt.md')).toContain(statement);
+  });
+
+  it.each(['summary-prompt.md', 'assistant-view.md'])('has %s explain the count on a relationship line by its label, and forbid copying the label as a word', (name) => {
+    // the label as the product writes it, so that the instruction and the line cannot drift apart
+    expect(shipped(name)).toContain(`A relationship line may hold "${RELATIONSHIP_COUNT_LABEL}: <count>": how many relationships of the source that one line stands for.`);
+    expect(shipped(name)).toContain('Never copy that label and its colon as a word of your answer; when you state the count, write it into a sentence that names the two elements, and keep its quality as the line writes it.');
   });
 
   it.each(['Fan-in', 'Fan-out', 'Cycle', 'Rapid pass-through', 'Shared device or address'])('describes the shape %s of the banking pack as a structure', (shape) => {

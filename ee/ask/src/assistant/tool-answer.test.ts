@@ -303,7 +303,7 @@ describe('the lines of the relationships of a tool result', () => {
 
   it('writes an aggregate relationship with no property and the rest as the view writes it: its times and its member count phrase', () => {
     const { assembled, } = assembleResults([{ tool: 'sentBy', result: withEdges() }]);
-    expect(assembled.lines.get('r5')).toBe('r5: PAID: Account A-1 → Account A-3 | unknown | observed "2026-01-01" to "2026-02-01" | relationships on this line: ~5 (estimated)');
+    expect(assembled.lines.get('r5')).toBe('r5: PAID: Account A-1 → Account A-3 | unknown | observed "2026-01-01" to "2026-02-01" | relationships between them: ~5 (estimated)');
     expect(assembled.inexactCounts).toContainEqual({ phrase: '~5 (estimated)', value: '5' });
   });
 
