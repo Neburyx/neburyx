@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { unavailableHeadline } from '../../../apps/web/src/banner/copy.js';
-import { HUB, NEIGHBOR_TYPES, PATTERN, personalise, runAndAdd, startRig, until, type Rig } from './rig.js';
+import { HUB, NEIGHBOR_TYPES, PATTERN, filterTypes, personalise, runAndAdd, startRig, until, type Rig } from './rig.js';
 
 let rig: Rig;
 afterEach(async () => {
@@ -106,5 +106,20 @@ describe('a pattern run with a delay after the previous step whose source stops 
     expect(await answer.json()).toMatchObject({ error: { code: 'SOURCE_UNAVAILABLE', retryable: true } });
     expect(rig.snapshot()).toBe(before);
     await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+  });
+});
+
+describe('a type filter while the source stops answering', () => {
+  it('is kept, with the client as it was, when the second read of three types finds the source unreachable', async () => {
+    rig = await startRig();
+    filterTypes(rig);
+    const before = rig.snapshot();
+    const asked = rig.expand.expand(HUB, [...NEIGHBOR_TYPES]);
+    (await rig.nextRead()).answerRows();
+    const second = await rig.nextRead();
+    rig.drain();
+    second.fail(unreachable);
+    expect(await asked).toBe('failed');
+    expect(rig.snapshot()).toBe(before);
   });
 });

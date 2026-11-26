@@ -343,6 +343,15 @@ export function personalise(rig: Rig): void {
   rig.state.presentation.select([elementKey(rig.hub)]);
 }
 
+/** Switches the type of the loaded leaf and its relationship type off in the filters, as a person does once the mapping's types are known; the filter is part of what a snapshot compares. */
+export function filterTypes(rig: Rig): void {
+  rig.state.presentation.setMappedTypes({ entityTypes: [rig.hub.entityType, ...NEIGHBOR_TYPES], relationshipTypes: Object.values(KINDS).map((kind) => kind.rel) });
+  rig.state.setEntityTypeOff('leaf', true);
+  rig.state.setRelationshipTypeOff('LINKED', true);
+  const { offEntityTypes, offRelationshipTypes } = rig.state.presentation.view.getState().typeFilter;
+  if (!offEntityTypes.has('leaf') || !offRelationshipTypes.has('LINKED')) throw new Error('the rig could not switch the types off');
+}
+
 /** Runs the pattern to its answer and adds the result to the graph, as a person does; the client then holds the added items and the result stays retained. */
 export async function runAndAdd(rig: Rig): Promise<void> {
   rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });

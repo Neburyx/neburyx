@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HUB, HUB_THREE, HUB_TWO, NEIGHBOR_TYPES, PATTERN, personalise, RULE, runAndAdd, startRig, until, type Rig } from './rig.js';
+import { HUB, HUB_THREE, HUB_TWO, NEIGHBOR_TYPES, PATTERN, filterTypes, personalise, RULE, runAndAdd, startRig, until, type Rig } from './rig.js';
 import { elementKey } from '../../../apps/web/src/state/keys.js';
 import { cancelledHeadline } from '../../../apps/web/src/banner/copy.js';
 import { EXPAND_NEIGHBORS_ID } from '../../../services/api/src/gate/templates/expand-neighbors.js';
@@ -392,5 +392,20 @@ describe.each(DEFINITIONS)('cancelling a pattern built in the panel: %s', (_kind
     read.answerRows();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(rig.definitionRuns.getState()).toMatchObject({ running: false, result: undefined, cancelled: false });
+  });
+});
+
+describe('a type filter while an expansion is cancelled', () => {
+  it('is kept, with the client as it was, when the person cancels between the reads of three types', async () => {
+    rig = await startRig();
+    filterTypes(rig);
+    const before = rig.snapshot();
+    const asked = rig.expand.expand(HUB, [...NEIGHBOR_TYPES]);
+    (await rig.nextRead()).answerRows();
+    const second = await rig.nextRead();
+    await rig.pressCancel();
+    second.answerRows();
+    await asked;
+    expect(rig.snapshot()).toBe(before);
   });
 });

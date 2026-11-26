@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HUB, NEIGHBOR_TYPES, PATTERN, personalise, runAndAdd, startRig, until, type Rig } from './rig.js';
+import { HUB, NEIGHBOR_TYPES, PATTERN, filterTypes, personalise, runAndAdd, startRig, until, type Rig } from './rig.js';
 
 let rig: Rig;
 afterEach(async () => {
@@ -138,5 +138,20 @@ describe('a pattern run with a delay after the previous step whose read times ou
     expect((await again).headers.get('idempotent-replay')).toBeNull();
     expect(rig.snapshot()).toBe(before);
     await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+  });
+});
+
+describe('a type filter while a read times out', () => {
+  it('is kept, with the client as it was, when the second read of three types times out', async () => {
+    rig = await startRig();
+    filterTypes(rig);
+    const before = rig.snapshot();
+    const asked = rig.expand.expand(HUB, [...NEIGHBOR_TYPES]);
+    (await rig.nextRead()).answerRows();
+    const second = await rig.nextRead();
+    rig.drain();
+    second.fail(timeout);
+    expect(await asked).toBe('failed');
+    expect(rig.snapshot()).toBe(before);
   });
 });
